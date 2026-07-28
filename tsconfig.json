@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/journey-evidence" },
+    { "path": "packages/journey-runner" },
+    { "path": "packages/journey-model-ujg" },
+    { "path": "packages/journey-profiles" },
+    { "path": "examples/nextcloud-filesharing" },
+    { "path": "tests" }
+  ]
+}

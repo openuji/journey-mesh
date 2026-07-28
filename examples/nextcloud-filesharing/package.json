@@ -1,0 +1,14 @@
+{
+  "name": "@openuji/example-nextcloud-filesharing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openuji/journey-model-ujg": "workspace:*",
+    "@openuji/journey-profiles": "workspace:*",
+    "@openuji/journey-runner": "workspace:*"
+  },
+  "scripts": {
+    "run:dummy": "node --import tsx run.ts"
+  }
+}

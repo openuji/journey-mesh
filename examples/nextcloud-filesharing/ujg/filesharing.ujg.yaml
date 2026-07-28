@@ -1,0 +1,533 @@
+# Nested UJG authoring document aligned with the Editor's Draft state on 2026-07-16.
+# Keeps the compact authoring structure; a compiler may expand it to normative JSON-LD nodes.
+ujgTarget: ed-2026-07-19
+touchpoints:
+  "urn:touchpoint:nextcloud-a":
+    label: "Nextcloud A"
+    compositeStateRefs:
+      - "urn:composite:alice-federated-sharing"
+  "urn:touchpoint:nextcloud-b":
+    label: "Nextcloud B"
+    compositeStateRefs:
+      - "urn:composite:bob-remote-share"
+
+users:
+  "urn:user:alice":
+    label: "Alice"
+    touchpointRefs:
+      - "urn:touchpoint:nextcloud-a"
+  "urn:user:bob":
+    label: "Bob"
+    touchpointRefs:
+      - "urn:touchpoint:nextcloud-b"
+
+artifacts:
+  "urn:artifact:federated-share":
+    label: "Federated share for the test file"
+    nameRef: "urn:message:report-pdf-file-name"
+    sourceTouchpointRef: "urn:touchpoint:nextcloud-a"
+    targetTouchpointRefs:
+      - "urn:touchpoint:nextcloud-b"
+
+effects:
+  "urn:effect:alice-confirm-share":
+    label: "Alice confirms the remote share"
+    producedRefs:
+      - "urn:artifact:federated-share"
+  "urn:effect:bob-accept-share":
+    label: "Bob accepts the remote share"
+    consumedRefs:
+      - "urn:artifact:federated-share"
+
+journeyEntryIndex:
+  id: "urn:index:nextcloud-federated-sharing"
+  label: "Federated sharing local journey entries"
+  entryRefs:
+    - "urn:entry:alice-federated-sharing"
+    - "urn:entry:bob-remote-share"
+
+entryBindings:
+  "urn:entry-binding:alice-files":
+    label: "Alice files entry boot"
+    entryRef: "urn:entry:alice-federated-sharing"
+    value: "nextcloud.files"
+  "urn:entry-binding:bob-remote-share":
+    label: "Bob remote-share entry boot"
+    entryRef: "urn:entry:bob-remote-share"
+    value: "nextcloud.pendingShares"
+  "urn:entry-binding:bob-remote-share-offer":
+    label: "Bob remote-share offer entry boot"
+    entryRef: "urn:entry:bob-remote-share-offer"
+    value: "nextcloud.pendingShares"
+
+states:
+  "urn:composite:alice-federated-sharing":
+    type: "CompositeState"
+    label: "Alice federated sharing entry"
+    subjourney:
+      id: "urn:journey:alice-federated-sharing"
+      label: "Alice shares a file with a remote recipient"
+      defaultEntryRef: "urn:entry:alice-federated-sharing"
+      entries:
+        "urn:entry:alice-federated-sharing":
+          label: "Alice files entry"
+          stateRef: "urn:state:alice-files-ready"
+      states:
+        "urn:state:alice-files-ready":
+          label: "Alice files app is ready"
+          surface:
+            id: "urn:surface:alice-files-ready"
+            label: "Alice files list with target file"
+        "urn:state:alice-share-panel-open":
+          label: "Alice sharing panel is open"
+          surface:
+            id: "urn:surface:alice-share-panel-open"
+            label: "Alice share panel for target file"
+        "urn:state:alice-remote-recipient-entered":
+          label: "Alice entered Bob as a remote recipient"
+          surface:
+            id: "urn:surface:alice-remote-recipient-entered"
+            label: "Alice remote recipient entry"
+        "urn:state:alice-share-permissions-open":
+          label: "Alice share permissions are open"
+          surface:
+            id: "urn:surface:alice-share-permissions-open"
+            label: "Alice share permissions form"
+        "urn:state:alice-share-confirmed":
+          label: "Alice confirmed the remote share"
+          surface:
+            id: "urn:surface:alice-share-confirmed"
+            label: "Alice outgoing remote share is confirmed"
+      transitions:
+        - id: "urn:transition:alice-opens-file-menu"
+          label: "Alice opens the sharing panel"
+          from: "urn:state:alice-files-ready"
+          to: "urn:state:alice-share-panel-open"
+          surface:
+            id: "urn:surface:alice-opens-file-menu"
+            label: "Alice file share action"
+        - id: "urn:transition:alice-enters-remote-bob"
+          label: "Alice enters Bob's federated address"
+          from: "urn:state:alice-share-panel-open"
+          to: "urn:state:alice-remote-recipient-entered"
+          surface:
+            id: "urn:surface:alice-enters-remote-bob"
+            label: "Alice remote recipient input"
+        - id: "urn:transition:alice-selects-remote-recipient"
+          label: "Alice selects Bob as the remote recipient"
+          from: "urn:state:alice-remote-recipient-entered"
+          to: "urn:state:alice-share-permissions-open"
+          surface:
+            id: "urn:surface:alice-selects-remote-recipient"
+            label: "Alice remote recipient option"
+        - id: "urn:transition:alice-confirms-share"
+          label: "Alice confirms the share"
+          from: "urn:state:alice-share-permissions-open"
+          to: "urn:state:alice-share-confirmed"
+          surface:
+            id: "urn:surface:alice-confirms-share"
+            label: "Alice confirm-share action"
+          effectRef: "urn:effect:alice-confirm-share"
+  "urn:composite:bob-remote-share":
+    type: "CompositeState"
+    label: "Bob remote-share entry"
+    subjourney:
+      id: urn:journey:bob-remote-share
+      label: Bob handles an incoming remote share
+      defaultEntryRef: urn:entry:bob-remote-share
+      entries:
+        urn:entry:bob-remote-share:
+          label: Bob incoming remote share entry
+          stateRef: urn:composite:bob-remote-share-offer
+      states:
+        urn:composite:bob-remote-share-offer:
+          type: CompositeState
+          label: Bob remote-share offer
+          subjourney:
+            id: urn:journey:bob-remote-share-offer
+            label: Bob resolves the incoming remote-share offer
+            defaultEntryRef: urn:entry:bob-remote-share-offer
+            entries:
+              urn:entry:bob-remote-share-offer:
+                label: Bob pending remote share entry
+                stateRef: urn:state:bob-incoming-share-visible
+            states:
+              urn:state:bob-incoming-share-visible:
+                label: Bob sees the pending remote share
+                surface:
+                  id: urn:surface:bob-incoming-share-visible
+                  label: Bob incoming remote share row
+            exits:
+              urn:exit:bob-share-offer-accepted:
+                label: Remote share accepted
+            transitions:
+              - id: urn:transition:bob-accepts-share
+                label: Bob accepts the remote share
+                from: urn:state:bob-incoming-share-visible
+                to: urn:exit:bob-share-offer-accepted
+                surface:
+                  id: urn:surface:bob-accepts-share
+                  label: Bob accept-share action
+                effectRef: urn:effect:bob-accept-share
+        urn:composite:bob-pending-share-offer-cleared:
+          type: CompositeState
+          label: Bob pending share offer cleared
+          subjourney:
+            id: urn:journey:bob-pending-share-offer-cleared
+            label: Bob verifies the pending remote-share offer is cleared
+            defaultEntryRef: urn:entry:bob-pending-share-offer-cleared
+            entries:
+              urn:entry:bob-pending-share-offer-cleared:
+                label: Bob pending share offer cleared entry
+                stateRef: urn:state:bob-pending-share-offer-cleared
+            states:
+              urn:state:bob-pending-share-offer-cleared:
+                label: Bob pending remote-share offer is cleared
+                surface:
+                  id: urn:surface:bob-pending-share-offer-cleared
+                  label: Bob pending remote share row is removed
+              urn:state:bob-shared-report-visible:
+                label: Bob sees file marked as shared
+                surface:
+                  id: urn:surface:bob-shared-report-visible
+                  label: Bob shared report row
+            transitions:
+              - id: urn:transition:bob-opens-shares-overview
+                label: Bob opens Shares overview
+                from: urn:state:bob-pending-share-offer-cleared
+                to: urn:state:bob-shared-report-visible
+                surface:
+                  id: urn:surface:bob-opens-shares-overview
+                  label: Bob Shares overview link
+      transitions:
+        - id: urn:transition:bob-continues-after-share-offer-cleared
+          label: Bob accepted the remote share
+          from: urn:composite:bob-remote-share-offer
+          fromExitRef: urn:exit:bob-share-offer-accepted
+          to: urn:composite:bob-pending-share-offer-cleared
+          toEntryRef: urn:entry:bob-pending-share-offer-cleared
+
+locales:
+  "urn:locale:en":
+    label: "English"
+    localeCode: "en"
+
+messageMeta:
+  "urn:message:sharing-panel":
+    label: "Sharing panel label"
+    defaultLocaleRef: "urn:locale:en"
+  "urn:message:remote-recipient-input":
+    label: "Remote recipient input label"
+    defaultLocaleRef: "urn:locale:en"
+  "urn:message:share-action":
+    label: "Sharing options action"
+    defaultLocaleRef: "urn:locale:en"
+  "urn:message:save-share-action":
+    label: "Save share action"
+    defaultLocaleRef: "urn:locale:en"
+  "urn:message:accept-action":
+    label: "Accept action"
+    defaultLocaleRef: "urn:locale:en"
+  "urn:message:report-pdf-file-name":
+    label: "Report PDF file name"
+    defaultLocaleRef: "urn:locale:en"
+  "urn:message:report-file-basename":
+    label: "Report file basename"
+    defaultLocaleRef: "urn:locale:en"
+  "urn:message:report-pdf-shared-row":
+    label: "Shared file row status"
+    defaultLocaleRef: "urn:locale:en"
+  "urn:message:shares-overview":
+    label: "Shares overview navigation"
+    defaultLocaleRef: "urn:locale:en"
+
+messages:
+  "urn:message-value:sharing-panel:en":
+    messageMetaRef: "urn:message:sharing-panel"
+    localeRef: "urn:locale:en"
+    value: "Sharing"
+  "urn:message-value:remote-recipient-input:en":
+    messageMetaRef: "urn:message:remote-recipient-input"
+    localeRef: "urn:locale:en"
+    value: "Enter external recipients"
+  "urn:message-value:share-action:en":
+    messageMetaRef: "urn:message:share-action"
+    localeRef: "urn:locale:en"
+    value: "Sharing options"
+  "urn:message-value:save-share-action:en":
+    messageMetaRef: "urn:message:save-share-action"
+    localeRef: "urn:locale:en"
+    value: "Save share"
+  "urn:message-value:accept-action:en":
+    messageMetaRef: "urn:message:accept-action"
+    localeRef: "urn:locale:en"
+    value: "Accept share"
+  "urn:message-value:report-pdf-file-name:en":
+    messageMetaRef: "urn:message:report-pdf-file-name"
+    localeRef: "urn:locale:en"
+    value: "report.pdf"
+  "urn:message-value:report-file-basename:en":
+    messageMetaRef: "urn:message:report-file-basename"
+    localeRef: "urn:locale:en"
+    value: "report"
+  "urn:message-value:report-pdf-shared-row:en":
+    messageMetaRef: "urn:message:report-pdf-shared-row"
+    localeRef: "urn:locale:en"
+    value: "Shared"
+  "urn:message-value:shares-overview:en":
+    messageMetaRef: "urn:message:shares-overview"
+    localeRef: "urn:locale:en"
+    value: "Shares"
+
+accessible:
+  features:
+    "urn:feature:artifact-instance-key":
+      label: "Artifact instance key"
+      accessibleFeatureName: "file-id"
+      accessibleFeatureValue: "*"
+    "urn:feature:remote-recipient-instance-key":
+      label: "Remote recipient instance key"
+      accessibleFeatureName: "federated-cloud-id"
+      accessibleFeatureValue: "*"
+    "urn:feature:expanded-true":
+      label: "Expanded"
+      accessibleFeatureName: "expanded"
+      accessibleFeatureValue: "true"
+
+  locators:
+    "urn:locator:sharing-panel":
+      label: "Sharing panel"
+      role: "complementary"
+    "urn:locator:alice-file-row":
+      label: "Alice target file row"
+      role: "row"
+      accessibleNameRef: "urn:message:report-pdf-file-name"
+    "urn:locator:remote-recipient-entry":
+      label: "Remote recipient result"
+      role: "option"
+      accessibleFeatureRefs:
+        - "urn:feature:remote-recipient-instance-key"
+    "urn:locator:alice-share-row":
+      label: "Alice shared file row"
+      role: "row"
+      accessibleNameRef: "urn:message:report-pdf-shared-row"
+    "urn:locator:incoming-share-row":
+      label: "Incoming share row"
+      role: "row"
+      accessibleNameRef: "urn:message:report-file-basename"
+    "urn:locator:bob-shared-report-file-row":
+      label: "Bob shared report file row"
+      role: "row"
+      accessibleNameRef: "urn:message:report-pdf-file-name"
+    "urn:locator:bob-shared-report-status-row":
+      label: "Bob shared report status row"
+      role: "row"
+      accessibleNameRef: "urn:message:report-pdf-shared-row"
+    "urn:locator:shares-overview-link":
+      label: "Shares overview link"
+      role: "link"
+      accessibleNameRef: "urn:message:shares-overview"
+      accessibleFeatureRefs:
+        - "urn:feature:expanded-true"
+    "urn:locator:file-share-action":
+      label: "File share action"
+      role: "button"
+      accessibleNameRef: "urn:message:share-action"
+      contextLocatorRefs:
+        - "urn:locator:alice-file-row"
+    "urn:locator:remote-recipient-input":
+      label: "Remote recipient input"
+      role: "combobox"
+      accessibleNameRef: "urn:message:remote-recipient-input"
+      contextLocatorRefs:
+        - "urn:locator:sharing-panel"
+    "urn:locator:save-share-button":
+      label: "Save share button"
+      role: "button"
+      accessibleNameRef: "urn:message:save-share-action"
+      contextLocatorRefs:
+        - "urn:locator:sharing-panel"
+    "urn:locator:bob-accept-share-button":
+      label: "Bob accept share button"
+      role: "button"
+      accessibleNameRef: "urn:message:accept-action"
+      contextLocatorRefs:
+        - "urn:locator:incoming-share-row"
+resolvers:
+  "urn:resolver:artifact-instance":
+    label: "Resolve repeated artifact surface instances"
+    instanceKeyFeatureRef: "urn:feature:artifact-instance-key"
+inputModalities:
+  "urn:input-modality:keyboard-text-entry":
+    label: "Keyboard text entry"
+  "urn:input-modality:keyboard-space":
+    label: "Keyboard Space activation"
+  "urn:input-modality:keyboard-enter":
+    label: "Keyboard Enter activation"
+  "urn:input-modality:pointer":
+    label: "Pointer"
+
+inputModalityProfiles:
+  "urn:input-modality-profile:keyboard-text-entry":
+    label: "Keyboard text entry"
+    inputModalityRefs:
+      - "urn:input-modality:keyboard-text-entry"
+  "urn:input-modality-profile:keyboard-space":
+    label: "Keyboard Space activation"
+    inputModalityRefs:
+      - "urn:input-modality:keyboard-space"
+  "urn:input-modality-profile:keyboard-enter":
+    label: "Keyboard Enter activation"
+    inputModalityRefs:
+      - "urn:input-modality:keyboard-enter"
+  "urn:input-modality-profile:pointer":
+    label: "Pointer interaction"
+    inputModalityRefs:
+      - "urn:input-modality:pointer"
+
+observationEvents:
+  "urn:observation-event:presence":
+    label: "Presence"
+  "urn:observation-event:absence":
+    label: "Absence"
+  "urn:observation-event:button-activation":
+    label: "Button activation"
+    requiredInputModalityProfileRefs:
+      - "urn:input-modality-profile:keyboard-space"
+      - "urn:input-modality-profile:pointer"
+  "urn:observation-event:option-activation":
+    label: "Option activation"
+    requiredInputModalityProfileRefs:
+      - "urn:input-modality-profile:keyboard-enter"
+      - "urn:input-modality-profile:pointer"
+  "urn:observation-event:link-activation":
+    label: "Link activation"
+    requiredInputModalityProfileRefs:
+      - "urn:input-modality-profile:keyboard-enter"
+      - "urn:input-modality-profile:pointer"
+  "urn:observation-event:text-entry-activation":
+    label: "Text entry activation"
+    requiredInputModalityProfileRefs:
+      - "urn:input-modality-profile:keyboard-text-entry"
+observationBindings:
+  "urn:obs:alice-files-ready-presence":
+    label: "Observe Alice files ready"
+    observeSurfaceRef: "urn:surface:alice-files-ready"
+    observationEventRef: "urn:observation-event:presence"
+    expectedMatchCount: 1
+    locatorRefs:
+      - "urn:locator:alice-file-row"
+    surfaceInstanceResolverRef: "urn:resolver:artifact-instance"
+  "urn:obs:alice-share-panel-open-presence":
+    label: "Observe Alice share panel open"
+    observeSurfaceRef: "urn:surface:alice-share-panel-open"
+    observationEventRef: "urn:observation-event:presence"
+    expectedMatchCount: 1
+    locatorRefs:
+      - "urn:locator:sharing-panel"
+  "urn:obs:alice-remote-recipient-entered-presence":
+    label: "Observe Alice remote recipient entered"
+    observeSurfaceRef: "urn:surface:alice-remote-recipient-entered"
+    observationEventRef: "urn:observation-event:presence"
+    expectedMatchCount: 1
+    locatorRefs:
+      - "urn:locator:remote-recipient-entry"
+  "urn:obs:alice-share-permissions-open-presence":
+    label: "Observe Alice share permissions open"
+    observeSurfaceRef: "urn:surface:alice-share-permissions-open"
+    observationEventRef: "urn:observation-event:presence"
+    expectedMatchCount: 1
+    locatorRefs:
+      - "urn:locator:save-share-button"
+  "urn:obs:alice-share-confirmed-presence":
+    label: "Observe Alice share confirmed"
+    observeSurfaceRef: "urn:surface:alice-share-confirmed"
+    observationEventRef: "urn:observation-event:presence"
+    expectedMatchCount: 1
+    locatorRefs:
+      - "urn:locator:alice-share-row"
+    surfaceInstanceResolverRef: "urn:resolver:artifact-instance"
+  "urn:obs:bob-incoming-share-visible-presence":
+    label: "Observe Bob incoming share"
+    observeSurfaceRef: "urn:surface:bob-incoming-share-visible"
+    observationEventRef: "urn:observation-event:presence"
+    expectedMatchCount: 1
+    locatorRefs:
+      - "urn:locator:incoming-share-row"
+  "urn:obs:bob-pending-share-offer-cleared-absence":
+    label: "Observe Bob pending share removed"
+    observeSurfaceRef: "urn:surface:bob-pending-share-offer-cleared"
+    observationEventRef: "urn:observation-event:absence"
+    expectedMatchCount: 0
+    locatorRefs:
+      - "urn:locator:incoming-share-row"
+  "urn:obs:bob-shared-report-visible-presence":
+    label: "Observe Bob shared report row"
+    observeSurfaceRef: "urn:surface:bob-shared-report-visible"
+    observationEventRef: "urn:observation-event:presence"
+    expectedMatchCount: 1
+    locatorRefs:
+      - "urn:locator:bob-shared-report-file-row"
+      - "urn:locator:bob-shared-report-status-row"
+  "urn:obs:alice-opens-file-menu-activation":
+    label: "Activate Alice share action"
+    observeSurfaceRef: "urn:surface:alice-opens-file-menu"
+    observationEventRef: "urn:observation-event:button-activation"
+    locatorRefs:
+      - "urn:locator:file-share-action"
+    surfaceInstanceResolverRef: "urn:resolver:artifact-instance"
+  "urn:obs:alice-enters-remote-bob-activation":
+    label: "Activate Alice remote recipient entry"
+    observeSurfaceRef: "urn:surface:alice-enters-remote-bob"
+    observationEventRef: "urn:observation-event:text-entry-activation"
+    locatorRefs:
+      - "urn:locator:remote-recipient-input"
+  "urn:obs:alice-selects-remote-recipient-activation":
+    label: "Activate Alice remote recipient option"
+    observeSurfaceRef: "urn:surface:alice-selects-remote-recipient"
+    observationEventRef: "urn:observation-event:option-activation"
+    locatorRefs:
+      - "urn:locator:remote-recipient-entry"
+    surfaceInstanceResolverRef: "urn:resolver:artifact-instance"
+  "urn:obs:alice-confirms-share-activation":
+    label: "Activate Alice share confirmation"
+    observeSurfaceRef: "urn:surface:alice-confirms-share"
+    observationEventRef: "urn:observation-event:button-activation"
+    locatorRefs:
+      - "urn:locator:save-share-button"
+  "urn:obs:bob-accepts-share-activation":
+    label: "Activate Bob share acceptance"
+    observeSurfaceRef: "urn:surface:bob-accepts-share"
+    observationEventRef: "urn:observation-event:button-activation"
+    locatorRefs:
+      - "urn:locator:bob-accept-share-button"
+  "urn:obs:bob-opens-shares-overview-activation":
+    label: "Activate Bob Shares overview navigation"
+    observeSurfaceRef: "urn:surface:bob-opens-shares-overview"
+    observationEventRef: "urn:observation-event:link-activation"
+    locatorRefs:
+      - "urn:locator:shares-overview-link"
+
+phases:
+  "urn:phase:remote-share-offered":
+    label: "Remote share offered"
+    order: 1
+  "urn:phase:pending-share-offer-cleared":
+    label: "Remote share accepted"
+    order: 2
+
+steps:
+  "urn:step:alice-federated-sharing":
+    label: "Alice offers the remote share"
+    order: 1
+    compositeStateRef: "urn:composite:alice-federated-sharing"
+    phaseRef: "urn:phase:remote-share-offered"
+  "urn:step:bob-remote-share-offer":
+    label: "Bob receives the remote-share offer"
+    order: 2
+    compositeStateRef: "urn:composite:bob-remote-share-offer"
+    phaseRef: "urn:phase:remote-share-offered"
+  "urn:step:bob-pending-share-offer-cleared":
+    label: "Bob verifies accepted remote-share access"
+    compositeStateRef: "urn:composite:bob-pending-share-offer-cleared"
+    phaseRef: "urn:phase:pending-share-offer-cleared"
