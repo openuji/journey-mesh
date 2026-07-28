@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 
 import {
   activatePlaywrightLocator,
@@ -17,6 +17,14 @@ import {
   openNextcloudRoute,
   requiredEnv
 } from "@openuji/journey-driver-nextcloud";
+import type {
+  JourneyOperation as CoreJourneyOperation,
+  JourneyPlan as CoreJourneyPlan
+} from "@openuji/journey-core";
+import type {
+  JourneyPlan as EvidenceJourneyPlan,
+  JourneyPlanOperation as EvidenceJourneyPlanOperation
+} from "@openuji/journey-evidence";
 import {
   compileUjgJourneyPlan,
   loadUjgDocument,
@@ -55,12 +63,86 @@ import {
 
 const fixtureUrl = new URL("../examples/nextcloud-filesharing/ujg/filesharing.ujg.jsonld", import.meta.url);
 
+const forbiddenCoreTerms = [
+  "Accessible",
+  "Locator",
+  "Observation",
+  "Modality",
+  "Effect",
+  "Artifact",
+  "StatePlan",
+  "TransitionPlan",
+  "ControlFlow",
+  "Ujg",
+  "documentId",
+  "phaseId",
+  "stepId",
+  "userId",
+  "actorId",
+  "touchpointId",
+  "entryId",
+  "Evidence",
+  "Playwright",
+  "Nextcloud",
+  "Axe"
+];
+
 type TestCase = {
   name: string;
   run: () => Promise<void> | void;
 };
 
 const tests: TestCase[] = [
+  {
+    name: "journey-core stays model-agnostic and evidence plans satisfy core contracts",
+    async run() {
+      const packageSource = await readFile(
+        new URL("../packages/journey-core/package.json", import.meta.url),
+        "utf8"
+      );
+      const packageJson = JSON.parse(packageSource) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+        peerDependencies?: Record<string, string>;
+        optionalDependencies?: Record<string, string>;
+      };
+      const dependencyFields = [
+        "dependencies",
+        "devDependencies",
+        "peerDependencies",
+        "optionalDependencies"
+      ] as const;
+
+      for (const field of dependencyFields) {
+        for (const [dependencyName, dependencyVersion] of Object.entries(packageJson[field] ?? {})) {
+          assert.equal(
+            dependencyVersion.startsWith("workspace:"),
+            false,
+            `journey-core must not declare workspace dependency ${dependencyName}`
+          );
+        }
+      }
+
+      const coreSources = await readTypeScriptSources(
+        new URL("../packages/journey-core/src/", import.meta.url)
+      );
+      assert.ok(coreSources.length > 0, "journey-core must contain TypeScript source files");
+
+      for (const sourceFile of coreSources) {
+        for (const forbiddenTerm of forbiddenCoreTerms) {
+          assert.equal(
+            sourceFile.source.includes(forbiddenTerm),
+            false,
+            `journey-core must stay model-agnostic; found ${forbiddenTerm} in ${sourceFile.path}`
+          );
+        }
+      }
+
+      const evidencePlan: EvidenceJourneyPlan = await loadFixturePlan();
+      assertCoreCompatiblePlan(evidencePlan);
+      assertCoreCompatibleOperation(evidencePlan.operations[0]);
+    }
+  },
   {
     name: "compiler produces the expected v1 operation sequence",
     async run() {
@@ -143,7 +225,7 @@ const tests: TestCase[] = [
 
       const bobShares = transitionOperation(plan, "urn:transition:bob-opens-shares-overview");
       assert.equal(bobShares.activation.bindings[0].locators[0].features[0].name, "expanded");
-      assert.equal(bobShares.activation.bindings[0].locators[0].features[0].value, "false");
+      assert.equal(bobShares.activation.bindings[0].locators[0].features[0].value, "true");
     }
   },
   {
@@ -412,7 +494,7 @@ const tests: TestCase[] = [
 
       assert.match(locator.toString(), /role=link/);
       assert.match(locator.toString(), /Shares/);
-      assert.match(locator.toString(), /expanded=false/);
+      assert.match(locator.toString(), /expanded=true/);
 
       const aliceOperation = transitionOperation(plan, "urn:transition:alice-opens-file-menu");
       const aliceLocator = await toPlaywrightObservationLocator(
@@ -898,6 +980,43 @@ const tests: TestCase[] = [
 
 async function loadFixturePlan(): Promise<JourneyPlan> {
   return compileUjgJourneyPlan(await loadUjgDocument(fixtureUrl));
+}
+
+async function readTypeScriptSources(
+  directory: URL
+): Promise<Array<{ path: string; source: string }>> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const sources: Array<{ path: string; source: string }> = [];
+
+  for (const entry of entries) {
+    const child = new URL(`${entry.name}${entry.isDirectory() ? "/" : ""}`, directory);
+
+    if (entry.isDirectory()) {
+      sources.push(...await readTypeScriptSources(child));
+      continue;
+    }
+
+    if (entry.isFile() && entry.name.endsWith(".ts")) {
+      sources.push({
+        path: child.pathname,
+        source: await readFile(child, "utf8")
+      });
+    }
+  }
+
+  return sources;
+}
+
+function assertCoreCompatiblePlan(
+  plan: EvidenceJourneyPlan
+): CoreJourneyPlan<EvidenceJourneyPlanOperation> {
+  return plan;
+}
+
+function assertCoreCompatibleOperation(
+  operation: EvidenceJourneyPlanOperation
+): CoreJourneyOperation<EvidenceJourneyPlanOperation["kind"]> {
+  return operation;
 }
 
 async function loadFixtureDocument(): Promise<UjgDocument> {

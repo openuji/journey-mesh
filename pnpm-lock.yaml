@@ -11,6 +11,9 @@ importers:
       '@openuji/journey-adapter-playwright':
         specifier: workspace:*
         version: link:packages/journey-adapter-playwright
+      '@openuji/journey-core':
+        specifier: workspace:*
+        version: link:packages/journey-core
       '@openuji/journey-driver-nextcloud':
         specifier: workspace:*
         version: link:packages/journey-driver-nextcloud
@@ -73,6 +76,8 @@ importers:
         specifier: ^1.61.1
         version: 1.62.0
 
+  packages/journey-core: {}
+
   packages/journey-driver-nextcloud:
     dependencies:
       '@openuji/journey-adapter-playwright':
@@ -85,7 +90,11 @@ importers:
         specifier: ^1.61.1
         version: 1.62.0
 
-  packages/journey-evidence: {}
+  packages/journey-evidence:
+    dependencies:
+      '@openuji/journey-core':
+        specifier: workspace:*
+        version: link:../journey-core
 
   packages/journey-model-ujg:
     dependencies:

@@ -1,3 +1,8 @@
+import type {
+  JourneyOperation as CoreJourneyOperation,
+  JourneyPlan as CoreJourneyPlan
+} from "@openuji/journey-core";
+
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonObject = { [key: string]: JsonValue };
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
@@ -97,10 +102,7 @@ export type ResolvedEffect = LabeledRef & {
 
 export type JourneyPlanOperationKind = "state" | "transition" | "control-flow";
 
-export type JourneyPlanOperationBase<K extends JourneyPlanOperationKind> = {
-  id: string;
-  sequence: number;
-  kind: K;
+export type JourneyPlanOperationBase<K extends JourneyPlanOperationKind> = CoreJourneyOperation<K> & {
   documentId: string;
   phaseId: string;
   stepId: string;
@@ -145,10 +147,8 @@ export type JourneyPlanOperation =
   | TransitionPlanOperation
   | ControlFlowPlanOperation;
 
-export type JourneyPlan = {
-  id: string;
+export type JourneyPlan = CoreJourneyPlan<JourneyPlanOperation> & {
   documentId: string;
-  operations: JourneyPlanOperation[];
 };
 
 export type JourneyInteractionCommand =
