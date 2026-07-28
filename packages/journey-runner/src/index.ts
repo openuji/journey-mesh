@@ -1,17 +1,19 @@
+import type {
+  ControlFlowPlanOperation,
+  InputModalityDecision,
+  JourneyPlan,
+  JourneyPlanOperation,
+  ResolvedAccessibleLocator,
+  StatePlanOperation,
+  TransitionPlanOperation
+} from "@openuji/journey-execution-model";
 import {
   EvidenceRecorder,
   errorToEvidence,
-  type ControlFlowPlanOperation,
   type EvidenceError,
   type EvidenceEvent,
   type EvidenceEventInput,
-  type InputModalityDecision,
-  type JourneyPlan,
-  type JourneyPlanOperation,
   type JsonObject,
-  type ResolvedAccessibleLocator,
-  type StatePlanOperation,
-  type TransitionPlanOperation,
   type UjgRefSet
 } from "@openuji/journey-evidence";
 
@@ -21,18 +23,14 @@ export type {
   AccessibleFeature,
   ControlFlowPlanOperation,
   EntryBindingRef,
-  EvidenceError,
-  EvidenceEvent,
-  EvidenceEventInput,
   GraphVertexRef,
   InputModalityDecision,
+  JourneyEntryRef,
   JourneyInteractionCommand,
   JourneyPlan,
   JourneyPlanOperation,
+  JourneyPlanOperationBase,
   JourneyPlanOperationKind,
-  JsonObject,
-  JsonPrimitive,
-  JsonValue,
   LabeledRef,
   ResolvedAccessibleLocator,
   ResolvedArtifact,
@@ -45,7 +43,16 @@ export type {
   ResolvedSurfaceInstanceResolver,
   ResolvedTransitionActivation,
   StatePlanOperation,
-  TransitionPlanOperation,
+  TransitionPlanOperation
+} from "@openuji/journey-execution-model";
+
+export type {
+  EvidenceError,
+  EvidenceEvent,
+  EvidenceEventInput,
+  JsonObject,
+  JsonPrimitive,
+  JsonValue,
   UjgRefSet
 } from "@openuji/journey-evidence";
 

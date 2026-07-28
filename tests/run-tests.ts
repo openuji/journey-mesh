@@ -25,6 +25,10 @@ import type {
   JourneyPlan as EvidenceJourneyPlan,
   JourneyPlanOperation as EvidenceJourneyPlanOperation
 } from "@openuji/journey-evidence";
+import type {
+  JourneyPlan as ExecutionJourneyPlan,
+  JourneyPlanOperation as ExecutionJourneyPlanOperation
+} from "@openuji/journey-execution-model";
 import {
   compileUjgJourneyPlan,
   loadUjgDocument,
@@ -87,6 +91,18 @@ const forbiddenCoreTerms = [
   "Axe"
 ];
 
+const movedExecutionModelTypeNames = [
+  "JourneyPlan",
+  "JourneyPlanOperationKind",
+  "JourneyPlanOperationBase",
+  "StatePlanOperation",
+  "TransitionPlanOperation",
+  "ControlFlowPlanOperation",
+  "ResolvedAccessibleLocator",
+  "InputModalityDecision",
+  "ResolvedEffect"
+];
+
 type TestCase = {
   name: string;
   run: () => Promise<void> | void;
@@ -94,7 +110,7 @@ type TestCase = {
 
 const tests: TestCase[] = [
   {
-    name: "journey-core stays model-agnostic and evidence plans satisfy core contracts",
+    name: "journey model package boundaries and compatibility re-exports stay intact",
     async run() {
       const packageSource = await readFile(
         new URL("../packages/journey-core/package.json", import.meta.url),
@@ -137,6 +153,90 @@ const tests: TestCase[] = [
           );
         }
       }
+
+      const executionModelPackageSource = await readFile(
+        new URL("../packages/journey-execution-model/package.json", import.meta.url),
+        "utf8"
+      );
+      const executionModelPackageJson = JSON.parse(executionModelPackageSource) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+        peerDependencies?: Record<string, string>;
+        optionalDependencies?: Record<string, string>;
+      };
+      assert.deepEqual(
+        executionModelPackageJson.dependencies,
+        { "@openuji/journey-core": "workspace:*" },
+        "journey-execution-model must depend only on journey-core"
+      );
+
+      for (const field of ["devDependencies", "peerDependencies", "optionalDependencies"] as const) {
+        assert.deepEqual(
+          executionModelPackageJson[field] ?? {},
+          {},
+          `journey-execution-model must not declare ${field}`
+        );
+      }
+
+      const packageSources = await readTypeScriptSources(
+        new URL("../packages/", import.meta.url)
+      );
+      const executionModelSourcePath = new URL(
+        "../packages/journey-execution-model/src/index.ts",
+        import.meta.url
+      ).pathname;
+      for (const typeName of movedExecutionModelTypeNames) {
+        const definitions = packageSources.filter((sourceFile) =>
+          sourceFile.source.includes(`export type ${typeName} =`) ||
+          sourceFile.source.includes(`export type ${typeName}<`)
+        );
+        assert.deepEqual(
+          definitions.map((definition) => definition.path),
+          [executionModelSourcePath],
+          `${typeName} must be defined only in journey-execution-model`
+        );
+      }
+
+      const compilerPackageSource = await readFile(
+        new URL("../packages/journey-model-ujg/package.json", import.meta.url),
+        "utf8"
+      );
+      const compilerPackageJson = JSON.parse(compilerPackageSource) as {
+        dependencies?: Record<string, string>;
+      };
+      assert.equal(
+        compilerPackageJson.dependencies?.["@openuji/journey-execution-model"],
+        "workspace:*",
+        "journey-model-ujg must depend on journey-execution-model"
+      );
+      assert.equal(
+        compilerPackageJson.dependencies?.["@openuji/journey-evidence"],
+        undefined,
+        "journey-model-ujg must not depend on journey-evidence"
+      );
+
+      const compilerSources = await readTypeScriptSources(
+        new URL("../packages/journey-model-ujg/src/", import.meta.url)
+      );
+      for (const sourceFile of compilerSources) {
+        assert.equal(
+          sourceFile.source.includes('from "@openuji/journey-evidence"'),
+          false,
+          `journey-model-ujg must import execution-model instead of evidence: ${sourceFile.path}`
+        );
+      }
+
+      const directPlan: ExecutionJourneyPlan = await compileUjgJourneyPlan(
+        await loadUjgDocument(fixtureUrl)
+      );
+      const evidencePlanFromDirect: EvidenceJourneyPlan = directPlan;
+      const runnerPlanFromEvidence: JourneyPlan = evidencePlanFromDirect;
+      assertCoreCompatiblePlan(directPlan);
+      assertCoreCompatibleOperation(directPlan.operations[0]);
+      assertCoreCompatiblePlan(evidencePlanFromDirect);
+      assertCoreCompatibleOperation(evidencePlanFromDirect.operations[0]);
+      assertCoreCompatiblePlan(runnerPlanFromEvidence);
+      assertCoreCompatibleOperation(runnerPlanFromEvidence.operations[0]);
 
       const evidencePlan: EvidenceJourneyPlan = await loadFixturePlan();
       assertCoreCompatiblePlan(evidencePlan);
@@ -1008,14 +1108,14 @@ async function readTypeScriptSources(
 }
 
 function assertCoreCompatiblePlan(
-  plan: EvidenceJourneyPlan
-): CoreJourneyPlan<EvidenceJourneyPlanOperation> {
+  plan: ExecutionJourneyPlan
+): CoreJourneyPlan<ExecutionJourneyPlanOperation> {
   return plan;
 }
 
 function assertCoreCompatibleOperation(
-  operation: EvidenceJourneyPlanOperation
-): CoreJourneyOperation<EvidenceJourneyPlanOperation["kind"]> {
+  operation: ExecutionJourneyPlanOperation
+): CoreJourneyOperation<ExecutionJourneyPlanOperation["kind"]> {
   return operation;
 }
 

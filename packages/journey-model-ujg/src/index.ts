@@ -21,7 +21,7 @@ import type {
   ResolvedTransitionActivation,
   StatePlanOperation,
   TransitionPlanOperation
-} from "@openuji/journey-evidence";
+} from "@openuji/journey-execution-model";
 
 export type UjgNode = {
   "@id": string;

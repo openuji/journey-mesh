@@ -20,6 +20,9 @@ importers:
       '@openuji/journey-evidence':
         specifier: workspace:*
         version: link:packages/journey-evidence
+      '@openuji/journey-execution-model':
+        specifier: workspace:*
+        version: link:packages/journey-execution-model
       '@openuji/journey-model-ujg':
         specifier: workspace:*
         version: link:packages/journey-model-ujg
@@ -92,15 +95,21 @@ importers:
 
   packages/journey-evidence:
     dependencies:
+      '@openuji/journey-execution-model':
+        specifier: workspace:*
+        version: link:../journey-execution-model
+
+  packages/journey-execution-model:
+    dependencies:
       '@openuji/journey-core':
         specifier: workspace:*
         version: link:../journey-core
 
   packages/journey-model-ujg:
     dependencies:
-      '@openuji/journey-evidence':
+      '@openuji/journey-execution-model':
         specifier: workspace:*
-        version: link:../journey-evidence
+        version: link:../journey-execution-model
 
   packages/journey-observer-axe:
     dependencies:
@@ -131,6 +140,9 @@ importers:
       '@openuji/journey-evidence':
         specifier: workspace:*
         version: link:../journey-evidence
+      '@openuji/journey-execution-model':
+        specifier: workspace:*
+        version: link:../journey-execution-model
 
 packages:
 

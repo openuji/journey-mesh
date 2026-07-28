@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@10.14.0",
   "scripts": {
-    "build": "tsc -b packages/journey-core packages/journey-evidence packages/journey-runner packages/journey-model-ujg packages/journey-profiles packages/journey-adapter-playwright packages/journey-driver-nextcloud packages/journey-observer-axe examples/nextcloud-filesharing",
+    "build": "tsc -b packages/journey-core packages/journey-execution-model packages/journey-evidence packages/journey-runner packages/journey-model-ujg packages/journey-profiles packages/journey-adapter-playwright packages/journey-driver-nextcloud packages/journey-observer-axe examples/nextcloud-filesharing",
     "typecheck": "tsc -b --pretty false",
     "lint": "node scripts/lint.mjs",
     "test": "node --import tsx tests/run-tests.ts"
@@ -15,6 +15,7 @@
     "@openuji/journey-core": "workspace:*",
     "@openuji/journey-driver-nextcloud": "workspace:*",
     "@openuji/journey-evidence": "workspace:*",
+    "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-model-ujg": "workspace:*",
     "@openuji/journey-observer-axe": "workspace:*",
     "@openuji/journey-profiles": "workspace:*",

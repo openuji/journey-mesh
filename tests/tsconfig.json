@@ -8,6 +8,7 @@
   "include": ["**/*.ts"],
   "references": [
     { "path": "../packages/journey-core/tsconfig.json" },
+    { "path": "../packages/journey-execution-model/tsconfig.json" },
     { "path": "../packages/journey-evidence/tsconfig.json" },
     { "path": "../packages/journey-runner/tsconfig.json" },
     { "path": "../packages/journey-model-ujg/tsconfig.json" },
