@@ -10,8 +10,11 @@ import type {
 } from "@openuji/journey-adapter-playwright";
 import type {
   ExecutionResult,
+  JourneyOperationSource,
   JourneyObserverExecutionInput,
+  JourneyPlanSource,
   JourneyReporter,
+  JourneySourceReferences,
   JsonObject,
   JsonValue,
   ResolvedAccessibleLocator,
@@ -323,8 +326,10 @@ export function axeObserver(options: AxeObserverOptions): AxeObserver {
         metadata: {
           ...(options.metadata ?? {}),
           runId: result.runId,
-          planId: result.planId,
-          documentId: result.documentId,
+          planId: result.plan.id,
+          ...(planSourceMetadata(result.plan.source)
+            ? { planSource: planSourceMetadata(result.plan.source) }
+            : {}),
           executionCount: result.executions.length
         },
         items: itemOrder.map((key) => {
@@ -755,8 +760,8 @@ function createAxeJourneyItem(
   return {
     auditId: itemId,
     itemId,
-    groupId: `${profileId}:${operation.stepId}`,
-    groupLabel: `${profileId} ${operation.stepId}`,
+    groupId: `${profileId}:${operation.entry.id}`,
+    groupLabel: `${profileId} ${operation.entry.label ?? operation.entry.id}`,
     metadata: metadataForOperation(profileId, executionId, graphNodeId, operation)
   };
 }
@@ -833,14 +838,12 @@ function metadataForOperation(
     sequence: operation.sequence,
     kind: operation.kind,
     graphNodeId,
-    documentId: operation.documentId,
-    phaseId: operation.phaseId,
-    stepId: operation.stepId,
-    userId: operation.userId,
+    actorId: operation.actorId,
     touchpointId: operation.touchpointId,
     entryId: operation.entry.id
   };
 
+  addOptional(metadata, "source", operationSourceMetadata(operation.source));
   addOptional(metadata, "entryBindingId", operation.entryBinding?.id);
   addOptional(metadata, "entryBindingValue", operation.entryBinding?.value);
 
@@ -882,6 +885,35 @@ function metadataForOperation(
   addOptional(metadata, "transitionLabel", operation.transition.label);
   addOptional(metadata, "fromExitRef", operation.transition.fromExitRef);
   addOptional(metadata, "toEntryRef", operation.transition.toEntryRef);
+  return metadata;
+}
+
+function planSourceMetadata(source: JourneyPlanSource | undefined): JsonObject | undefined {
+  if (!source) return undefined;
+
+  const metadata: JsonObject = {
+    model: source.model
+  };
+  addOptional(metadata, "documentId", source.documentId);
+  addOptional(metadata, "references", sourceReferencesMetadata(source.references));
+  return metadata;
+}
+
+function operationSourceMetadata(source: JourneyOperationSource | undefined): JsonObject | undefined {
+  if (!source) return undefined;
+
+  const metadata: JsonObject = {};
+  addOptional(metadata, "references", sourceReferencesMetadata(source.references));
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+function sourceReferencesMetadata(references: JourneySourceReferences | undefined): JsonObject | undefined {
+  if (!references) return undefined;
+
+  const metadata: JsonObject = {};
+  for (const [key, value] of Object.entries(references)) {
+    metadata[key] = typeof value === "string" ? value : [...value];
+  }
   return metadata;
 }
 

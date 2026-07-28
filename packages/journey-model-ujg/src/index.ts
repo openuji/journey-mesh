@@ -137,7 +137,10 @@ function compileDocument(document: UjgDocument): JourneyPlan {
 
   return {
     id: `${document["@id"]}:plan:v1`,
-    documentId: document["@id"],
+    source: {
+      model: "ujg",
+      documentId: document["@id"]
+    },
     operations
   };
 }
@@ -164,12 +167,16 @@ function operationForPathItem({
   const base = {
     id: operationId(document["@id"], sequence, pathItem.node["@id"]),
     sequence,
-    documentId: document["@id"],
-    phaseId,
-    stepId: step["@id"],
-    userId: assignment.userId,
+    actorId: assignment.userId,
     touchpointId: assignment.touchpointId,
     entry: entryRef(compositeContext.entry),
+    source: {
+      references: {
+        phaseId,
+        stepId: step["@id"],
+        graphNodeId: pathItem.node["@id"]
+      }
+    },
     ...(compositeContext.entryBinding ? { entryBinding: compositeContext.entryBinding } : {})
   };
 

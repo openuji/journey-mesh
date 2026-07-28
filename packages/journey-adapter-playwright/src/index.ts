@@ -27,6 +27,7 @@ import type {
   StatePlanOperation,
   TransitionPlanOperation
 } from "@openuji/journey-runner";
+import { referencesForOperation } from "@openuji/journey-evidence";
 import { errorToEvidence } from "@openuji/journey-runner";
 
 export type PlaywrightCreateBrowserContextInput = {
@@ -252,15 +253,7 @@ export function playwrightAdapter(options: PlaywrightAdapterOptions): JourneyAda
         operationId: operation.id,
         operationKind: operation.kind,
         ok: true,
-        ujg: {
-          documentId: operation.documentId,
-          stateId: operation.state.id,
-          surfaceId: operation.surface.id,
-          observationBindingIds: operation.target.bindings.map((binding) => binding.id),
-          locatorIds: unique(
-            operation.target.bindings.flatMap((binding) => collectLocatorIds(binding.locators))
-          )
-        },
+        references: referencesForOperation(context.plan, operation),
         data: {
           expectedMatchCount: operation.target.expectedMatchCount
         }
@@ -313,15 +306,7 @@ export function playwrightAdapter(options: PlaywrightAdapterOptions): JourneyAda
         operationId: operation.id,
         operationKind: operation.kind,
         ok: true,
-        ujg: {
-          documentId: operation.documentId,
-          transitionId: operation.transition.id,
-          surfaceId: operation.surface.id,
-          observationBindingIds: operation.activation.bindings.map((binding) => binding.id),
-          locatorIds: unique(
-            operation.activation.bindings.flatMap((binding) => collectLocatorIds(binding.locators))
-          )
-        },
+        references: referencesForOperation(context.plan, operation),
         data: {
           command: decision.command,
           inputModalityProfileId: decision.inputModalityProfile.id,

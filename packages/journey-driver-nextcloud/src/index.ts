@@ -10,6 +10,7 @@ import type {
   JourneyPlanOperation,
   TransitionPlanOperation
 } from "@openuji/journey-runner";
+import { referencesForOperation } from "@openuji/journey-evidence";
 
 export type Awaitable<T> = T | Promise<T>;
 
@@ -24,7 +25,7 @@ export type NextcloudUserConfig = {
 };
 
 export type NextcloudActorSession = {
-  userId: string;
+  actorId: string;
   touchpointId: string;
   user: NextcloudUserConfig;
   touchpoint: NextcloudTouchpointConfig;
@@ -127,13 +128,7 @@ export function nextcloudDriver(options: NextcloudDriverOptions): PlaywrightJour
         operationId: operation.id,
         operationKind: operation.kind,
         ok: true,
-        ujg: {
-          documentId: operation.documentId,
-          userId: operation.userId,
-          touchpointId: operation.touchpointId,
-          entryId: operation.entry.id,
-          entryBindingId: operation.entryBinding.id
-        },
+        references: referencesForOperation(context.plan, operation),
         data: {
           entryBindingValue: operation.entryBinding.value,
           baseURL: String(session.touchpoint.baseURL)
@@ -189,13 +184,7 @@ export function nextcloudDriver(options: NextcloudDriverOptions): PlaywrightJour
         operationId: operation.id,
         operationKind: operation.kind,
         ok: true,
-        ujg: {
-          documentId: operation.documentId,
-          transitionId: operation.transition.id,
-          userId: operation.userId,
-          touchpointId: operation.touchpointId,
-          entryId: operation.toEntry?.id
-        },
+        references: referencesForOperation(context.plan, operation),
         data: {
           fromExitRef: operation.transition.fromExitRef ?? null,
           toEntryRef: operation.transition.toEntryRef ?? null
@@ -243,12 +232,12 @@ export function nextcloudDriver(options: NextcloudDriverOptions): PlaywrightJour
       throw new Error(`No Nextcloud execution state for ${context.executionId}`);
     }
 
-    const sessionKey = `${operation.userId}\u0000${operation.touchpointId}`;
+    const sessionKey = `${operation.actorId}\u0000${operation.touchpointId}`;
     const existing = state.sessions.get(sessionKey);
     if (existing) return existing;
 
-    const user = options.users[operation.userId];
-    if (!user) throw new Error(`No Nextcloud user config for ${operation.userId}`);
+    const user = options.users[operation.actorId];
+    if (!user) throw new Error(`No Nextcloud user config for ${operation.actorId}`);
     const touchpoint = options.touchpoints[operation.touchpointId];
     if (!touchpoint) {
       throw new Error(`No Nextcloud touchpoint config for ${operation.touchpointId}`);
@@ -256,15 +245,15 @@ export function nextcloudDriver(options: NextcloudDriverOptions): PlaywrightJour
 
     const browserContext = await context.createBrowserContext({
       operation,
-      label: `${operation.userId}-${operation.touchpointId}`,
+      label: `${operation.actorId}-${operation.touchpointId}`,
       data: {
-        userId: operation.userId,
+        actorId: operation.actorId,
         touchpointId: operation.touchpointId
       }
     });
     const page = await browserContext.newPage();
     const session: NextcloudActorSession = {
-      userId: operation.userId,
+      actorId: operation.actorId,
       touchpointId: operation.touchpointId,
       user,
       touchpoint,
@@ -280,11 +269,7 @@ export function nextcloudDriver(options: NextcloudDriverOptions): PlaywrightJour
       executionId: context.executionId,
       profileId: context.profile.id,
       ok: true,
-      ujg: {
-        documentId: operation.documentId,
-        userId: operation.userId,
-        touchpointId: operation.touchpointId
-      },
+      references: referencesForOperation(context.plan, operation),
       data: {
         username: user.username,
         baseURL: String(touchpoint.baseURL)

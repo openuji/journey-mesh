@@ -226,6 +226,71 @@ const tests: TestCase[] = [
         );
       }
 
+      const executionModelSource = await readFile(
+        new URL("../packages/journey-execution-model/src/index.ts", import.meta.url),
+        "utf8"
+      );
+      for (const forbiddenPattern of ["phaseId:", "stepId:", "userId:"]) {
+        assert.equal(
+          executionModelSource.includes(forbiddenPattern),
+          false,
+          `journey-execution-model must not expose UJG provenance field ${forbiddenPattern}`
+        );
+      }
+
+      for (const sourceFile of packageSources) {
+        assert.equal(
+          sourceFile.source.includes("ujg:"),
+          false,
+          `evidence events must use references, not ujg: ${sourceFile.path}`
+        );
+      }
+
+      const runtimeSourcePackages = [
+        "/packages/journey-runner/src/",
+        "/packages/journey-profiles/src/",
+        "/packages/journey-adapter-playwright/src/",
+        "/packages/journey-driver-nextcloud/src/",
+        "/packages/journey-observer-axe/src/"
+      ];
+      const runtimeSources = packageSources.filter((sourceFile) =>
+        runtimeSourcePackages.some((packagePath) => sourceFile.path.includes(packagePath))
+      );
+      const forbiddenRuntimeOperationFields = [
+        "operation.documentId",
+        "operation.phaseId",
+        "operation.stepId",
+        "operation.userId"
+      ];
+      const forbiddenSourceReferenceReads = [
+        "source.references.phaseId",
+        "source.references.stepId",
+        '["phaseId"]',
+        '["stepId"]'
+      ];
+
+      for (const sourceFile of runtimeSources) {
+        for (const forbiddenPattern of [
+          ...forbiddenRuntimeOperationFields,
+          ...forbiddenSourceReferenceReads
+        ]) {
+          assert.equal(
+            sourceFile.source.includes(forbiddenPattern),
+            false,
+            `runtime packages must not inspect UJG-specific source fields: ${forbiddenPattern} in ${sourceFile.path}`
+          );
+        }
+      }
+
+      const ujgRefSetDefinitions = packageSources.filter((sourceFile) =>
+        sourceFile.source.includes("UjgRefSet")
+      );
+      assert.deepEqual(
+        ujgRefSetDefinitions.map((definition) => definition.path),
+        [new URL("../packages/journey-evidence/src/index.ts", import.meta.url).pathname],
+        "UjgRefSet may exist only as the evidence compatibility alias"
+      );
+
       const directPlan: ExecutionJourneyPlan = await compileUjgJourneyPlan(
         await loadUjgDocument(fixtureUrl)
       );
@@ -247,7 +312,8 @@ const tests: TestCase[] = [
     name: "compiler produces the expected v1 operation sequence",
     async run() {
       const plan = await loadFixturePlan();
-      assert.equal(plan.documentId, "urn:ujg:document:nextcloud-federated-sharing");
+      assert.equal(plan.source?.model, "ujg");
+      assert.equal(plan.source?.documentId, "urn:ujg:document:nextcloud-federated-sharing");
       assert.equal(plan.operations.length, 15);
       assert.deepEqual(
         plan.operations.map((operation) => operation.kind),
@@ -296,8 +362,11 @@ const tests: TestCase[] = [
     async run() {
       const plan = await loadFixturePlan();
       const aliceReady = stateOperation(plan, "urn:state:alice-files-ready");
-      assert.equal(aliceReady.userId, "urn:user:alice");
+      assert.equal(aliceReady.actorId, "urn:user:alice");
       assert.equal(aliceReady.touchpointId, "urn:touchpoint:nextcloud-a");
+      assert.equal(aliceReady.source?.references?.phaseId, "urn:phase:remote-share-offered");
+      assert.equal(aliceReady.source?.references?.stepId, "urn:step:alice-federated-sharing");
+      assert.equal(aliceReady.source?.references?.graphNodeId, "urn:state:alice-files-ready");
       assert.equal(aliceReady.entry.id, "urn:entry:alice-federated-sharing");
       assert.equal(aliceReady.entryBinding?.value, "nextcloud.files");
       assert.equal(aliceReady.target.bindings[0].id, "urn:obs:alice-files-ready-presence");
@@ -453,13 +522,106 @@ const tests: TestCase[] = [
       assert.ok(result.evidence.events.some((event) => event.type === "profile.modality.selected"));
       assert.ok(
         result.evidence.events.some(
-          (event) => event.ujg?.transitionId === "urn:transition:alice-opens-file-menu"
+          (event) => event.references?.transitionId === "urn:transition:alice-opens-file-menu"
         )
       );
       assert.ok(
         result.evidence.events.some(
           (event) => event.profileId === "keyboard-only" && event.type === "adapter.perform-transition.completed"
         )
+      );
+    }
+  },
+  {
+    name: "runner accepts source-neutral manually constructed plans",
+    async run() {
+      const minimalResult = await runJourney({
+        plan: {
+          id: "minimal-custom-plan",
+          operations: []
+        },
+        adapter: fakeAdapter([]),
+        profiles: [defaultProfile()]
+      });
+
+      assert.equal(minimalResult.ok, true);
+      assert.deepEqual(minimalResult.plan, { id: "minimal-custom-plan" });
+      assert.equal(
+        minimalResult.evidence.events.some((event) => "ujg" in event),
+        false
+      );
+
+      const plan: JourneyPlan = {
+        id: "custom-plan",
+        source: {
+          model: "custom-workflow",
+          documentId: "workflow-42",
+          references: {
+            workflowVersion: "3"
+          }
+        },
+        operations: [
+          {
+            id: "operation-1",
+            sequence: 0,
+            kind: "state",
+            actorId: "actor-a",
+            touchpointId: "web",
+            entry: {
+              id: "entry-a",
+              stateId: "state-a"
+            },
+            source: {
+              references: {
+                taskId: "task-7"
+              }
+            },
+            state: {
+              id: "state-a"
+            },
+            surface: {
+              id: "surface-a"
+            },
+            target: {
+              observation: {
+                stateId: "state-a",
+                surfaceId: "surface-a",
+                expectedMatchCount: 1,
+                bindings: []
+              },
+              expectedMatchCount: 1,
+              bindings: []
+            }
+          }
+        ]
+      };
+
+      const result = await runJourney({
+        plan,
+        adapter: fakeAdapter([]),
+        profiles: [defaultProfile()]
+      });
+      const operationStarted = result.evidence.events.find(
+        (event) => event.type === "operation.started"
+      );
+
+      assert.equal(result.ok, true);
+      assert.equal(result.plan.source?.model, "custom-workflow");
+      assert.equal(result.plan.source?.documentId, "workflow-42");
+      assert.equal(operationStarted?.references?.actorId, "actor-a");
+      assert.equal(operationStarted?.references?.source?.model, "custom-workflow");
+      assert.equal(operationStarted?.references?.source?.documentId, "workflow-42");
+      assert.equal(
+        operationStarted?.references?.source?.planReferences?.workflowVersion,
+        "3"
+      );
+      assert.equal(
+        operationStarted?.references?.source?.operationReferences?.taskId,
+        "task-7"
+      );
+      assert.equal(
+        result.evidence.events.some((event) => "ujg" in event),
+        false
       );
     }
   },
@@ -486,7 +648,7 @@ const tests: TestCase[] = [
       );
       assert.ok(
         result.evidence.events.some(
-          (event) => event.ujg?.stateId === "urn:state:alice-files-ready"
+          (event) => event.references?.stateId === "urn:state:alice-files-ready"
         )
       );
     }
@@ -1089,6 +1251,10 @@ async function readTypeScriptSources(
   const sources: Array<{ path: string; source: string }> = [];
 
   for (const entry of entries) {
+    if (entry.isDirectory() && entry.name === "dist") {
+      continue;
+    }
+
     const child = new URL(`${entry.name}${entry.isDirectory() ? "/" : ""}`, directory);
 
     if (entry.isDirectory()) {
@@ -1489,7 +1655,7 @@ function fakeDriverContext(): PlaywrightDriverExecutionContext {
     runId: "test-run",
     executionId: "test-execution",
     profile: defaultProfile(),
-    plan: { id: "test-plan", documentId: "urn:test", operations: [] },
+    plan: { id: "test-plan", operations: [] },
     evidence: new EvidenceRecorder("test-run"),
     observers: [],
     browser: undefined as never,
@@ -1515,8 +1681,10 @@ function fakeRunResult(
   return {
     ok: executions.every((execution) => execution.ok),
     runId: "axe-run",
-    planId: plan.id,
-    documentId: plan.documentId,
+    plan: {
+      id: plan.id,
+      ...(plan.source ? { source: plan.source } : {})
+    },
     executions,
     evidence: {
       events: []

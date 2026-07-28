@@ -2,22 +2,28 @@ import type {
   ControlFlowPlanOperation,
   InputModalityDecision,
   JourneyPlan,
+  JourneyPlanSource,
   JourneyPlanOperation,
-  ResolvedAccessibleLocator,
   StatePlanOperation,
   TransitionPlanOperation
 } from "@openuji/journey-execution-model";
 import {
   EvidenceRecorder,
   errorToEvidence,
+  referencesForOperation,
+  referencesForPlan,
   type EvidenceError,
   type EvidenceEvent,
   type EvidenceEventInput,
-  type JsonObject,
-  type UjgRefSet
+  type JsonObject
 } from "@openuji/journey-evidence";
 
-export { EvidenceRecorder, errorToEvidence } from "@openuji/journey-evidence";
+export {
+  EvidenceRecorder,
+  errorToEvidence,
+  referencesForOperation,
+  referencesForPlan
+} from "@openuji/journey-evidence";
 
 export type {
   AccessibleFeature,
@@ -27,10 +33,14 @@ export type {
   InputModalityDecision,
   JourneyEntryRef,
   JourneyInteractionCommand,
+  JourneyOperationSource,
   JourneyPlan,
   JourneyPlanOperation,
   JourneyPlanOperationBase,
   JourneyPlanOperationKind,
+  JourneyPlanSource,
+  JourneySourceReferences,
+  JourneySourceReferenceValue,
   LabeledRef,
   ResolvedAccessibleLocator,
   ResolvedArtifact,
@@ -50,10 +60,11 @@ export type {
   EvidenceError,
   EvidenceEvent,
   EvidenceEventInput,
+  JourneyEvidenceSource,
+  JourneyReferenceSet,
   JsonObject,
   JsonPrimitive,
-  JsonValue,
-  UjgRefSet
+  JsonValue
 } from "@openuji/journey-evidence";
 
 export type AdapterExecutionContext = {
@@ -154,8 +165,10 @@ export type ExecutionResult = {
 export type RunResult = {
   ok: boolean;
   runId: string;
-  planId: string;
-  documentId: string;
+  plan: {
+    id: string;
+    source?: JourneyPlanSource;
+  };
   executions: ExecutionResult[];
   evidence: {
     events: EvidenceEvent[];
@@ -177,7 +190,7 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
   evidence.emit({
     type: "runner.run.started",
     ok: true,
-    ujg: { documentId: options.plan.documentId },
+    references: referencesForPlan(options.plan),
     data: {
       planId: options.plan.id,
       operationCount: options.plan.operations.length,
@@ -201,7 +214,7 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
     evidence.emit({
       type: "runner.run.completed",
       ok: false,
-      ujg: { documentId: options.plan.documentId },
+      references: referencesForPlan(options.plan),
       data: {
         planId: options.plan.id,
         executionCount: 0,
@@ -209,12 +222,11 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
       }
     });
     return buildResult({
-      documentId: options.plan.documentId,
       errors,
       events: evidence.snapshot(),
       executions,
       ok: false,
-      planId: options.plan.id,
+      plan: options.plan,
       runId
     });
   }
@@ -245,12 +257,11 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
 
   let ok = executions.every((execution) => execution.ok);
   let result = buildResult({
-    documentId: options.plan.documentId,
     errors,
     events: evidence.snapshot(),
     executions,
     ok,
-    planId: options.plan.id,
+    plan: options.plan,
     runId
   });
 
@@ -280,12 +291,11 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
     }
 
     result = buildResult({
-      documentId: options.plan.documentId,
       errors,
       events: evidence.snapshot(),
       executions,
       ok,
-      planId: options.plan.id,
+      plan: options.plan,
       runId
     });
   }
@@ -299,12 +309,11 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
     ok = false;
     errors.push(runCompletionError);
     result = buildResult({
-      documentId: options.plan.documentId,
       errors,
       events: evidence.snapshot(),
       executions,
       ok,
-      planId: options.plan.id,
+      plan: options.plan,
       runId
     });
   }
@@ -312,7 +321,7 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
   evidence.emit({
     type: "runner.run.completed",
     ok,
-    ujg: { documentId: options.plan.documentId },
+    references: referencesForPlan(options.plan),
     data: {
       planId: options.plan.id,
       executionCount: executions.length,
@@ -321,12 +330,11 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
   });
 
   return buildResult({
-    documentId: options.plan.documentId,
     errors,
     events: evidence.snapshot(),
     executions,
     ok,
-    planId: options.plan.id,
+    plan: options.plan,
     runId
   });
 }
@@ -348,14 +356,14 @@ async function runProfileExecution({
 }): Promise<ExecutionResult> {
   let ok = true;
   let executionError: EvidenceError | undefined;
-  const currentEntryByUser = new Map<string, string>();
+  const currentEntryByActor = new Map<string, string>();
 
   evidence.emit({
     type: "profile.execution.started",
     executionId: context.executionId,
     profileId: profile.id,
     ok: true,
-    ujg: { documentId: plan.documentId },
+    references: referencesForPlan(plan),
     data: { label: profile.label ?? profile.id }
   });
 
@@ -380,7 +388,7 @@ async function runProfileExecution({
 
     for (const operation of plan.operations) {
       evidence.emit(operationEvent(operation, context, "operation.started", true));
-      await ensureEntryOpen({ adapter, context, currentEntryByUser, evidence, operation });
+      await ensureEntryOpen({ adapter, context, currentEntryByActor, evidence, operation });
 
       if (operation.kind === "state") {
         await assertState({ adapter, context, evidence, operation });
@@ -469,26 +477,26 @@ async function runProfileExecution({
 async function ensureEntryOpen({
   adapter,
   context,
-  currentEntryByUser,
+  currentEntryByActor,
   evidence,
   operation
 }: {
   adapter: JourneyAdapter;
   context: AdapterExecutionContext;
-  currentEntryByUser: Map<string, string>;
+  currentEntryByActor: Map<string, string>;
   evidence: EvidenceRecorder;
   operation: JourneyPlanOperation;
 }): Promise<void> {
   if (!operation.entryBinding) return;
 
   const entryKey = `${operation.entry.id}\u0000${operation.entryBinding.id}\u0000${operation.entryBinding.value}`;
-  if (currentEntryByUser.get(operation.userId) === entryKey) return;
+  if (currentEntryByActor.get(operation.actorId) === entryKey) return;
 
   evidence.emit(operationEvent(operation, context, "adapter.open-entry.started", true, {
     entryBindingValue: operation.entryBinding.value
   }));
   await adapter.openEntry(operation, context);
-  currentEntryByUser.set(operation.userId, entryKey);
+  currentEntryByActor.set(operation.actorId, entryKey);
   evidence.emit(operationEvent(operation, context, "adapter.open-entry.completed", true, {
     entryBindingValue: operation.entryBinding.value
   }));
@@ -756,53 +764,9 @@ function operationEvent(
     operationId: operation.id,
     operationKind: operation.kind,
     ok,
-    ujg: ujgRefsForOperation(operation),
+    references: referencesForOperation(context.plan, operation),
     data
   };
-}
-
-function ujgRefsForOperation(operation: JourneyPlanOperation): UjgRefSet {
-  const refs: UjgRefSet = {
-    documentId: operation.documentId,
-    phaseId: operation.phaseId,
-    stepId: operation.stepId,
-    userId: operation.userId,
-    touchpointId: operation.touchpointId,
-    entryId: operation.entry.id,
-    entryBindingId: operation.entryBinding?.id
-  };
-
-  if (operation.kind === "state") {
-    refs.stateId = operation.state.id;
-    refs.surfaceId = operation.surface.id;
-    refs.observationBindingIds = operation.target.bindings.map((binding) => binding.id);
-    refs.observationEventIds = unique(operation.target.bindings.map((binding) => binding.eventId));
-    refs.locatorIds = unique(operation.target.bindings.flatMap((binding) => locatorIds(binding.locators)));
-    return refs;
-  }
-
-  refs.transitionId = operation.transition.id;
-
-  if (operation.kind === "transition") {
-    refs.surfaceId = operation.surface.id;
-    refs.observationBindingIds = operation.activation.bindings.map((binding) => binding.id);
-    refs.observationEventIds = unique(operation.activation.bindings.map((binding) => binding.eventId));
-    refs.locatorIds = unique(operation.activation.bindings.flatMap((binding) => locatorIds(binding.locators)));
-    refs.effectIds = operation.effects.map((effect) => effect.id);
-    refs.artifactIds = unique(
-      operation.effects.flatMap((effect) => [...effect.producedRefs, ...effect.consumedRefs])
-    );
-  }
-
-  return refs;
-}
-
-function locatorIds(locators: ResolvedAccessibleLocator[]): string[] {
-  return locators.flatMap((locator) => [locator.id, ...locatorIds(locator.contexts)]);
-}
-
-function unique(values: string[]): string[] {
-  return [...new Set(values)];
 }
 
 function componentData(component: { name: string; version?: string }): JsonObject {
@@ -817,27 +781,27 @@ function safeSegment(value: string): string {
 }
 
 function buildResult({
-  documentId,
   errors,
   events,
   executions,
   ok,
-  planId,
+  plan,
   runId
 }: {
-  documentId: string;
   errors: EvidenceError[];
   events: EvidenceEvent[];
   executions: ExecutionResult[];
   ok: boolean;
-  planId: string;
+  plan: JourneyPlan;
   runId: string;
 }): RunResult {
   return {
     ok,
     runId,
-    planId,
-    documentId,
+    plan: {
+      id: plan.id,
+      ...(plan.source ? { source: plan.source } : {})
+    },
     executions: [...executions],
     evidence: { events },
     errors: [...errors]

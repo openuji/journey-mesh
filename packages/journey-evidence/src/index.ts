@@ -1,6 +1,9 @@
 import type {
-  JourneyPlanOperationKind
+  JourneyPlanOperationKind,
+  JourneySourceReferences
 } from "@openuji/journey-execution-model";
+
+export { referencesForOperation, referencesForPlan } from "./journey-references.js";
 
 export type {
   AccessibleFeature,
@@ -11,9 +14,13 @@ export type {
   JourneyEntryRef,
   JourneyInteractionCommand,
   JourneyPlan,
+  JourneyOperationSource,
   JourneyPlanOperation,
   JourneyPlanOperationBase,
   JourneyPlanOperationKind,
+  JourneyPlanSource,
+  JourneySourceReferences,
+  JourneySourceReferenceValue,
   LabeledRef,
   ResolvedAccessibleLocator,
   ResolvedArtifact,
@@ -33,11 +40,15 @@ export type JsonPrimitive = string | number | boolean | null;
 export type JsonObject = { [key: string]: JsonValue };
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
 
-export type UjgRefSet = {
+export type JourneyEvidenceSource = {
+  model: string;
   documentId?: string;
-  phaseId?: string;
-  stepId?: string;
-  userId?: string;
+  planReferences?: JourneySourceReferences;
+  operationReferences?: JourneySourceReferences;
+};
+
+export type JourneyReferenceSet = {
+  actorId?: string;
   touchpointId?: string;
   entryId?: string;
   entryBindingId?: string;
@@ -50,7 +61,13 @@ export type UjgRefSet = {
   featureIds?: string[];
   effectIds?: string[];
   artifactIds?: string[];
+  source?: JourneyEvidenceSource;
 };
+
+/**
+ * @deprecated Use JourneyReferenceSet.
+ */
+export type UjgRefSet = JourneyReferenceSet;
 
 export type EvidenceError = {
   name: string;
@@ -70,7 +87,7 @@ export type EvidenceEvent = {
   type: string;
   ok?: boolean;
   message?: string;
-  ujg?: UjgRefSet;
+  references?: JourneyReferenceSet;
   data?: JsonValue;
   error?: EvidenceError;
 };

@@ -96,16 +96,28 @@ export type ResolvedEffect = LabeledRef & {
   consumed: ResolvedArtifact[];
 };
 
+export type JourneySourceReferenceValue = string | readonly string[];
+
+export type JourneySourceReferences = Readonly<Record<string, JourneySourceReferenceValue>>;
+
+export type JourneyPlanSource = {
+  readonly model: string;
+  readonly documentId?: string;
+  readonly references?: JourneySourceReferences;
+};
+
+export type JourneyOperationSource = {
+  readonly references?: JourneySourceReferences;
+};
+
 export type JourneyPlanOperationKind = "state" | "transition" | "control-flow";
 
 export type JourneyPlanOperationBase<K extends JourneyPlanOperationKind> = CoreJourneyOperation<K> & {
-  documentId: string;
-  phaseId: string;
-  stepId: string;
-  userId: string;
+  actorId: string;
   touchpointId: string;
   entry: JourneyEntryRef;
   entryBinding?: EntryBindingRef;
+  source?: JourneyOperationSource;
 };
 
 export type StatePlanOperation = JourneyPlanOperationBase<"state"> & {
@@ -144,7 +156,7 @@ export type JourneyPlanOperation =
   | ControlFlowPlanOperation;
 
 export type JourneyPlan = CoreJourneyPlan<JourneyPlanOperation> & {
-  documentId: string;
+  readonly source?: JourneyPlanSource;
 };
 
 export type JourneyInteractionCommand =

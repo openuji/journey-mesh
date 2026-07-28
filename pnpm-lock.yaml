@@ -72,6 +72,9 @@ importers:
 
   packages/journey-adapter-playwright:
     dependencies:
+      '@openuji/journey-evidence':
+        specifier: workspace:*
+        version: link:../journey-evidence
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner
@@ -86,6 +89,9 @@ importers:
       '@openuji/journey-adapter-playwright':
         specifier: workspace:*
         version: link:../journey-adapter-playwright
+      '@openuji/journey-evidence':
+        specifier: workspace:*
+        version: link:../journey-evidence
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner

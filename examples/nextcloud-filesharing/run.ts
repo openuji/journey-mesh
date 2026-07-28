@@ -11,7 +11,7 @@ import { nextcloudDriver } from "@openuji/journey-driver-nextcloud";
 import { compileUjgJourneyPlan } from "@openuji/journey-model-ujg";
 import { axeObserver, isAxeStrict, type AxeObserver } from "@openuji/journey-observer-axe";
 import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
-import { runJourney, type EvidenceError, type RunResult } from "@openuji/journey-runner";
+import { runJourney, type EvidenceError, type JourneyPlan, type RunResult } from "@openuji/journey-runner";
 
 import {
   nextcloudEnvironment,
@@ -34,9 +34,8 @@ test("executes the federated file-sharing UJG journey", async ({ browser }, test
   });
   const result = preflightErrors.length > 0
     ? preflightFailureResult({
-        documentId: plan.documentId,
         errors: preflightErrors,
-        planId: plan.id
+        plan
       })
     : await runJourney({
         plan,
@@ -125,9 +124,8 @@ function formatError(error: EvidenceError): string {
 }
 
 function preflightFailureResult(input: {
-  documentId: string;
   errors: string[];
-  planId: string;
+  plan: JourneyPlan;
 }): RunResult {
   const errors: EvidenceError[] = input.errors.map((message) => ({
     name: "PreflightError",
@@ -137,8 +135,10 @@ function preflightFailureResult(input: {
   return {
     ok: false,
     runId: `preflight-${new Date().toISOString()}`,
-    planId: input.planId,
-    documentId: input.documentId,
+    plan: {
+      id: input.plan.id,
+      ...(input.plan.source ? { source: input.plan.source } : {})
+    },
     executions: [],
     evidence: {
       events: []
