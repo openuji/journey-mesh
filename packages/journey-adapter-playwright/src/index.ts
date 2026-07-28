@@ -19,6 +19,7 @@ import type {
   InputModalityDecision,
   JourneyAdapter,
   JourneyInteractionCommand,
+  JourneyObserver,
   JourneyPlanOperation,
   JsonObject,
   ResolvedAccessibleLocator,
@@ -93,6 +94,42 @@ export type PlaywrightJourneyDriver = {
   ): Promise<void> | void;
   teardownExecution(context: PlaywrightDriverExecutionContext): Promise<void> | void;
 };
+
+export type PlaywrightOperationObservation =
+  | {
+      stage: "state-asserted";
+      operation: StatePlanOperation;
+      context: PlaywrightDriverExecutionContext;
+      page: Page;
+      locator: Locator;
+      expectedMatchCount: number;
+    }
+  | {
+      stage: "transition-ready";
+      operation: TransitionPlanOperation;
+      context: PlaywrightDriverExecutionContext;
+      page: Page;
+      locator: Locator;
+      expectedMatchCount: 1;
+      decision: InputModalityDecision;
+    }
+  | {
+      stage: "control-flow-recorded";
+      operation: ControlFlowPlanOperation;
+      context: PlaywrightDriverExecutionContext;
+    };
+
+export type PlaywrightJourneyObserver = JourneyObserver & {
+  observePlaywrightOperation(
+    observation: PlaywrightOperationObservation
+  ): Promise<void> | void;
+};
+
+export function isPlaywrightJourneyObserver(
+  observer: JourneyObserver
+): observer is PlaywrightJourneyObserver {
+  return typeof (observer as { observePlaywrightOperation?: unknown }).observePlaywrightOperation === "function";
+}
 
 export type PlaywrightAdapterOptions = {
   driver: PlaywrightJourneyDriver;
@@ -228,6 +265,15 @@ export function playwrightAdapter(options: PlaywrightAdapterOptions): JourneyAda
           expectedMatchCount: operation.target.expectedMatchCount
         }
       });
+
+      await notifyPlaywrightObservers({
+        context: state.context,
+        expectedMatchCount: operation.target.expectedMatchCount,
+        locator,
+        operation,
+        page,
+        stage: "state-asserted"
+      });
     },
 
     async performTransition(operation, decision, context) {
@@ -241,6 +287,16 @@ export function playwrightAdapter(options: PlaywrightAdapterOptions): JourneyAda
 
       await assertPlaywrightLocator(locator, 1, {
         timeoutMs: options.assertionTimeoutMs ?? defaultAssertionTimeoutMs
+      });
+
+      await notifyPlaywrightObservers({
+        context: state.context,
+        decision,
+        expectedMatchCount: 1,
+        locator,
+        operation,
+        page,
+        stage: "transition-ready"
       });
 
       const text = decision.command === "keyboard-text-entry"
@@ -277,6 +333,11 @@ export function playwrightAdapter(options: PlaywrightAdapterOptions): JourneyAda
     async recordControlFlow(operation, context) {
       const state = requireExecutionState(executions, context.executionId);
       await options.driver.recordControlFlow(operation, state.context);
+      await notifyPlaywrightObservers({
+        context: state.context,
+        operation,
+        stage: "control-flow-recorded"
+      });
     },
 
     async teardownExecution(context) {
@@ -546,6 +607,58 @@ async function attachVideos(
           label: browserContext.label
         });
       }
+    }
+  }
+}
+
+async function notifyPlaywrightObservers(
+  observation: PlaywrightOperationObservation
+): Promise<void> {
+  const observers = observation.context.observers.filter(isPlaywrightJourneyObserver);
+
+  for (const observer of observers) {
+    try {
+      observation.context.evidence.emit({
+        type: "playwright.observer.operation.started",
+        executionId: observation.context.executionId,
+        profileId: observation.context.profile.id,
+        operationId: observation.operation.id,
+        operationKind: observation.operation.kind,
+        ok: true,
+        data: {
+          observer: componentData(observer),
+          stage: observation.stage
+        }
+      });
+      await observer.observePlaywrightOperation(observation);
+      observation.context.evidence.emit({
+        type: "playwright.observer.operation.completed",
+        executionId: observation.context.executionId,
+        profileId: observation.context.profile.id,
+        operationId: observation.operation.id,
+        operationKind: observation.operation.kind,
+        ok: true,
+        data: {
+          observer: componentData(observer),
+          stage: observation.stage
+        }
+      });
+    } catch (error) {
+      const evidenceError = errorToEvidence(error);
+      observation.context.evidence.emit({
+        type: "playwright.observer.operation.failed",
+        executionId: observation.context.executionId,
+        profileId: observation.context.profile.id,
+        operationId: observation.operation.id,
+        operationKind: observation.operation.kind,
+        ok: false,
+        data: {
+          observer: componentData(observer),
+          stage: observation.stage
+        },
+        error: evidenceError
+      });
+      throw error;
     }
   }
 }

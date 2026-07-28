@@ -20,6 +20,9 @@ importers:
       '@openuji/journey-model-ujg':
         specifier: workspace:*
         version: link:packages/journey-model-ujg
+      '@openuji/journey-observer-axe':
+        specifier: workspace:*
+        version: link:packages/journey-observer-axe
       '@openuji/journey-profiles':
         specifier: workspace:*
         version: link:packages/journey-profiles
@@ -47,6 +50,9 @@ importers:
       '@openuji/journey-model-ujg':
         specifier: workspace:*
         version: link:../../packages/journey-model-ujg
+      '@openuji/journey-observer-axe':
+        specifier: workspace:*
+        version: link:../../packages/journey-observer-axe
       '@openuji/journey-profiles':
         specifier: workspace:*
         version: link:../../packages/journey-profiles
@@ -87,6 +93,24 @@ importers:
         specifier: workspace:*
         version: link:../journey-evidence
 
+  packages/journey-observer-axe:
+    dependencies:
+      '@axe-core/playwright':
+        specifier: ^4.10.2
+        version: 4.12.1(playwright-core@1.62.0)
+      '@openuji/journey-adapter-playwright':
+        specifier: workspace:*
+        version: link:../journey-adapter-playwright
+      '@openuji/journey-runner':
+        specifier: workspace:*
+        version: link:../journey-runner
+      '@playwright/test':
+        specifier: ^1.62.0
+        version: 1.62.0
+      playwright:
+        specifier: ^1.61.1
+        version: 1.62.0
+
   packages/journey-profiles:
     dependencies:
       '@openuji/journey-runner':
@@ -100,6 +124,11 @@ importers:
         version: link:../journey-evidence
 
 packages:
+
+  '@axe-core/playwright@4.12.1':
+    resolution: {integrity: sha512-rMd7xriptqKpP+w5265i4Hdkv2X5kbu6uiBi/B2I7uf3hieRBM3qDCfaKPtxfiYb2mKXfF+yLODJwIx+Jv1GDw==}
+    peerDependencies:
+      playwright-core: '>= 1.0.0'
 
   '@esbuild/aix-ppc64@0.28.1':
     resolution: {integrity: sha512-Svl7tq8k/08+p6CXPpRjQ1fKX+1odH/BQbb48fV6fj3CWHhsoIOoY87w1oHXm0qEpkIK3ZfVgp0hed3XBXzXMQ==}
@@ -265,6 +294,10 @@ packages:
   '@types/node@22.20.1':
     resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
 
+  axe-core@4.12.1:
+    resolution: {integrity: sha512-s7iGf5GaVMxEG0ENN9x+xTr7GFZCb1ZP/1uATUpCEK2X78nDB3RwbtFCo9pGAf9ru+VwoQ464DkaLEeRM08wJA==}
+    engines: {node: '>=4'}
+
   esbuild@0.28.1:
     resolution: {integrity: sha512-HrJrvZv5ayxBzPfwphOoNzkzOIIlifzk0KJrGK2c8R4+LKpMtpYLQeUdjnwjWv/LZlkH2laZk+4w78pi99D4Vw==}
     engines: {node: '>=18'}
@@ -304,6 +337,11 @@ packages:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
 snapshots:
+
+  '@axe-core/playwright@4.12.1(playwright-core@1.62.0)':
+    dependencies:
+      axe-core: 4.12.1
+      playwright-core: 1.62.0
 
   '@esbuild/aix-ppc64@0.28.1':
     optional: true
@@ -390,6 +428,8 @@ snapshots:
   '@types/node@22.20.1':
     dependencies:
       undici-types: 6.21.0
+
+  axe-core@4.12.1: {}
 
   esbuild@0.28.1:
     optionalDependencies:

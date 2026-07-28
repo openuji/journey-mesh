@@ -9,6 +9,7 @@ import {
 } from "@openuji/journey-adapter-playwright";
 import { nextcloudDriver } from "@openuji/journey-driver-nextcloud";
 import { compileUjgJourneyPlan } from "@openuji/journey-model-ujg";
+import { axeObserver, isAxeStrict, type AxeObserver } from "@openuji/journey-observer-axe";
 import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
 import { runJourney, type EvidenceError, type RunResult } from "@openuji/journey-runner";
 
@@ -22,6 +23,15 @@ const journey = new URL("./ujg/filesharing.ujg.jsonld", import.meta.url);
 test("executes the federated file-sharing UJG journey", async ({ browser }, testInfo) => {
   const plan = await compileUjgJourneyPlan(journey);
   const preflightErrors = validateNextcloudEnvironmentForPlan(plan);
+  const axe = axeObserver({
+    testInfo,
+    reportId: "nextcloud-filesharing.axe-path",
+    sourceScreenshots: {
+      states: true,
+      fullPage: true
+    },
+    strict: isAxeStrict()
+  });
   const result = preflightErrors.length > 0
     ? preflightFailureResult({
         documentId: plan.documentId,
@@ -41,11 +51,13 @@ test("executes the federated file-sharing UJG journey", async ({ browser }, test
             videos: true
           }
         }),
-        profiles: [defaultProfile(), keyboardOnlyProfile()]
+        profiles: [defaultProfile(), keyboardOnlyProfile()],
+        observers: [axe],
+        reporters: [axe]
       });
 
   const evidencePath = await attachEvidence(testInfo, result);
-  printSummary(result, evidencePath);
+  printSummary(result, evidencePath, axe);
 
   if (process.env.UJG_EVIDENCE_STDOUT === "1") {
     console.log(JSON.stringify(result, null, 2));
@@ -64,7 +76,7 @@ async function attachEvidence(testInfo: TestInfo, result: RunResult): Promise<st
   return path;
 }
 
-function printSummary(result: RunResult, evidencePath: string): void {
+function printSummary(result: RunResult, evidencePath: string, axe: AxeObserver): void {
   console.log(`UJG journey ${result.ok ? "passed" : "failed"}: ${result.runId}`);
   for (const execution of result.executions) {
     const suffix = execution.ok
@@ -78,6 +90,9 @@ function printSummary(result: RunResult, evidencePath: string): void {
     }
   }
   console.log(`  evidence: ${evidencePath}`);
+  if (axe.latestPathReportPath) {
+    console.log(`  axe: ${axe.latestPathReportPath}`);
+  }
   console.log("  report: pnpm --filter @openuji/example-nextcloud-filesharing e2e:report");
 }
 
