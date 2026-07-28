@@ -1,7 +1,6 @@
-# journey-runner
+# journey-mesh
 
-Model-driven UJG journey runner with a neutral runner boundary, a generic
-Playwright adapter, and a configurable Nextcloud driver.
+Model-driven execution and validation of cross-service user journeys, with pluggable model bindings, automation adapters, application drivers, interaction profiles, and evidence observers.
 
 ## Commands
 
