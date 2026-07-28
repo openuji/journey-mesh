@@ -8,7 +8,6 @@
   },
   "include": ["environment.ts", "playwright.config.ts", "run.ts"],
   "references": [
-    { "path": "../../packages/journey-evidence/tsconfig.json" },
     { "path": "../../packages/journey-runner/tsconfig.json" },
     { "path": "../../packages/journey-model-ujg/tsconfig.json" },
     { "path": "../../packages/journey-profiles/tsconfig.json" },

@@ -1,32 +1,31 @@
-import { errorToEvidence, type EvidenceError } from "@openuji/journey-evidence";
-
-import type { RunEvidence } from "../evidence/run-evidence.js";
+import {
+  errorToJourneyRunError,
+  type JourneyRunError
+} from "../errors.js";
 import type { JourneyReporter, RunResult } from "../index.js";
 
 export type ReporterPipelineInput = {
   readonly reporters: readonly JourneyReporter[];
-  readonly report: RunResult;
-  readonly evidence: RunEvidence;
+  readonly result: RunResult;
 };
 
 export type ReporterPipelineResult = {
-  readonly errors: readonly EvidenceError[];
+  readonly errors: readonly JourneyRunError[];
 };
 
 export class ReporterPipeline {
   async run(input: ReporterPipelineInput): Promise<ReporterPipelineResult> {
-    const errors: EvidenceError[] = [];
+    const errors: JourneyRunError[] = [];
+    const json = JSON.stringify(input.result, null, 2);
 
     for (const reporter of input.reporters) {
-      input.evidence.reporterStarted(reporter);
-
       try {
-        await reporter.report(input.report);
-        input.evidence.reporterCompleted(reporter);
+        await reporter.report({
+          result: input.result,
+          json
+        });
       } catch (error) {
-        const evidenceError = errorToEvidence(error);
-        errors.push(evidenceError);
-        input.evidence.reporterFailed(reporter, evidenceError);
+        errors.push(errorToJourneyRunError(error));
       }
     }
 

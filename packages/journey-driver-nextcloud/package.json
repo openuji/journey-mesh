@@ -9,7 +9,6 @@
   "types": "./src/index.ts",
   "dependencies": {
     "@openuji/journey-adapter-playwright": "workspace:*",
-    "@openuji/journey-evidence": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
     "playwright": "^1.61.1"
   },

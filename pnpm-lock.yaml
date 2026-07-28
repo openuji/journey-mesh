@@ -17,9 +17,6 @@ importers:
       '@openuji/journey-driver-nextcloud':
         specifier: workspace:*
         version: link:packages/journey-driver-nextcloud
-      '@openuji/journey-evidence':
-        specifier: workspace:*
-        version: link:packages/journey-evidence
       '@openuji/journey-execution-model':
         specifier: workspace:*
         version: link:packages/journey-execution-model
@@ -72,9 +69,6 @@ importers:
 
   packages/journey-adapter-playwright:
     dependencies:
-      '@openuji/journey-evidence':
-        specifier: workspace:*
-        version: link:../journey-evidence
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner
@@ -89,21 +83,12 @@ importers:
       '@openuji/journey-adapter-playwright':
         specifier: workspace:*
         version: link:../journey-adapter-playwright
-      '@openuji/journey-evidence':
-        specifier: workspace:*
-        version: link:../journey-evidence
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner
       playwright:
         specifier: ^1.61.1
         version: 1.62.0
-
-  packages/journey-evidence:
-    dependencies:
-      '@openuji/journey-execution-model':
-        specifier: workspace:*
-        version: link:../journey-execution-model
 
   packages/journey-execution-model:
     dependencies:
@@ -143,9 +128,6 @@ importers:
 
   packages/journey-runner:
     dependencies:
-      '@openuji/journey-evidence':
-        specifier: workspace:*
-        version: link:../journey-evidence
       '@openuji/journey-execution-model':
         specifier: workspace:*
         version: link:../journey-execution-model

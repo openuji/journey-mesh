@@ -7,7 +7,7 @@ import { nextcloudDriver } from "@openuji/journey-driver-nextcloud";
 import { compileUjgJourneyPlan } from "@openuji/journey-model-ujg";
 import { axeObserver, isAxeStrict, type AxeObserver } from "@openuji/journey-observer-axe";
 import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
-import { runJourney, type EvidenceError, type JourneyPlan, type RunResult } from "@openuji/journey-runner";
+import { runJourney, type JourneyPlan, type JourneyRunError, type RunResult } from "@openuji/journey-runner";
 
 import {
   nextcloudEnvironment,
@@ -92,7 +92,7 @@ function failureSummary(result: RunResult): string {
   return result.errors.map(formatError).join("\n\n") || "UJG journey failed";
 }
 
-function formatError(error: EvidenceError): string {
+function formatError(error: JourneyRunError): string {
   return `${error.name}: ${error.message}`;
 }
 
@@ -100,7 +100,7 @@ function preflightFailureResult(input: {
   errors: string[];
   plan: JourneyPlan;
 }): RunResult {
-  const errors: EvidenceError[] = input.errors.map((message) => ({
+  const errors: JourneyRunError[] = input.errors.map((message) => ({
     name: "PreflightError",
     message
   }));
@@ -114,7 +114,7 @@ function preflightFailureResult(input: {
     },
     executions: [],
     evidence: {
-      events: []
+      executions: []
     },
     errors
   };

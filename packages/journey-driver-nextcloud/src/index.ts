@@ -15,7 +15,6 @@ import type {
   JourneyProfile,
   TransitionPlanOperation
 } from "@openuji/journey-runner";
-import { NextcloudEvidence } from "./evidence/nextcloud-evidence.js";
 
 export type Awaitable<T> = T | Promise<T>;
 
@@ -102,7 +101,6 @@ class NextcloudExecution implements PlaywrightJourneyDriverExecution {
   private readonly sessions = new Map<string, NextcloudActorSession>();
   private readonly driverContext: PlaywrightDriverExecutionContext;
   private readonly context: NextcloudDriverContext;
-  private readonly events: NextcloudEvidence;
   private started = false;
   private closed = false;
 
@@ -119,7 +117,6 @@ class NextcloudExecution implements PlaywrightJourneyDriverExecution {
       plan: input.context.plan,
       getSession: (operation) => this.getSession(operation)
     };
-    this.events = new NextcloudEvidence(input.context, input.evidence);
   }
 
   async start(): Promise<void> {
@@ -128,10 +125,8 @@ class NextcloudExecution implements PlaywrightJourneyDriverExecution {
       throw new Error(`Nextcloud execution ${this.context.executionId} has already started`);
     }
 
-    this.events.executionSetupStarted();
     await this.options.setupExecution?.(this.context);
     this.started = true;
-    this.events.executionSetupCompleted();
   }
 
   async openEntry(operation: JourneyPlanOperation): Promise<void> {
@@ -148,8 +143,6 @@ class NextcloudExecution implements PlaywrightJourneyDriverExecution {
     const session = await this.getSession(operation);
     await handler({ session, operation, context: this.context });
     await (this.options.awaitApplicationSettled ?? awaitNextcloudApplicationSettled)(session);
-
-    this.events.entryOpened(operation, session);
   }
 
   async pageForOperation(operation: JourneyPlanOperation): Promise<Page> {
@@ -195,7 +188,6 @@ class NextcloudExecution implements PlaywrightJourneyDriverExecution {
 
   recordControlFlow(operation: ControlFlowPlanOperation): void {
     this.assertOpen();
-    this.events.controlFlowRecorded(operation);
   }
 
   async close(_input: PlaywrightDriverCloseInput): Promise<void> {
@@ -208,8 +200,6 @@ class NextcloudExecution implements PlaywrightJourneyDriverExecution {
       await Promise.all([...this.sessions.values()].map((session) => session.browserContext.close()));
       this.sessions.clear();
     }
-
-    this.events.executionTeardownCompleted();
   }
 
   private async getSession(operation: JourneyPlanOperation): Promise<NextcloudActorSession> {
@@ -246,8 +236,6 @@ class NextcloudExecution implements PlaywrightJourneyDriverExecution {
 
     await (this.options.login ?? logInToNextcloud)(session);
     this.sessions.set(sessionKey, session);
-
-    this.events.actorSessionCreated(operation, session);
 
     return session;
   }

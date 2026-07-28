@@ -2,21 +2,16 @@ import type {
   ControlFlowPlanOperation,
   InputModalityDecision,
   JourneyPlan,
-  JourneyPlanSource,
   JourneyPlanOperation,
+  JourneyPlanOperationKind,
+  JourneyPlanSource,
   StatePlanOperation,
   TransitionPlanOperation
 } from "@openuji/journey-execution-model";
 import {
-  EvidenceRecorder,
-  errorToEvidence,
-  scopeEvidenceToExecution,
-  type EvidenceError,
-  type EvidenceEvent,
-  type ExecutionEvidenceSink
-} from "@openuji/journey-evidence";
-import { ExecutionEvidence } from "./evidence/execution-evidence.js";
-import { RunEvidence } from "./evidence/run-evidence.js";
+  errorToJourneyRunError,
+  type JourneyRunError
+} from "./errors.js";
 import {
   componentDescriptor,
   executionDescriptor,
@@ -27,11 +22,11 @@ import type { JourneyObserver } from "./observers/contracts.js";
 import { ReporterPipeline } from "./reporters/reporter-pipeline.js";
 
 export {
-  EvidenceRecorder,
-  errorToEvidence,
-  referencesForPlan,
-  scopeEvidenceToExecution
-} from "@openuji/journey-evidence";
+  componentDescriptor,
+  executionDescriptor,
+  profileDescriptor
+} from "./observers/contracts.js";
+export { errorToJourneyRunError } from "./errors.js";
 
 export type {
   AccessibleFeature,
@@ -63,28 +58,7 @@ export type {
   StatePlanOperation,
   TransitionPlanOperation
 } from "@openuji/journey-execution-model";
-
-export type {
-  EvidenceError,
-  EvidenceEvent,
-  EvidenceEventInput,
-  EvidenceLog,
-  EvidenceSink,
-  EvidenceComponent,
-  ExecutionEvidenceIdentity,
-  ExecutionEvidenceSink,
-  JourneyEvidenceSource,
-  JourneyReferenceSet,
-  JsonObject,
-  JsonPrimitive,
-  JsonValue
-} from "@openuji/journey-evidence";
-
-export {
-  componentDescriptor,
-  executionDescriptor,
-  profileDescriptor
-} from "./observers/contracts.js";
+export type { JourneyRunError } from "./errors.js";
 
 export type {
   JourneyComponentDescriptor,
@@ -96,6 +70,10 @@ export type {
   JourneyObserverRunStartedInput,
   JourneyProfileDescriptor
 } from "./observers/contracts.js";
+
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonObject = { [key: string]: JsonValue };
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
 
 export type JourneyExecutionContext = {
   readonly runId: string;
@@ -121,7 +99,6 @@ export type JourneyAdapter = {
 
 export type JourneyAdapterExecutionInput = {
   readonly context: JourneyExecutionContext;
-  readonly evidence: ExecutionEvidenceSink;
 };
 
 export type JourneyAdapterExecution = {
@@ -145,10 +122,15 @@ export type JourneyProfile = {
   ): Promise<InputModalityDecision> | InputModalityDecision;
 };
 
+export type JourneyReporterInput = {
+  readonly result: RunResult;
+  readonly json: string;
+};
+
 export type JourneyReporter = {
   name: string;
   version?: string;
-  report(result: RunResult): Promise<void> | void;
+  report(input: JourneyReporterInput): Promise<void> | void;
 };
 
 export type RunJourneyOptions = {
@@ -164,7 +146,20 @@ export type ExecutionResult = {
   executionId: string;
   profileId: string;
   ok: boolean;
-  error?: EvidenceError;
+  error?: JourneyRunError;
+};
+
+export type JourneyOperationEvidence = {
+  operationId: string;
+  operationKind: JourneyPlanOperationKind;
+  ok: boolean;
+  error?: JourneyRunError;
+};
+
+export type JourneyExecutionEvidence = {
+  executionId: string;
+  profileId: string;
+  operations: JourneyOperationEvidence[];
 };
 
 export type RunResult = {
@@ -176,9 +171,14 @@ export type RunResult = {
   };
   executions: ExecutionResult[];
   evidence: {
-    events: EvidenceEvent[];
+    executions: JourneyExecutionEvidence[];
   };
-  errors: EvidenceError[];
+  errors: JourneyRunError[];
+};
+
+type ProfileExecutionOutcome = {
+  readonly execution: ExecutionResult;
+  readonly evidence: JourneyExecutionEvidence;
 };
 
 export async function runJourney(options: RunJourneyOptions): Promise<RunResult> {
@@ -187,20 +187,11 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
   }
 
   const runId = options.runId ?? `run-${new Date().toISOString()}`;
-  const evidence = new EvidenceRecorder(runId);
-  const runEvidence = new RunEvidence(evidence);
   const executions: ExecutionResult[] = [];
-  const errors: EvidenceError[] = [];
+  const evidenceExecutions: JourneyExecutionEvidence[] = [];
+  const errors: JourneyRunError[] = [];
   const observers = options.observers ?? [];
-  const observerDispatcher = new JourneyObserverDispatcher(observers, runEvidence);
-
-  runEvidence.runStarted({
-    plan: options.plan,
-    profiles: options.profiles,
-    adapter: options.adapter,
-    observers: observers.map(componentDescriptor),
-    reporters: options.reporters ?? []
-  });
+  const observerDispatcher = new JourneyObserverDispatcher(observers);
 
   const runStartError = await observerDispatcher.runStarted({
     adapter: componentDescriptor(options.adapter),
@@ -210,15 +201,9 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
   });
   if (runStartError) {
     errors.push(runStartError);
-    runEvidence.runCompleted({
-      plan: options.plan,
-      ok: false,
-      executionCount: 0,
-      errorCount: errors.length
-    });
     return buildResult({
       errors,
-      events: evidence.snapshot(),
+      evidenceExecutions,
       executions,
       ok: false,
       plan: options.plan,
@@ -235,31 +220,25 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
       plan: options.plan
     };
     const descriptor = executionDescriptor(context);
-    const executionSink = scopeEvidenceToExecution(evidence, {
-      executionId,
-      profileId: profile.id
-    });
-    const executionEvidence = new ExecutionEvidence(context, executionSink);
 
-    const execution = await runProfileExecution({
+    const outcome = await runProfileExecution({
       adapter: options.adapter,
       context,
       descriptor,
-      executionEvidence,
-      executionSink,
       observerDispatcher,
       plan: options.plan,
       profile
     });
 
-    executions.push(execution);
-    if (execution.error) errors.push(execution.error);
+    executions.push(outcome.execution);
+    evidenceExecutions.push(outcome.evidence);
+    if (outcome.execution.error) errors.push(outcome.execution.error);
   }
 
   let ok = executions.every((execution) => execution.ok);
   let result = buildResult({
     errors,
-    events: evidence.snapshot(),
+    evidenceExecutions,
     executions,
     ok,
     plan: options.plan,
@@ -269,15 +248,14 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
   const reporterPipeline = new ReporterPipeline();
   const reporterOutcome = await reporterPipeline.run({
     reporters: options.reporters ?? [],
-    report: result,
-    evidence: runEvidence
+    result
   });
   if (reporterOutcome.errors.length > 0) {
     ok = false;
     errors.push(...reporterOutcome.errors);
     result = buildResult({
       errors,
-      events: evidence.snapshot(),
+      evidenceExecutions,
       executions,
       ok,
       plan: options.plan,
@@ -291,7 +269,7 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
     errors.push(runCompletionError);
     result = buildResult({
       errors,
-      events: evidence.snapshot(),
+      evidenceExecutions,
       executions,
       ok,
       plan: options.plan,
@@ -299,29 +277,13 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
     });
   }
 
-  runEvidence.runCompleted({
-    plan: options.plan,
-    ok,
-    executionCount: executions.length,
-    errorCount: errors.length
-  });
-
-  return buildResult({
-    errors,
-    events: evidence.snapshot(),
-    executions,
-    ok,
-    plan: options.plan,
-    runId
-  });
+  return result;
 }
 
 async function runProfileExecution({
   adapter,
   context,
   descriptor,
-  executionEvidence,
-  executionSink,
   observerDispatcher,
   plan,
   profile
@@ -329,68 +291,53 @@ async function runProfileExecution({
   adapter: JourneyAdapter;
   context: JourneyExecutionContext;
   descriptor: ReturnType<typeof executionDescriptor>;
-  executionEvidence: ExecutionEvidence;
-  executionSink: ExecutionEvidenceSink;
   observerDispatcher: JourneyObserverDispatcher;
   plan: JourneyPlan;
   profile: JourneyProfile;
-}): Promise<ExecutionResult> {
+}): Promise<ProfileExecutionOutcome> {
   let ok = true;
-  let executionError: EvidenceError | undefined;
+  let executionError: JourneyRunError | undefined;
   const currentEntryByActor = new Map<string, string>();
   let adapterExecution: JourneyAdapterExecution | undefined;
-
-  executionEvidence.executionStarted();
+  const operations: JourneyOperationEvidence[] = [];
 
   try {
-    await observerDispatcher.executionStarted(descriptor, executionEvidence);
+    await observerDispatcher.executionStarted(descriptor);
 
-    executionEvidence.adapterStartStarted(adapter);
-    adapterExecution = adapter.createExecution({
-      context,
-      evidence: executionSink
-    });
+    adapterExecution = adapter.createExecution({ context });
     await adapterExecution.start();
-    executionEvidence.adapterStartCompleted(adapter);
 
     for (const operation of plan.operations) {
-      executionEvidence.operationStarted(operation);
-      await ensureEntryOpen({
-        adapterExecution,
-        currentEntryByActor,
-        executionEvidence,
-        operation
-      });
-
-      if (operation.kind === "state") {
-        await assertState({ adapterExecution, executionEvidence, operation });
-      } else if (operation.kind === "transition") {
-        await performTransition({ adapterExecution, context, executionEvidence, operation, profile });
-      } else {
-        await recordControlFlow({ adapterExecution, executionEvidence, operation });
+      try {
+        await executeOperation({
+          adapterExecution,
+          context,
+          currentEntryByActor,
+          operation,
+          profile
+        });
+        operations.push(operationEvidence(operation, true));
+      } catch (error) {
+        const operationError = errorToJourneyRunError(error);
+        operations.push(operationEvidence(operation, false, operationError));
+        throw operationError;
       }
-
-      executionEvidence.operationCompleted(operation);
     }
   } catch (error) {
     ok = false;
-    executionError = errorToEvidence(error);
-    executionEvidence.executionFailed(executionError);
+    executionError = errorToJourneyRunError(error);
   } finally {
     if (adapterExecution) {
       try {
-        executionEvidence.adapterCloseStarted(adapter);
         await adapterExecution.close({ executionFailed: !ok });
-        executionEvidence.adapterCloseCompleted(adapter);
       } catch (error) {
         ok = false;
-        executionError = errorToEvidence(error);
-        executionEvidence.adapterCloseFailed(adapter, executionError);
+        executionError = errorToJourneyRunError(error);
       }
     }
   }
 
-  const executionBeforeObserver = {
+  const executionBeforeObserver: ExecutionResult = {
     executionId: context.executionId,
     profileId: profile.id,
     ok,
@@ -399,7 +346,6 @@ async function runProfileExecution({
   const observerCompletionError = await notifyExecutionCompleted({
     descriptor,
     execution: executionBeforeObserver,
-    executionEvidence,
     observerDispatcher
   });
   if (observerCompletionError) {
@@ -407,30 +353,57 @@ async function runProfileExecution({
     executionError = observerCompletionError;
   }
 
-  executionEvidence.executionCompleted({
-    executionId: context.executionId,
-    profileId: profile.id,
-    ok,
-    error: executionError
+  return {
+    execution: {
+      executionId: context.executionId,
+      profileId: profile.id,
+      ok,
+      error: executionError
+    },
+    evidence: {
+      executionId: context.executionId,
+      profileId: profile.id,
+      operations
+    }
+  };
+}
+
+async function executeOperation({
+  adapterExecution,
+  context,
+  currentEntryByActor,
+  operation,
+  profile
+}: {
+  adapterExecution: JourneyAdapterExecution;
+  context: JourneyExecutionContext;
+  currentEntryByActor: Map<string, string>;
+  operation: JourneyPlanOperation;
+  profile: JourneyProfile;
+}): Promise<void> {
+  await ensureEntryOpen({
+    adapterExecution,
+    currentEntryByActor,
+    operation
   });
 
-  return {
-    executionId: context.executionId,
-    profileId: profile.id,
-    ok,
-    error: executionError
-  };
+  if (operation.kind === "state") {
+    await adapterExecution.assertState(operation);
+  } else if (operation.kind === "transition") {
+    const decision = await profile.selectInputModality(operation, context);
+    await adapterExecution.performTransition(operation, decision);
+  } else {
+    await adapterExecution.recordControlFlow(operation);
+  }
 }
 
 async function ensureEntryOpen({
   adapterExecution,
   currentEntryByActor,
-  executionEvidence,
   operation
 }: {
   adapterExecution: JourneyAdapterExecution;
   currentEntryByActor: Map<string, string>;
-  executionEvidence: ExecutionEvidence;
   operation: JourneyPlanOperation;
 }): Promise<void> {
   if (!operation.entryBinding) return;
@@ -438,95 +411,50 @@ async function ensureEntryOpen({
   const entryKey = `${operation.entry.id}\u0000${operation.entryBinding.id}\u0000${operation.entryBinding.value}`;
   if (currentEntryByActor.get(operation.actorId) === entryKey) return;
 
-  executionEvidence.openEntryStarted(operation);
   await adapterExecution.openEntry(operation);
   currentEntryByActor.set(operation.actorId, entryKey);
-  executionEvidence.openEntryCompleted(operation);
-}
-
-async function assertState({
-  adapterExecution,
-  executionEvidence,
-  operation
-}: {
-  adapterExecution: JourneyAdapterExecution;
-  executionEvidence: ExecutionEvidence;
-  operation: StatePlanOperation;
-}): Promise<void> {
-  executionEvidence.stateAssertionStarted(operation);
-  await adapterExecution.assertState(operation);
-  executionEvidence.stateAssertionCompleted(operation);
-}
-
-async function performTransition({
-  adapterExecution,
-  context,
-  executionEvidence,
-  operation,
-  profile
-}: {
-  adapterExecution: JourneyAdapterExecution;
-  context: JourneyExecutionContext;
-  executionEvidence: ExecutionEvidence;
-  operation: TransitionPlanOperation;
-  profile: JourneyProfile;
-}): Promise<void> {
-  const decision = await profile.selectInputModality(operation, context);
-
-  executionEvidence.modalitySelected(operation, decision);
-
-  executionEvidence.transitionStarted(operation, decision);
-  await adapterExecution.performTransition(operation, decision);
-  executionEvidence.transitionCompleted(operation, decision);
-
-  for (const effect of operation.effects) {
-    executionEvidence.effectRecorded(operation, effect);
-  }
-}
-
-async function recordControlFlow({
-  adapterExecution,
-  executionEvidence,
-  operation
-}: {
-  adapterExecution: JourneyAdapterExecution;
-  executionEvidence: ExecutionEvidence;
-  operation: ControlFlowPlanOperation;
-}): Promise<void> {
-  executionEvidence.controlFlowStarted(operation);
-  await adapterExecution.recordControlFlow(operation);
-  executionEvidence.controlFlowCompleted(operation);
 }
 
 async function notifyExecutionCompleted({
   descriptor,
   execution,
-  executionEvidence,
   observerDispatcher
 }: {
   descriptor: ReturnType<typeof executionDescriptor>;
   execution: ExecutionResult;
-  executionEvidence: ExecutionEvidence;
   observerDispatcher: JourneyObserverDispatcher;
-}): Promise<EvidenceError | undefined> {
-  return observerDispatcher.executionCompleted(descriptor, execution, executionEvidence);
+}): Promise<JourneyRunError | undefined> {
+  return observerDispatcher.executionCompleted(descriptor, execution);
 }
 
 function safeSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "-");
 }
 
+function operationEvidence(
+  operation: JourneyPlanOperation,
+  ok: boolean,
+  error?: JourneyRunError
+): JourneyOperationEvidence {
+  return {
+    operationId: operation.id,
+    operationKind: operation.kind,
+    ok,
+    ...(error ? { error } : {})
+  };
+}
+
 function buildResult({
   errors,
-  events,
+  evidenceExecutions,
   executions,
   ok,
   plan,
   runId
 }: {
-  errors: EvidenceError[];
-  events: readonly EvidenceEvent[];
-  executions: ExecutionResult[];
+  errors: readonly JourneyRunError[];
+  evidenceExecutions: readonly JourneyExecutionEvidence[];
+  executions: readonly ExecutionResult[];
   ok: boolean;
   plan: JourneyPlan;
   runId: string;
@@ -538,8 +466,14 @@ function buildResult({
       id: plan.id,
       ...(plan.source ? { source: plan.source } : {})
     },
-    executions: [...executions],
-    evidence: { events: [...events] },
-    errors: [...errors]
+    executions: executions.map((execution) => ({ ...execution })),
+    evidence: {
+      executions: evidenceExecutions.map((execution) => ({
+        executionId: execution.executionId,
+        profileId: execution.profileId,
+        operations: execution.operations.map((operation) => ({ ...operation }))
+      }))
+    },
+    errors: errors.map((error) => ({ ...error }))
   };
 }

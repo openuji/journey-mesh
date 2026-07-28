@@ -373,7 +373,7 @@ export function axeObserver(options: AxeObserverOptions): AxeObserver {
       setItem(key, auditedAxePathItem(journeyItem, report, screenshots));
     },
 
-    async report(result: RunResult) {
+    async report({ result }) {
       latestPathReport = buildAxePathAuditReport({
         reportId: options.reportId,
         metadata: {

@@ -28,8 +28,6 @@ import {
   type StatePlanOperation,
   type TransitionPlanOperation
 } from "@openuji/journey-runner";
-import type { ExecutionEvidenceSink } from "@openuji/journey-evidence";
-import { PlaywrightEvidence } from "./evidence/playwright-evidence.js";
 import type { PlaywrightExecutionObserver } from "./observers/contracts.js";
 import { PlaywrightObserverDispatcher } from "./observers/playwright-observer-dispatcher.js";
 
@@ -67,7 +65,6 @@ export type PlaywrightJourneyDriver = {
 
 export type PlaywrightDriverExecutionInput = {
   readonly context: PlaywrightDriverExecutionContext;
-  readonly evidence: ExecutionEvidenceSink;
 };
 
 export type PlaywrightJourneyDriverExecution = {
@@ -130,8 +127,6 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
   private readonly browserContexts: BrowserContextRecord[] = [];
   private readonly context: JourneyExecutionContext;
   private readonly execution: JourneyExecutionDescriptor;
-  private readonly events: PlaywrightEvidence;
-  private readonly evidence: ExecutionEvidenceSink;
   private readonly observers: PlaywrightObserverDispatcher;
   private lifecycle: "created" | "starting" | "started" | "closing" | "closed" = "created";
 
@@ -141,12 +136,9 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
   ) {
     this.context = input.context;
     this.execution = executionDescriptor(input.context);
-    this.evidence = input.evidence;
-    this.events = new PlaywrightEvidence(input.context, input.evidence);
     this.observers = new PlaywrightObserverDispatcher(
       options.executionObservers ?? [],
-      this.execution,
-      this.events
+      this.execution
     );
   }
 
@@ -166,13 +158,7 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
       createBrowserContext: (input) => this.createBrowserContext(input)
     };
     this.driverExecution = this.options.driver.createExecution({
-      context: this.driverContext,
-      evidence: this.evidence
-    });
-    this.events.browserStarted({
-      owned: this.ownsBrowser,
-      headless: this.ownsBrowser ? this.options.headless ?? true : null,
-      driver: this.options.driver
+      context: this.driverContext
     });
 
     await this.driverExecution.start();
@@ -196,8 +182,6 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     await assertPlaywrightLocator(locator, operation.target.expectedMatchCount, {
       timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs
     });
-
-    this.events.assertionCompleted(operation);
 
     await this.observers.observe({
       execution: this.execution,
@@ -242,8 +226,6 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
 
     await activatePlaywrightLocator(locator, decision.command, text);
     await driver.afterTransition(operation, decision);
-
-    this.events.transitionCompleted(operation, decision);
   }
 
   async recordControlFlow(operation: ControlFlowPlanOperation): Promise<void> {
@@ -266,12 +248,9 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     try {
       await this.driverExecution?.close({ executionFailed: input.executionFailed });
     } finally {
-      await closeTrackedBrowserContexts(this.browserContexts, this.events);
+      await closeTrackedBrowserContexts(this.browserContexts);
       if (this.ownsBrowser && this.browser) {
         await this.browser.close();
-      }
-      if (this.browser) {
-        this.events.browserStopped({ owned: this.ownsBrowser });
       }
       this.lifecycle = "closed";
     }
@@ -291,7 +270,6 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     };
 
     this.browserContexts.push(record);
-    this.events.browserContextCreated(record, input);
 
     return browserContext;
   }
@@ -330,15 +308,14 @@ async function launchBrowser(options: PlaywrightAdapterOptions): Promise<Browser
 }
 
 async function closeTrackedBrowserContexts(
-  browserContexts: readonly BrowserContextRecord[],
-  evidence: PlaywrightEvidence
+  browserContexts: readonly BrowserContextRecord[]
 ): Promise<void> {
   await Promise.all(
     browserContexts.map(async (record) => {
       try {
         await record.browserContext.close();
-      } catch (error) {
-        evidence.browserContextCloseFailed(record, error);
+      } catch {
+        // Context close failures were previously reported only as detail evidence.
       }
     })
   );
