@@ -2,16 +2,12 @@ import { writeFile } from "node:fs/promises";
 
 import { expect, test, type Browser, type TestInfo } from "@playwright/test";
 
-import {
-  playwrightAdapter,
-  type PlaywrightArtifactMode,
-  type PlaywrightArtifactSink
-} from "@openuji/journey-adapter-playwright";
+import { playwrightAdapter } from "@openuji/journey-adapter-playwright";
 import { nextcloudDriver } from "@openuji/journey-driver-nextcloud";
 import { compileUjgJourneyPlan } from "@openuji/journey-model-ujg";
 import { axeObserver, isAxeStrict, type AxeObserver } from "@openuji/journey-observer-axe";
 import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
-import { runJourney, type EvidenceError, type RunResult } from "@openuji/journey-runner";
+import { runJourney, type EvidenceError, type JourneyPlan, type RunResult } from "@openuji/journey-runner";
 
 import {
   nextcloudEnvironment,
@@ -34,25 +30,17 @@ test("executes the federated file-sharing UJG journey", async ({ browser }, test
   });
   const result = preflightErrors.length > 0
     ? preflightFailureResult({
-        documentId: plan.documentId,
         errors: preflightErrors,
-        planId: plan.id
+        plan
       })
     : await runJourney({
         plan,
         adapter: playwrightAdapter({
           driver: nextcloudDriver(nextcloudEnvironment),
           browser: browser as Browser,
-          artifacts: {
-            mode: artifactModeFromEnv(),
-            sink: testInfoArtifactSink(testInfo),
-            traces: false,
-            screenshots: true,
-            videos: true
-          }
+          executionObservers: [axe]
         }),
         profiles: [defaultProfile(), keyboardOnlyProfile()],
-        observers: [axe],
         reporters: [axe]
       });
 
@@ -96,25 +84,6 @@ function printSummary(result: RunResult, evidencePath: string, axe: AxeObserver)
   console.log("  report: pnpm --filter @openuji/example-nextcloud-filesharing e2e:report");
 }
 
-function artifactModeFromEnv(): PlaywrightArtifactMode {
-  const value = process.env.UJG_PLAYWRIGHT_ARTIFACTS;
-  if (value === "always" || value === "retain-on-failure" || value === "off") {
-    return value;
-  }
-  return "retain-on-failure";
-}
-
-function testInfoArtifactSink(testInfo: TestInfo): PlaywrightArtifactSink {
-  return {
-    outputPath(...pathSegments) {
-      return testInfo.outputPath(...pathSegments);
-    },
-    attach(name, attachment) {
-      return testInfo.attach(name, attachment);
-    }
-  };
-}
-
 function failureSummary(result: RunResult): string {
   if (result.ok) return "UJG journey should pass";
   return result.errors.map(formatError).join("\n\n") || "UJG journey failed";
@@ -125,9 +94,8 @@ function formatError(error: EvidenceError): string {
 }
 
 function preflightFailureResult(input: {
-  documentId: string;
   errors: string[];
-  planId: string;
+  plan: JourneyPlan;
 }): RunResult {
   const errors: EvidenceError[] = input.errors.map((message) => ({
     name: "PreflightError",
@@ -137,8 +105,10 @@ function preflightFailureResult(input: {
   return {
     ok: false,
     runId: `preflight-${new Date().toISOString()}`,
-    planId: input.planId,
-    documentId: input.documentId,
+    plan: {
+      id: input.plan.id,
+      ...(input.plan.source ? { source: input.plan.source } : {})
+    },
     executions: [],
     evidence: {
       events: []

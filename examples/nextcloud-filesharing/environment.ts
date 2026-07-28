@@ -90,8 +90,8 @@ export function validateNextcloudEnvironmentForPlan(
   const errors: string[] = [];
 
   for (const operation of plan.operations) {
-    if (!environment.users[operation.userId]) {
-      errors.push(`${operation.id}: missing user config for ${operation.userId}`);
+    if (!environment.users[operation.actorId]) {
+      errors.push(`${operation.id}: missing user config for ${operation.actorId}`);
     }
     if (!environment.touchpoints[operation.touchpointId]) {
       errors.push(`${operation.id}: missing touchpoint config for ${operation.touchpointId}`);

@@ -1,38 +1,54 @@
+import type {
+  ControlFlowPlanOperation,
+  InputModalityDecision,
+  JourneyPlan,
+  JourneyPlanSource,
+  JourneyPlanOperation,
+  StatePlanOperation,
+  TransitionPlanOperation
+} from "@openuji/journey-execution-model";
 import {
   EvidenceRecorder,
   errorToEvidence,
-  type ControlFlowPlanOperation,
+  scopeEvidenceToExecution,
   type EvidenceError,
   type EvidenceEvent,
-  type EvidenceEventInput,
-  type InputModalityDecision,
-  type JourneyPlan,
-  type JourneyPlanOperation,
-  type JsonObject,
-  type ResolvedAccessibleLocator,
-  type StatePlanOperation,
-  type TransitionPlanOperation,
-  type UjgRefSet
+  type ExecutionEvidenceSink
 } from "@openuji/journey-evidence";
+import { ExecutionEvidence } from "./evidence/execution-evidence.js";
+import { RunEvidence } from "./evidence/run-evidence.js";
+import {
+  componentDescriptor,
+  executionDescriptor,
+  profileDescriptor
+} from "./observers/contracts.js";
+import { JourneyObserverDispatcher } from "./observers/journey-observer-dispatcher.js";
+import type { JourneyObserver } from "./observers/contracts.js";
+import { ReporterPipeline } from "./reporters/reporter-pipeline.js";
 
-export { EvidenceRecorder, errorToEvidence } from "@openuji/journey-evidence";
+export {
+  EvidenceRecorder,
+  errorToEvidence,
+  referencesForPlan,
+  scopeEvidenceToExecution
+} from "@openuji/journey-evidence";
 
 export type {
   AccessibleFeature,
   ControlFlowPlanOperation,
   EntryBindingRef,
-  EvidenceError,
-  EvidenceEvent,
-  EvidenceEventInput,
   GraphVertexRef,
   InputModalityDecision,
+  JourneyEntryRef,
   JourneyInteractionCommand,
+  JourneyOperationSource,
   JourneyPlan,
   JourneyPlanOperation,
+  JourneyPlanOperationBase,
   JourneyPlanOperationKind,
-  JsonObject,
-  JsonPrimitive,
-  JsonValue,
+  JourneyPlanSource,
+  JourneySourceReferences,
+  JourneySourceReferenceValue,
   LabeledRef,
   ResolvedAccessibleLocator,
   ResolvedArtifact,
@@ -45,41 +61,79 @@ export type {
   ResolvedSurfaceInstanceResolver,
   ResolvedTransitionActivation,
   StatePlanOperation,
-  TransitionPlanOperation,
-  UjgRefSet
+  TransitionPlanOperation
+} from "@openuji/journey-execution-model";
+
+export type {
+  EvidenceError,
+  EvidenceEvent,
+  EvidenceEventInput,
+  EvidenceLog,
+  EvidenceSink,
+  EvidenceComponent,
+  ExecutionEvidenceIdentity,
+  ExecutionEvidenceSink,
+  JourneyEvidenceSource,
+  JourneyReferenceSet,
+  JsonObject,
+  JsonPrimitive,
+  JsonValue
 } from "@openuji/journey-evidence";
 
-export type AdapterExecutionContext = {
-  runId: string;
-  executionId: string;
-  profile: JourneyProfile;
-  plan: JourneyPlan;
-  evidence: EvidenceRecorder;
-  observers: readonly JourneyObserver[];
+export {
+  componentDescriptor,
+  executionDescriptor,
+  profileDescriptor
+} from "./observers/contracts.js";
+
+export type {
+  JourneyComponentDescriptor,
+  JourneyExecutionDescriptor,
+  JourneyObserver,
+  JourneyObserverExecutionCompletedInput,
+  JourneyObserverExecutionStartedInput,
+  JourneyObserverRunCompletedInput,
+  JourneyObserverRunStartedInput,
+  JourneyProfileDescriptor
+} from "./observers/contracts.js";
+
+export type JourneyExecutionContext = {
+  readonly runId: string;
+  readonly executionId: string;
+  readonly profile: JourneyProfile;
+  readonly plan: JourneyPlan;
+};
+
+/**
+ * @deprecated Use JourneyExecutionContext.
+ */
+export type AdapterExecutionContext = JourneyExecutionContext;
+
+export type JourneyAdapterCloseInput = {
+  readonly executionFailed: boolean;
 };
 
 export type JourneyAdapter = {
-  name: string;
-  version?: string;
-  setupExecution(context: AdapterExecutionContext): Promise<void> | void;
-  openEntry(
-    operation: JourneyPlanOperation,
-    context: AdapterExecutionContext
-  ): Promise<void> | void;
-  assertState(
-    operation: StatePlanOperation,
-    context: AdapterExecutionContext
-  ): Promise<void> | void;
+  readonly name: string;
+  readonly version?: string;
+  createExecution(input: JourneyAdapterExecutionInput): JourneyAdapterExecution;
+};
+
+export type JourneyAdapterExecutionInput = {
+  readonly context: JourneyExecutionContext;
+  readonly evidence: ExecutionEvidenceSink;
+};
+
+export type JourneyAdapterExecution = {
+  start(): Promise<void> | void;
+  openEntry(operation: JourneyPlanOperation): Promise<void> | void;
+  assertState(operation: StatePlanOperation): Promise<void> | void;
   performTransition(
     operation: TransitionPlanOperation,
-    decision: InputModalityDecision,
-    context: AdapterExecutionContext
+    decision: InputModalityDecision
   ): Promise<void> | void;
-  recordControlFlow(
-    operation: ControlFlowPlanOperation,
-    context: AdapterExecutionContext
-  ): Promise<void> | void;
-  teardownExecution(context: AdapterExecutionContext): Promise<void> | void;
+  recordControlFlow(operation: ControlFlowPlanOperation): Promise<void> | void;
+  close(input: JourneyAdapterCloseInput): Promise<void> | void;
 };
 
 export type JourneyProfile = {
@@ -87,39 +141,8 @@ export type JourneyProfile = {
   label?: string;
   selectInputModality(
     operation: TransitionPlanOperation,
-    context: AdapterExecutionContext
+    context: JourneyExecutionContext
   ): Promise<InputModalityDecision> | InputModalityDecision;
-};
-
-export type JourneyObserver = {
-  name: string;
-  version?: string;
-  onRunStarted?(input: JourneyObserverRunStartedInput): Promise<void> | void;
-  onRunCompleted?(input: JourneyObserverRunCompletedInput): Promise<void> | void;
-  onExecutionStarted?(input: JourneyObserverExecutionInput): Promise<void> | void;
-  onExecutionCompleted?(input: JourneyObserverExecutionCompletedInput): Promise<void> | void;
-};
-
-export type JourneyObserverRunStartedInput = {
-  runId: string;
-  plan: JourneyPlan;
-  profiles: readonly JourneyProfile[];
-  adapter: JourneyAdapter;
-  evidence: EvidenceRecorder;
-};
-
-export type JourneyObserverRunCompletedInput = {
-  result: RunResult;
-  evidence: EvidenceRecorder;
-};
-
-export type JourneyObserverExecutionInput = {
-  context: AdapterExecutionContext;
-};
-
-export type JourneyObserverExecutionCompletedInput = {
-  context: AdapterExecutionContext;
-  execution: ExecutionResult;
 };
 
 export type JourneyReporter = {
@@ -147,8 +170,10 @@ export type ExecutionResult = {
 export type RunResult = {
   ok: boolean;
   runId: string;
-  planId: string;
-  documentId: string;
+  plan: {
+    id: string;
+    source?: JourneyPlanSource;
+  };
   executions: ExecutionResult[];
   evidence: {
     events: EvidenceEvent[];
@@ -163,71 +188,66 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
 
   const runId = options.runId ?? `run-${new Date().toISOString()}`;
   const evidence = new EvidenceRecorder(runId);
+  const runEvidence = new RunEvidence(evidence);
   const executions: ExecutionResult[] = [];
   const errors: EvidenceError[] = [];
   const observers = options.observers ?? [];
+  const observerDispatcher = new JourneyObserverDispatcher(observers, runEvidence);
 
-  evidence.emit({
-    type: "runner.run.started",
-    ok: true,
-    ujg: { documentId: options.plan.documentId },
-    data: {
-      planId: options.plan.id,
-      operationCount: options.plan.operations.length,
-      profiles: options.profiles.map((profile) => profile.id),
-      adapter: componentData(options.adapter),
-      observers: observers.map(componentData),
-      reporters: (options.reporters ?? []).map(componentData)
-    }
-  });
-
-  const runStartError = await notifyRunStarted({
-    adapter: options.adapter,
-    evidence,
-    observers,
+  runEvidence.runStarted({
     plan: options.plan,
     profiles: options.profiles,
+    adapter: options.adapter,
+    observers: observers.map(componentDescriptor),
+    reporters: options.reporters ?? []
+  });
+
+  const runStartError = await observerDispatcher.runStarted({
+    adapter: componentDescriptor(options.adapter),
+    plan: options.plan,
+    profiles: options.profiles.map(profileDescriptor),
     runId
   });
   if (runStartError) {
     errors.push(runStartError);
-    evidence.emit({
-      type: "runner.run.completed",
+    runEvidence.runCompleted({
+      plan: options.plan,
       ok: false,
-      ujg: { documentId: options.plan.documentId },
-      data: {
-        planId: options.plan.id,
-        executionCount: 0,
-        errorCount: errors.length
-      }
+      executionCount: 0,
+      errorCount: errors.length
     });
     return buildResult({
-      documentId: options.plan.documentId,
       errors,
       events: evidence.snapshot(),
       executions,
       ok: false,
-      planId: options.plan.id,
+      plan: options.plan,
       runId
     });
   }
 
   for (const [profileIndex, profile] of options.profiles.entries()) {
     const executionId = `${safeSegment(profile.id)}-${String(profileIndex + 1).padStart(2, "0")}`;
-    const context: AdapterExecutionContext = {
+    const context: JourneyExecutionContext = {
       runId,
       executionId,
       profile,
-      plan: options.plan,
-      evidence,
-      observers
+      plan: options.plan
     };
+    const descriptor = executionDescriptor(context);
+    const executionSink = scopeEvidenceToExecution(evidence, {
+      executionId,
+      profileId: profile.id
+    });
+    const executionEvidence = new ExecutionEvidence(context, executionSink);
 
     const execution = await runProfileExecution({
       adapter: options.adapter,
       context,
-      evidence,
-      observers,
+      descriptor,
+      executionEvidence,
+      executionSink,
+      observerDispatcher,
       plan: options.plan,
       profile
     });
@@ -238,88 +258,60 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
 
   let ok = executions.every((execution) => execution.ok);
   let result = buildResult({
-    documentId: options.plan.documentId,
     errors,
     events: evidence.snapshot(),
     executions,
     ok,
-    planId: options.plan.id,
+    plan: options.plan,
     runId
   });
 
-  for (const reporter of options.reporters ?? []) {
-    try {
-      evidence.emit({
-        type: "reporter.started",
-        ok: true,
-        data: componentData(reporter)
-      });
-      await reporter.report(result);
-      evidence.emit({
-        type: "reporter.completed",
-        ok: true,
-        data: componentData(reporter)
-      });
-    } catch (error) {
-      ok = false;
-      const evidenceError = errorToEvidence(error);
-      errors.push(evidenceError);
-      evidence.emit({
-        type: "reporter.failed",
-        ok: false,
-        data: componentData(reporter),
-        error: evidenceError
-      });
-    }
-
+  const reporterPipeline = new ReporterPipeline();
+  const reporterOutcome = await reporterPipeline.run({
+    reporters: options.reporters ?? [],
+    report: result,
+    evidence: runEvidence
+  });
+  if (reporterOutcome.errors.length > 0) {
+    ok = false;
+    errors.push(...reporterOutcome.errors);
     result = buildResult({
-      documentId: options.plan.documentId,
       errors,
       events: evidence.snapshot(),
       executions,
       ok,
-      planId: options.plan.id,
+      plan: options.plan,
       runId
     });
   }
 
-  const runCompletionError = await notifyRunCompleted({
-    evidence,
-    observers,
-    result
-  });
+  const runCompletionError = await observerDispatcher.runCompleted(result);
   if (runCompletionError) {
     ok = false;
     errors.push(runCompletionError);
     result = buildResult({
-      documentId: options.plan.documentId,
       errors,
       events: evidence.snapshot(),
       executions,
       ok,
-      planId: options.plan.id,
+      plan: options.plan,
       runId
     });
   }
 
-  evidence.emit({
-    type: "runner.run.completed",
+  runEvidence.runCompleted({
+    plan: options.plan,
     ok,
-    ujg: { documentId: options.plan.documentId },
-    data: {
-      planId: options.plan.id,
-      executionCount: executions.length,
-      errorCount: errors.length
-    }
+    executionCount: executions.length,
+    errorCount: errors.length
   });
 
   return buildResult({
-    documentId: options.plan.documentId,
     errors,
     events: evidence.snapshot(),
     executions,
     ok,
-    planId: options.plan.id,
+    plan: options.plan,
     runId
   });
 }
@@ -327,102 +319,74 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
 async function runProfileExecution({
   adapter,
   context,
-  evidence,
-  observers,
+  descriptor,
+  executionEvidence,
+  executionSink,
+  observerDispatcher,
   plan,
   profile
 }: {
   adapter: JourneyAdapter;
-  context: AdapterExecutionContext;
-  evidence: EvidenceRecorder;
-  observers: readonly JourneyObserver[];
+  context: JourneyExecutionContext;
+  descriptor: ReturnType<typeof executionDescriptor>;
+  executionEvidence: ExecutionEvidence;
+  executionSink: ExecutionEvidenceSink;
+  observerDispatcher: JourneyObserverDispatcher;
   plan: JourneyPlan;
   profile: JourneyProfile;
 }): Promise<ExecutionResult> {
   let ok = true;
   let executionError: EvidenceError | undefined;
-  const currentEntryByUser = new Map<string, string>();
+  const currentEntryByActor = new Map<string, string>();
+  let adapterExecution: JourneyAdapterExecution | undefined;
 
-  evidence.emit({
-    type: "profile.execution.started",
-    executionId: context.executionId,
-    profileId: profile.id,
-    ok: true,
-    ujg: { documentId: plan.documentId },
-    data: { label: profile.label ?? profile.id }
-  });
+  executionEvidence.executionStarted();
 
   try {
-    await notifyExecutionStarted({ context, evidence, observers });
+    await observerDispatcher.executionStarted(descriptor, executionEvidence);
 
-    evidence.emit({
-      type: "adapter.setup.started",
-      executionId: context.executionId,
-      profileId: profile.id,
-      ok: true,
-      data: componentData(adapter)
+    executionEvidence.adapterStartStarted(adapter);
+    adapterExecution = adapter.createExecution({
+      context,
+      evidence: executionSink
     });
-    await adapter.setupExecution(context);
-    evidence.emit({
-      type: "adapter.setup.completed",
-      executionId: context.executionId,
-      profileId: profile.id,
-      ok: true,
-      data: componentData(adapter)
-    });
+    await adapterExecution.start();
+    executionEvidence.adapterStartCompleted(adapter);
 
     for (const operation of plan.operations) {
-      evidence.emit(operationEvent(operation, context, "operation.started", true));
-      await ensureEntryOpen({ adapter, context, currentEntryByUser, evidence, operation });
+      executionEvidence.operationStarted(operation);
+      await ensureEntryOpen({
+        adapterExecution,
+        currentEntryByActor,
+        executionEvidence,
+        operation
+      });
 
       if (operation.kind === "state") {
-        await assertState({ adapter, context, evidence, operation });
+        await assertState({ adapterExecution, executionEvidence, operation });
       } else if (operation.kind === "transition") {
-        await performTransition({ adapter, context, evidence, operation, profile });
+        await performTransition({ adapterExecution, context, executionEvidence, operation, profile });
       } else {
-        await recordControlFlow({ adapter, context, evidence, operation });
+        await recordControlFlow({ adapterExecution, executionEvidence, operation });
       }
 
-      evidence.emit(operationEvent(operation, context, "operation.completed", true));
+      executionEvidence.operationCompleted(operation);
     }
   } catch (error) {
     ok = false;
     executionError = errorToEvidence(error);
-    evidence.emit({
-      type: "profile.execution.failed",
-      executionId: context.executionId,
-      profileId: profile.id,
-      ok: false,
-      error: executionError
-    });
+    executionEvidence.executionFailed(executionError);
   } finally {
-    try {
-      evidence.emit({
-        type: "adapter.teardown.started",
-        executionId: context.executionId,
-        profileId: profile.id,
-        ok: true,
-        data: componentData(adapter)
-      });
-      await adapter.teardownExecution(context);
-      evidence.emit({
-        type: "adapter.teardown.completed",
-        executionId: context.executionId,
-        profileId: profile.id,
-        ok: true,
-        data: componentData(adapter)
-      });
-    } catch (error) {
-      ok = false;
-      executionError = errorToEvidence(error);
-      evidence.emit({
-        type: "adapter.teardown.failed",
-        executionId: context.executionId,
-        profileId: profile.id,
-        ok: false,
-        error: executionError,
-        data: componentData(adapter)
-      });
+    if (adapterExecution) {
+      try {
+        executionEvidence.adapterCloseStarted(adapter);
+        await adapterExecution.close({ executionFailed: !ok });
+        executionEvidence.adapterCloseCompleted(adapter);
+      } catch (error) {
+        ok = false;
+        executionError = errorToEvidence(error);
+        executionEvidence.adapterCloseFailed(adapter, executionError);
+      }
     }
   }
 
@@ -433,18 +397,17 @@ async function runProfileExecution({
     error: executionError
   };
   const observerCompletionError = await notifyExecutionCompleted({
-    context,
-    evidence,
+    descriptor,
     execution: executionBeforeObserver,
-    observers
+    executionEvidence,
+    observerDispatcher
   });
   if (observerCompletionError) {
     ok = false;
     executionError = observerCompletionError;
   }
 
-  evidence.emit({
-    type: "profile.execution.completed",
+  executionEvidence.executionCompleted({
     executionId: context.executionId,
     profileId: profile.id,
     ok,
@@ -460,349 +423,93 @@ async function runProfileExecution({
 }
 
 async function ensureEntryOpen({
-  adapter,
-  context,
-  currentEntryByUser,
-  evidence,
+  adapterExecution,
+  currentEntryByActor,
+  executionEvidence,
   operation
 }: {
-  adapter: JourneyAdapter;
-  context: AdapterExecutionContext;
-  currentEntryByUser: Map<string, string>;
-  evidence: EvidenceRecorder;
+  adapterExecution: JourneyAdapterExecution;
+  currentEntryByActor: Map<string, string>;
+  executionEvidence: ExecutionEvidence;
   operation: JourneyPlanOperation;
 }): Promise<void> {
   if (!operation.entryBinding) return;
 
   const entryKey = `${operation.entry.id}\u0000${operation.entryBinding.id}\u0000${operation.entryBinding.value}`;
-  if (currentEntryByUser.get(operation.userId) === entryKey) return;
+  if (currentEntryByActor.get(operation.actorId) === entryKey) return;
 
-  evidence.emit(operationEvent(operation, context, "adapter.open-entry.started", true, {
-    entryBindingValue: operation.entryBinding.value
-  }));
-  await adapter.openEntry(operation, context);
-  currentEntryByUser.set(operation.userId, entryKey);
-  evidence.emit(operationEvent(operation, context, "adapter.open-entry.completed", true, {
-    entryBindingValue: operation.entryBinding.value
-  }));
+  executionEvidence.openEntryStarted(operation);
+  await adapterExecution.openEntry(operation);
+  currentEntryByActor.set(operation.actorId, entryKey);
+  executionEvidence.openEntryCompleted(operation);
 }
 
 async function assertState({
-  adapter,
-  context,
-  evidence,
+  adapterExecution,
+  executionEvidence,
   operation
 }: {
-  adapter: JourneyAdapter;
-  context: AdapterExecutionContext;
-  evidence: EvidenceRecorder;
+  adapterExecution: JourneyAdapterExecution;
+  executionEvidence: ExecutionEvidence;
   operation: StatePlanOperation;
 }): Promise<void> {
-  evidence.emit(operationEvent(operation, context, "adapter.assert-state.started", true, {
-    expectedMatchCount: operation.target.expectedMatchCount
-  }));
-  await adapter.assertState(operation, context);
-  evidence.emit(operationEvent(operation, context, "adapter.assert-state.completed", true, {
-    expectedMatchCount: operation.target.expectedMatchCount
-  }));
+  executionEvidence.stateAssertionStarted(operation);
+  await adapterExecution.assertState(operation);
+  executionEvidence.stateAssertionCompleted(operation);
 }
 
 async function performTransition({
-  adapter,
+  adapterExecution,
   context,
-  evidence,
+  executionEvidence,
   operation,
   profile
 }: {
-  adapter: JourneyAdapter;
-  context: AdapterExecutionContext;
-  evidence: EvidenceRecorder;
+  adapterExecution: JourneyAdapterExecution;
+  context: JourneyExecutionContext;
+  executionEvidence: ExecutionEvidence;
   operation: TransitionPlanOperation;
   profile: JourneyProfile;
 }): Promise<void> {
   const decision = await profile.selectInputModality(operation, context);
 
-  evidence.emit(operationEvent(operation, context, "profile.modality.selected", true, {
-    command: decision.command,
-    inputModalityProfileId: decision.inputModalityProfile.id,
-    modalityId: decision.modality.id
-  }));
+  executionEvidence.modalitySelected(operation, decision);
 
-  evidence.emit(operationEvent(operation, context, "adapter.perform-transition.started", true, {
-    command: decision.command
-  }));
-  await adapter.performTransition(operation, decision, context);
-  evidence.emit(operationEvent(operation, context, "adapter.perform-transition.completed", true, {
-    command: decision.command
-  }));
+  executionEvidence.transitionStarted(operation, decision);
+  await adapterExecution.performTransition(operation, decision);
+  executionEvidence.transitionCompleted(operation, decision);
 
   for (const effect of operation.effects) {
-    evidence.emit(operationEvent(operation, context, "effect.recorded", true, {
-      effectId: effect.id,
-      producedRefs: effect.producedRefs,
-      consumedRefs: effect.consumedRefs
-    }));
+    executionEvidence.effectRecorded(operation, effect);
   }
 }
 
 async function recordControlFlow({
-  adapter,
-  context,
-  evidence,
+  adapterExecution,
+  executionEvidence,
   operation
 }: {
-  adapter: JourneyAdapter;
-  context: AdapterExecutionContext;
-  evidence: EvidenceRecorder;
+  adapterExecution: JourneyAdapterExecution;
+  executionEvidence: ExecutionEvidence;
   operation: ControlFlowPlanOperation;
 }): Promise<void> {
-  evidence.emit(operationEvent(operation, context, "adapter.control-flow.started", true));
-  await adapter.recordControlFlow(operation, context);
-  evidence.emit(operationEvent(operation, context, "adapter.control-flow.completed", true));
-}
-
-async function notifyRunStarted({
-  adapter,
-  evidence,
-  observers,
-  plan,
-  profiles,
-  runId
-}: {
-  adapter: JourneyAdapter;
-  evidence: EvidenceRecorder;
-  observers: readonly JourneyObserver[];
-  plan: JourneyPlan;
-  profiles: readonly JourneyProfile[];
-  runId: string;
-}): Promise<EvidenceError | undefined> {
-  for (const observer of observers) {
-    if (!observer.onRunStarted) continue;
-
-    try {
-      evidence.emit({
-        type: "observer.run-started.started",
-        ok: true,
-        data: componentData(observer)
-      });
-      await observer.onRunStarted({ adapter, evidence, plan, profiles, runId });
-      evidence.emit({
-        type: "observer.run-started.completed",
-        ok: true,
-        data: componentData(observer)
-      });
-    } catch (error) {
-      const evidenceError = errorToEvidence(error);
-      evidence.emit({
-        type: "observer.run-started.failed",
-        ok: false,
-        data: componentData(observer),
-        error: evidenceError
-      });
-      return evidenceError;
-    }
-  }
-
-  return undefined;
-}
-
-async function notifyRunCompleted({
-  evidence,
-  observers,
-  result
-}: {
-  evidence: EvidenceRecorder;
-  observers: readonly JourneyObserver[];
-  result: RunResult;
-}): Promise<EvidenceError | undefined> {
-  for (const observer of observers) {
-    if (!observer.onRunCompleted) continue;
-
-    try {
-      evidence.emit({
-        type: "observer.run-completed.started",
-        ok: true,
-        data: componentData(observer)
-      });
-      await observer.onRunCompleted({ evidence, result });
-      evidence.emit({
-        type: "observer.run-completed.completed",
-        ok: true,
-        data: componentData(observer)
-      });
-    } catch (error) {
-      const evidenceError = errorToEvidence(error);
-      evidence.emit({
-        type: "observer.run-completed.failed",
-        ok: false,
-        data: componentData(observer),
-        error: evidenceError
-      });
-      return evidenceError;
-    }
-  }
-
-  return undefined;
-}
-
-async function notifyExecutionStarted({
-  context,
-  evidence,
-  observers
-}: {
-  context: AdapterExecutionContext;
-  evidence: EvidenceRecorder;
-  observers: readonly JourneyObserver[];
-}): Promise<void> {
-  for (const observer of observers) {
-    if (!observer.onExecutionStarted) continue;
-
-    try {
-      evidence.emit({
-        type: "observer.execution-started.started",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        ok: true,
-        data: componentData(observer)
-      });
-      await observer.onExecutionStarted({ context });
-      evidence.emit({
-        type: "observer.execution-started.completed",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        ok: true,
-        data: componentData(observer)
-      });
-    } catch (error) {
-      const evidenceError = errorToEvidence(error);
-      evidence.emit({
-        type: "observer.execution-started.failed",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        ok: false,
-        data: componentData(observer),
-        error: evidenceError
-      });
-      throw error;
-    }
-  }
+  executionEvidence.controlFlowStarted(operation);
+  await adapterExecution.recordControlFlow(operation);
+  executionEvidence.controlFlowCompleted(operation);
 }
 
 async function notifyExecutionCompleted({
-  context,
-  evidence,
+  descriptor,
   execution,
-  observers
+  executionEvidence,
+  observerDispatcher
 }: {
-  context: AdapterExecutionContext;
-  evidence: EvidenceRecorder;
+  descriptor: ReturnType<typeof executionDescriptor>;
   execution: ExecutionResult;
-  observers: readonly JourneyObserver[];
+  executionEvidence: ExecutionEvidence;
+  observerDispatcher: JourneyObserverDispatcher;
 }): Promise<EvidenceError | undefined> {
-  for (const observer of observers) {
-    if (!observer.onExecutionCompleted) continue;
-
-    try {
-      evidence.emit({
-        type: "observer.execution-completed.started",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        ok: true,
-        data: componentData(observer)
-      });
-      await observer.onExecutionCompleted({ context, execution });
-      evidence.emit({
-        type: "observer.execution-completed.completed",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        ok: true,
-        data: componentData(observer)
-      });
-    } catch (error) {
-      const evidenceError = errorToEvidence(error);
-      evidence.emit({
-        type: "observer.execution-completed.failed",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        ok: false,
-        data: componentData(observer),
-        error: evidenceError
-      });
-      return evidenceError;
-    }
-  }
-
-  return undefined;
-}
-
-function operationEvent(
-  operation: JourneyPlanOperation,
-  context: AdapterExecutionContext,
-  type: string,
-  ok: boolean,
-  data?: JsonObject
-): EvidenceEventInput {
-  return {
-    type,
-    executionId: context.executionId,
-    profileId: context.profile.id,
-    operationId: operation.id,
-    operationKind: operation.kind,
-    ok,
-    ujg: ujgRefsForOperation(operation),
-    data
-  };
-}
-
-function ujgRefsForOperation(operation: JourneyPlanOperation): UjgRefSet {
-  const refs: UjgRefSet = {
-    documentId: operation.documentId,
-    phaseId: operation.phaseId,
-    stepId: operation.stepId,
-    userId: operation.userId,
-    touchpointId: operation.touchpointId,
-    entryId: operation.entry.id,
-    entryBindingId: operation.entryBinding?.id
-  };
-
-  if (operation.kind === "state") {
-    refs.stateId = operation.state.id;
-    refs.surfaceId = operation.surface.id;
-    refs.observationBindingIds = operation.target.bindings.map((binding) => binding.id);
-    refs.observationEventIds = unique(operation.target.bindings.map((binding) => binding.eventId));
-    refs.locatorIds = unique(operation.target.bindings.flatMap((binding) => locatorIds(binding.locators)));
-    return refs;
-  }
-
-  refs.transitionId = operation.transition.id;
-
-  if (operation.kind === "transition") {
-    refs.surfaceId = operation.surface.id;
-    refs.observationBindingIds = operation.activation.bindings.map((binding) => binding.id);
-    refs.observationEventIds = unique(operation.activation.bindings.map((binding) => binding.eventId));
-    refs.locatorIds = unique(operation.activation.bindings.flatMap((binding) => locatorIds(binding.locators)));
-    refs.effectIds = operation.effects.map((effect) => effect.id);
-    refs.artifactIds = unique(
-      operation.effects.flatMap((effect) => [...effect.producedRefs, ...effect.consumedRefs])
-    );
-  }
-
-  return refs;
-}
-
-function locatorIds(locators: ResolvedAccessibleLocator[]): string[] {
-  return locators.flatMap((locator) => [locator.id, ...locatorIds(locator.contexts)]);
-}
-
-function unique(values: string[]): string[] {
-  return [...new Set(values)];
-}
-
-function componentData(component: { name: string; version?: string }): JsonObject {
-  return {
-    name: component.name,
-    ...(component.version ? { version: component.version } : {})
-  };
+  return observerDispatcher.executionCompleted(descriptor, execution, executionEvidence);
 }
 
 function safeSegment(value: string): string {
@@ -810,29 +517,29 @@ function safeSegment(value: string): string {
 }
 
 function buildResult({
-  documentId,
   errors,
   events,
   executions,
   ok,
-  planId,
+  plan,
   runId
 }: {
-  documentId: string;
   errors: EvidenceError[];
-  events: EvidenceEvent[];
+  events: readonly EvidenceEvent[];
   executions: ExecutionResult[];
   ok: boolean;
-  planId: string;
+  plan: JourneyPlan;
   runId: string;
 }): RunResult {
   return {
     ok,
     runId,
-    planId,
-    documentId,
+    plan: {
+      id: plan.id,
+      ...(plan.source ? { source: plan.source } : {})
+    },
     executions: [...executions],
-    evidence: { events },
+    evidence: { events: [...events] },
     errors: [...errors]
   };
 }

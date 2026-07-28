@@ -11,12 +11,18 @@ importers:
       '@openuji/journey-adapter-playwright':
         specifier: workspace:*
         version: link:packages/journey-adapter-playwright
+      '@openuji/journey-core':
+        specifier: workspace:*
+        version: link:packages/journey-core
       '@openuji/journey-driver-nextcloud':
         specifier: workspace:*
         version: link:packages/journey-driver-nextcloud
       '@openuji/journey-evidence':
         specifier: workspace:*
         version: link:packages/journey-evidence
+      '@openuji/journey-execution-model':
+        specifier: workspace:*
+        version: link:packages/journey-execution-model
       '@openuji/journey-model-ujg':
         specifier: workspace:*
         version: link:packages/journey-model-ujg
@@ -66,18 +72,26 @@ importers:
 
   packages/journey-adapter-playwright:
     dependencies:
+      '@openuji/journey-evidence':
+        specifier: workspace:*
+        version: link:../journey-evidence
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner
       playwright:
         specifier: ^1.61.1
         version: 1.62.0
+
+  packages/journey-core: {}
 
   packages/journey-driver-nextcloud:
     dependencies:
       '@openuji/journey-adapter-playwright':
         specifier: workspace:*
         version: link:../journey-adapter-playwright
+      '@openuji/journey-evidence':
+        specifier: workspace:*
+        version: link:../journey-evidence
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner
@@ -85,13 +99,23 @@ importers:
         specifier: ^1.61.1
         version: 1.62.0
 
-  packages/journey-evidence: {}
+  packages/journey-evidence:
+    dependencies:
+      '@openuji/journey-execution-model':
+        specifier: workspace:*
+        version: link:../journey-execution-model
+
+  packages/journey-execution-model:
+    dependencies:
+      '@openuji/journey-core':
+        specifier: workspace:*
+        version: link:../journey-core
 
   packages/journey-model-ujg:
     dependencies:
-      '@openuji/journey-evidence':
+      '@openuji/journey-execution-model':
         specifier: workspace:*
-        version: link:../journey-evidence
+        version: link:../journey-execution-model
 
   packages/journey-observer-axe:
     dependencies:
@@ -122,6 +146,9 @@ importers:
       '@openuji/journey-evidence':
         specifier: workspace:*
         version: link:../journey-evidence
+      '@openuji/journey-execution-model':
+        specifier: workspace:*
+        version: link:../journey-execution-model
 
 packages:
 

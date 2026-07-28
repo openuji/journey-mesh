@@ -1,5 +1,5 @@
 {
-  "name": "@openuji/journey-evidence",
+  "name": "@openuji/journey-core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,9 +7,6 @@
     ".": "./src/index.ts"
   },
   "types": "./src/index.ts",
-  "dependencies": {
-    "@openuji/journey-execution-model": "workspace:*"
-  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"

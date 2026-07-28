@@ -1,174 +1,54 @@
+import type {
+  JourneyPlanOperationKind,
+  JourneySourceReferences
+} from "@openuji/journey-execution-model";
+
+export { referencesForOperation, referencesForPlan } from "./journey-references.js";
+
+export type {
+  AccessibleFeature,
+  ControlFlowPlanOperation,
+  EntryBindingRef,
+  GraphVertexRef,
+  InputModalityDecision,
+  JourneyEntryRef,
+  JourneyInteractionCommand,
+  JourneyPlan,
+  JourneyOperationSource,
+  JourneyPlanOperation,
+  JourneyPlanOperationBase,
+  JourneyPlanOperationKind,
+  JourneyPlanSource,
+  JourneySourceReferences,
+  JourneySourceReferenceValue,
+  LabeledRef,
+  ResolvedAccessibleLocator,
+  ResolvedArtifact,
+  ResolvedEffect,
+  ResolvedInputModality,
+  ResolvedInputModalityProfile,
+  ResolvedObservationBinding,
+  ResolvedStateObservation,
+  ResolvedStateObservationTarget,
+  ResolvedSurfaceInstanceResolver,
+  ResolvedTransitionActivation,
+  StatePlanOperation,
+  TransitionPlanOperation
+} from "@openuji/journey-execution-model";
+
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonObject = { [key: string]: JsonValue };
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
 
-export type LabeledRef = {
-  id: string;
-  label?: string;
-};
-
-export type JourneyEntryRef = LabeledRef & {
-  stateId: string;
-};
-
-export type EntryBindingRef = LabeledRef & {
-  value: string;
-};
-
-export type AccessibleFeature = LabeledRef & {
-  name: string;
-  value: string;
-};
-
-export type ResolvedAccessibleLocator = LabeledRef & {
-  role?: string;
-  accessibleName?: string;
-  accessibleDescription?: string;
-  features: AccessibleFeature[];
-  contexts: ResolvedAccessibleLocator[];
-};
-
-export type ResolvedInputModality = LabeledRef;
-
-export type ResolvedInputModalityProfile = LabeledRef & {
-  modalities: ResolvedInputModality[];
-};
-
-export type ResolvedSurfaceInstanceResolver = LabeledRef & {
-  instanceKeyFeature: AccessibleFeature;
-};
-
-export type ResolvedObservationBinding = LabeledRef & {
-  surfaceId: string;
-  eventId: string;
-  eventLabel?: string;
-  expectedMatchCount?: number;
-  requiredInputModalityProfiles: ResolvedInputModalityProfile[];
-  locators: ResolvedAccessibleLocator[];
-  surfaceInstanceResolver?: ResolvedSurfaceInstanceResolver;
-};
-
-export type ResolvedStateObservation = {
-  stateId: string;
-  stateLabel?: string;
-  surfaceId: string;
-  surfaceLabel?: string;
-  expectedMatchCount: number;
-  bindings: ResolvedObservationBinding[];
-};
-
-export type ResolvedStateObservationTarget = {
-  observation: ResolvedStateObservation;
-  expectedMatchCount: number;
-  bindings: ResolvedObservationBinding[];
-};
-
-export type GraphVertexRef = LabeledRef & {
-  type: "State" | "CompositeState" | "JourneyExit";
-};
-
-export type ResolvedTransitionActivation = {
-  transitionId: string;
-  transitionLabel?: string;
-  eventId: string;
-  eventLabel?: string;
-  from: GraphVertexRef;
-  to: GraphVertexRef;
-  effectRef?: string;
-  surfaceId: string;
-  surfaceLabel?: string;
-  requiredInputModalityProfiles: ResolvedInputModalityProfile[];
-  bindings: ResolvedObservationBinding[];
-};
-
-export type ResolvedArtifact = LabeledRef & {
-  nameRef?: string;
-  name?: string;
-  sourceTouchpointRef?: string;
-  targetTouchpointRefs: string[];
-};
-
-export type ResolvedEffect = LabeledRef & {
-  producedRefs: string[];
-  consumedRefs: string[];
-  produced: ResolvedArtifact[];
-  consumed: ResolvedArtifact[];
-};
-
-export type JourneyPlanOperationKind = "state" | "transition" | "control-flow";
-
-export type JourneyPlanOperationBase<K extends JourneyPlanOperationKind> = {
-  id: string;
-  sequence: number;
-  kind: K;
-  documentId: string;
-  phaseId: string;
-  stepId: string;
-  userId: string;
-  touchpointId: string;
-  entry: JourneyEntryRef;
-  entryBinding?: EntryBindingRef;
-};
-
-export type StatePlanOperation = JourneyPlanOperationBase<"state"> & {
-  state: LabeledRef;
-  surface: LabeledRef;
-  target: ResolvedStateObservationTarget;
-};
-
-export type TransitionPlanOperation = JourneyPlanOperationBase<"transition"> & {
-  transition: LabeledRef & {
-    from: string;
-    to: string;
-    effectRef?: string;
-  };
-  from: GraphVertexRef;
-  to: GraphVertexRef;
-  surface: LabeledRef;
-  activation: ResolvedTransitionActivation;
-  effects: ResolvedEffect[];
-};
-
-export type ControlFlowPlanOperation = JourneyPlanOperationBase<"control-flow"> & {
-  transition: LabeledRef & {
-    from: string;
-    to: string;
-    fromExitRef?: string;
-    toEntryRef?: string;
-  };
-  fromExit?: LabeledRef;
-  toEntry?: JourneyEntryRef;
-};
-
-export type JourneyPlanOperation =
-  | StatePlanOperation
-  | TransitionPlanOperation
-  | ControlFlowPlanOperation;
-
-export type JourneyPlan = {
-  id: string;
-  documentId: string;
-  operations: JourneyPlanOperation[];
-};
-
-export type JourneyInteractionCommand =
-  | "pointer-click"
-  | "keyboard-enter"
-  | "keyboard-space"
-  | "keyboard-text-entry";
-
-export type InputModalityDecision = {
-  profileId: string;
-  inputModalityProfile: ResolvedInputModalityProfile;
-  modality: ResolvedInputModality;
-  command: JourneyInteractionCommand;
-};
-
-export type UjgRefSet = {
+export type JourneyEvidenceSource = {
+  model: string;
   documentId?: string;
-  phaseId?: string;
-  stepId?: string;
-  userId?: string;
+  planReferences?: JourneySourceReferences;
+  operationReferences?: JourneySourceReferences;
+};
+
+export type JourneyReferenceSet = {
+  actorId?: string;
   touchpointId?: string;
   entryId?: string;
   entryBindingId?: string;
@@ -181,7 +61,13 @@ export type UjgRefSet = {
   featureIds?: string[];
   effectIds?: string[];
   artifactIds?: string[];
+  source?: JourneyEvidenceSource;
 };
+
+/**
+ * @deprecated Use JourneyReferenceSet.
+ */
+export type UjgRefSet = JourneyReferenceSet;
 
 export type EvidenceError = {
   name: string;
@@ -201,14 +87,63 @@ export type EvidenceEvent = {
   type: string;
   ok?: boolean;
   message?: string;
-  ujg?: UjgRefSet;
+  references?: JourneyReferenceSet;
   data?: JsonValue;
   error?: EvidenceError;
 };
 
 export type EvidenceEventInput = Omit<EvidenceEvent, "id" | "sequence" | "timestamp" | "runId">;
 
-export class EvidenceRecorder {
+export interface EvidenceSink {
+  emit(input: EvidenceEventInput): EvidenceEvent;
+}
+
+export interface EvidenceLog {
+  snapshot(): readonly EvidenceEvent[];
+}
+
+export type ExecutionEvidenceIdentity = {
+  readonly executionId: string;
+  readonly profileId: string;
+};
+
+export interface ExecutionEvidenceSink {
+  emit(
+    input: Omit<
+      EvidenceEventInput,
+      "executionId" | "profileId"
+    >
+  ): EvidenceEvent;
+}
+
+export type EvidenceComponent = {
+  readonly name: string;
+  readonly version?: string;
+};
+
+export function componentEvidence(component: EvidenceComponent): JsonObject {
+  return {
+    name: component.name,
+    ...(component.version ? { version: component.version } : {})
+  };
+}
+
+export function scopeEvidenceToExecution(
+  sink: EvidenceSink,
+  identity: ExecutionEvidenceIdentity
+): ExecutionEvidenceSink {
+  return {
+    emit(input) {
+      return sink.emit({
+        ...input,
+        executionId: identity.executionId,
+        profileId: identity.profileId
+      });
+    }
+  };
+}
+
+export class EvidenceRecorder implements EvidenceSink, EvidenceLog {
   readonly runId: string;
   private sequence = 0;
   private readonly collectedEvents: EvidenceEvent[] = [];
@@ -231,7 +166,7 @@ export class EvidenceRecorder {
     return event;
   }
 
-  snapshot(): EvidenceEvent[] {
+  snapshot(): readonly EvidenceEvent[] {
     return [...this.collectedEvents];
   }
 }

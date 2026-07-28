@@ -1,6 +1,3 @@
-import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
-
 import {
   chromium,
   type Browser,
@@ -12,22 +9,36 @@ import {
   type Page
 } from "playwright";
 
-import type {
-  AccessibleFeature,
-  AdapterExecutionContext,
-  ControlFlowPlanOperation,
-  InputModalityDecision,
-  JourneyAdapter,
-  JourneyInteractionCommand,
-  JourneyObserver,
-  JourneyPlanOperation,
-  JsonObject,
-  ResolvedAccessibleLocator,
-  ResolvedObservationBinding,
-  StatePlanOperation,
-  TransitionPlanOperation
+import {
+  executionDescriptor,
+  type AccessibleFeature,
+  type ControlFlowPlanOperation,
+  type InputModalityDecision,
+  type JourneyAdapter,
+  type JourneyAdapterCloseInput,
+  type JourneyAdapterExecution,
+  type JourneyAdapterExecutionInput,
+  type JourneyInteractionCommand,
+  type JourneyExecutionContext,
+  type JourneyExecutionDescriptor,
+  type JourneyPlanOperation,
+  type JsonObject,
+  type ResolvedAccessibleLocator,
+  type ResolvedObservationBinding,
+  type StatePlanOperation,
+  type TransitionPlanOperation
 } from "@openuji/journey-runner";
-import { errorToEvidence } from "@openuji/journey-runner";
+import type { ExecutionEvidenceSink } from "@openuji/journey-evidence";
+import { PlaywrightEvidence } from "./evidence/playwright-evidence.js";
+import type { PlaywrightExecutionObserver } from "./observers/contracts.js";
+import { PlaywrightObserverDispatcher } from "./observers/playwright-observer-dispatcher.js";
+
+export type {
+  PlaywrightExecutionObserver,
+  PlaywrightJourneyObserver,
+  PlaywrightObserverExecutionStartedInput,
+  PlaywrightOperationObservation
+} from "./observers/contracts.js";
 
 export type PlaywrightCreateBrowserContextInput = {
   operation?: JourneyPlanOperation;
@@ -35,111 +46,52 @@ export type PlaywrightCreateBrowserContextInput = {
   data?: JsonObject;
 };
 
-export type PlaywrightArtifactMode = "off" | "retain-on-failure" | "always";
-
-export type PlaywrightArtifactAttachment = {
-  path?: string;
-  body?: string | Buffer;
-  contentType?: string;
-};
-
-export type PlaywrightArtifactSink = {
-  outputPath(...pathSegments: string[]): string;
-  attach(name: string, attachment: PlaywrightArtifactAttachment): Promise<void> | void;
-};
-
-export type PlaywrightArtifactOptions = {
-  mode?: PlaywrightArtifactMode;
-  sink?: PlaywrightArtifactSink;
-  traces?: boolean;
-  screenshots?: boolean;
-  videos?: boolean;
-};
-
-export type PlaywrightDriverExecutionContext = AdapterExecutionContext & {
+export type PlaywrightDriverExecutionContext = JourneyExecutionContext & {
   browser: Browser;
   createBrowserContext(
     input?: PlaywrightCreateBrowserContextInput
   ): Promise<BrowserContext>;
 };
 
-export type PlaywrightTransitionValueInput = {
-  operation: TransitionPlanOperation;
-  context: PlaywrightDriverExecutionContext;
+export type PlaywrightDriverCloseInput = {
+  readonly executionFailed: boolean;
 };
 
 export type PlaywrightJourneyDriver = {
-  name: string;
-  version?: string;
-  setupExecution(context: PlaywrightDriverExecutionContext): Promise<void> | void;
-  openEntry(
-    operation: JourneyPlanOperation,
-    context: PlaywrightDriverExecutionContext
-  ): Promise<void> | void;
-  pageForOperation(
-    operation: JourneyPlanOperation,
-    context: PlaywrightDriverExecutionContext
-  ): Promise<Page> | Page;
-  transitionValue(
-    input: PlaywrightTransitionValueInput
-  ): Promise<string | undefined> | string | undefined;
+  readonly name: string;
+  readonly version?: string;
+  createExecution(
+    input: PlaywrightDriverExecutionInput
+  ): PlaywrightJourneyDriverExecution;
+};
+
+export type PlaywrightDriverExecutionInput = {
+  readonly context: PlaywrightDriverExecutionContext;
+  readonly evidence: ExecutionEvidenceSink;
+};
+
+export type PlaywrightJourneyDriverExecution = {
+  start(): Promise<void> | void;
+  openEntry(operation: JourneyPlanOperation): Promise<void> | void;
+  pageForOperation(operation: JourneyPlanOperation): Promise<Page> | Page;
+  transitionValue(operation: TransitionPlanOperation): Promise<string | undefined> | string | undefined;
   afterTransition(
     operation: TransitionPlanOperation,
-    decision: InputModalityDecision,
-    context: PlaywrightDriverExecutionContext
+    decision: InputModalityDecision
   ): Promise<void> | void;
-  recordControlFlow(
-    operation: ControlFlowPlanOperation,
-    context: PlaywrightDriverExecutionContext
-  ): Promise<void> | void;
-  teardownExecution(context: PlaywrightDriverExecutionContext): Promise<void> | void;
+  recordControlFlow(operation: ControlFlowPlanOperation): Promise<void> | void;
+  close(input: PlaywrightDriverCloseInput): Promise<void> | void;
 };
-
-export type PlaywrightOperationObservation =
-  | {
-      stage: "state-asserted";
-      operation: StatePlanOperation;
-      context: PlaywrightDriverExecutionContext;
-      page: Page;
-      locator: Locator;
-      expectedMatchCount: number;
-    }
-  | {
-      stage: "transition-ready";
-      operation: TransitionPlanOperation;
-      context: PlaywrightDriverExecutionContext;
-      page: Page;
-      locator: Locator;
-      expectedMatchCount: 1;
-      decision: InputModalityDecision;
-    }
-  | {
-      stage: "control-flow-recorded";
-      operation: ControlFlowPlanOperation;
-      context: PlaywrightDriverExecutionContext;
-    };
-
-export type PlaywrightJourneyObserver = JourneyObserver & {
-  observePlaywrightOperation(
-    observation: PlaywrightOperationObservation
-  ): Promise<void> | void;
-};
-
-export function isPlaywrightJourneyObserver(
-  observer: JourneyObserver
-): observer is PlaywrightJourneyObserver {
-  return typeof (observer as { observePlaywrightOperation?: unknown }).observePlaywrightOperation === "function";
-}
 
 export type PlaywrightAdapterOptions = {
   driver: PlaywrightJourneyDriver;
+  executionObservers?: readonly PlaywrightExecutionObserver[];
   browser?: Browser;
   headless?: boolean;
   launchOptions?: LaunchOptions;
   contextOptions?: BrowserContextOptions;
   browserType?: Pick<BrowserType, "launch">;
   assertionTimeoutMs?: number;
-  artifacts?: PlaywrightArtifactOptions;
 };
 
 export type LocatorRoot = Page | Locator;
@@ -150,221 +102,223 @@ type LocatorResolutionOptions = {
   context?: PlaywrightDriverExecutionContext;
 };
 
-type AdapterExecutionState = {
-  browser: Browser;
-  ownsBrowser: boolean;
-  context: PlaywrightDriverExecutionContext;
-  browserContexts: BrowserContextRecord[];
-};
-
 type BrowserContextRecord = {
   id: string;
   label: string;
   browserContext: BrowserContext;
-  pages: Set<Page>;
-  traceStarted: boolean;
-};
-
-type ResolvedArtifactOptions = {
-  mode: PlaywrightArtifactMode;
-  sink?: PlaywrightArtifactSink;
-  traces: boolean;
-  screenshots: boolean;
-  videos: boolean;
 };
 
 const roleOptionFeatureNames = new Set(["expanded"]);
 const defaultAssertionTimeoutMs = 30_000;
 
 export function playwrightAdapter(options: PlaywrightAdapterOptions): JourneyAdapter {
-  const executions = new Map<string, AdapterExecutionState>();
-  const artifactOptions = resolveArtifactOptions(options.artifacts);
-
-  if (artifactOptions.mode !== "off" && !artifactOptions.sink) {
-    throw new Error("Playwright artifacts require an artifact sink");
-  }
-
   return {
     name: "@openuji/journey-adapter-playwright",
     version: "0.1.0",
 
-    async setupExecution(context) {
-      const browser = options.browser ?? await launchBrowser(options);
-      const state: AdapterExecutionState = {
-        browser,
-        ownsBrowser: !options.browser,
-        context: undefined as unknown as PlaywrightDriverExecutionContext,
-        browserContexts: []
-      };
-      const driverContext: PlaywrightDriverExecutionContext = {
-        ...context,
-        browser,
-        createBrowserContext(input) {
-          return createTrackedBrowserContext(state, context, options, artifactOptions, input);
-        }
-      };
-      state.context = driverContext;
-
-      executions.set(context.executionId, {
-        browser,
-        ownsBrowser: state.ownsBrowser,
-        context: driverContext,
-        browserContexts: state.browserContexts
-      });
-
-      context.evidence.emit({
-        type: state.ownsBrowser ? "playwright.browser.launched" : "playwright.browser.attached",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        ok: true,
-        data: {
-          headless: state.ownsBrowser ? options.headless ?? true : null,
-          owned: state.ownsBrowser,
-          driver: componentData(options.driver)
-        }
-      });
-
-      await options.driver.setupExecution(driverContext);
-    },
-
-    async openEntry(operation, context) {
-      const state = requireExecutionState(executions, context.executionId);
-      await options.driver.openEntry(operation, state.context);
-    },
-
-    async assertState(operation, context) {
-      const state = requireExecutionState(executions, context.executionId);
-      const page = await options.driver.pageForOperation(operation, state.context);
-      const locator = await toPlaywrightObservationLocator(page, operation.target.bindings, {
-        operation,
-        context: state.context,
-        driver: options.driver
-      });
-
-      await assertPlaywrightLocator(locator, operation.target.expectedMatchCount, {
-        timeoutMs: options.assertionTimeoutMs ?? defaultAssertionTimeoutMs
-      });
-
-      context.evidence.emit({
-        type: "playwright.assertion.completed",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        operationId: operation.id,
-        operationKind: operation.kind,
-        ok: true,
-        ujg: {
-          documentId: operation.documentId,
-          stateId: operation.state.id,
-          surfaceId: operation.surface.id,
-          observationBindingIds: operation.target.bindings.map((binding) => binding.id),
-          locatorIds: unique(
-            operation.target.bindings.flatMap((binding) => collectLocatorIds(binding.locators))
-          )
-        },
-        data: {
-          expectedMatchCount: operation.target.expectedMatchCount
-        }
-      });
-
-      await notifyPlaywrightObservers({
-        context: state.context,
-        expectedMatchCount: operation.target.expectedMatchCount,
-        locator,
-        operation,
-        page,
-        stage: "state-asserted"
-      });
-    },
-
-    async performTransition(operation, decision, context) {
-      const state = requireExecutionState(executions, context.executionId);
-      const page = await options.driver.pageForOperation(operation, state.context);
-      const locator = await toPlaywrightObservationLocator(page, operation.activation.bindings, {
-        operation,
-        context: state.context,
-        driver: options.driver
-      });
-
-      await assertPlaywrightLocator(locator, 1, {
-        timeoutMs: options.assertionTimeoutMs ?? defaultAssertionTimeoutMs
-      });
-
-      await notifyPlaywrightObservers({
-        context: state.context,
-        decision,
-        expectedMatchCount: 1,
-        locator,
-        operation,
-        page,
-        stage: "transition-ready"
-      });
-
-      const text = decision.command === "keyboard-text-entry"
-        ? await options.driver.transitionValue({ operation, context: state.context })
-        : undefined;
-
-      await activatePlaywrightLocator(locator, decision.command, text);
-      await options.driver.afterTransition(operation, decision, state.context);
-
-      context.evidence.emit({
-        type: "playwright.transition.completed",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        operationId: operation.id,
-        operationKind: operation.kind,
-        ok: true,
-        ujg: {
-          documentId: operation.documentId,
-          transitionId: operation.transition.id,
-          surfaceId: operation.surface.id,
-          observationBindingIds: operation.activation.bindings.map((binding) => binding.id),
-          locatorIds: unique(
-            operation.activation.bindings.flatMap((binding) => collectLocatorIds(binding.locators))
-          )
-        },
-        data: {
-          command: decision.command,
-          inputModalityProfileId: decision.inputModalityProfile.id,
-          modalityId: decision.modality.id
-        }
-      });
-    },
-
-    async recordControlFlow(operation, context) {
-      const state = requireExecutionState(executions, context.executionId);
-      await options.driver.recordControlFlow(operation, state.context);
-      await notifyPlaywrightObservers({
-        context: state.context,
-        operation,
-        stage: "control-flow-recorded"
-      });
-    },
-
-    async teardownExecution(context) {
-      const state = executions.get(context.executionId);
-      if (!state) return;
-
-      const retainArtifacts = shouldRetainArtifacts(context, artifactOptions.mode);
-
-      try {
-        await captureScreenshotsAndStopTraces(state, context, artifactOptions, retainArtifacts);
-        await options.driver.teardownExecution(state.context);
-      } finally {
-        await closeTrackedBrowserContexts(state, context);
-        await attachVideos(state, context, artifactOptions, retainArtifacts);
-        if (state.ownsBrowser) {
-          await state.browser.close();
-        }
-        executions.delete(context.executionId);
-        context.evidence.emit({
-          type: state.ownsBrowser ? "playwright.browser.closed" : "playwright.browser.released",
-          executionId: context.executionId,
-          profileId: context.profile.id,
-          ok: true
-        });
-      }
+    createExecution(input) {
+      return new PlaywrightAdapterExecution(input, options);
     }
   };
+}
+
+class PlaywrightAdapterExecution implements JourneyAdapterExecution {
+  private browser?: Browser;
+  private ownsBrowser = false;
+  private driverContext?: PlaywrightDriverExecutionContext;
+  private driverExecution?: PlaywrightJourneyDriverExecution;
+  private readonly browserContexts: BrowserContextRecord[] = [];
+  private readonly context: JourneyExecutionContext;
+  private readonly execution: JourneyExecutionDescriptor;
+  private readonly events: PlaywrightEvidence;
+  private readonly evidence: ExecutionEvidenceSink;
+  private readonly observers: PlaywrightObserverDispatcher;
+  private lifecycle: "created" | "starting" | "started" | "closing" | "closed" = "created";
+
+  constructor(
+    input: JourneyAdapterExecutionInput,
+    private readonly options: PlaywrightAdapterOptions
+  ) {
+    this.context = input.context;
+    this.execution = executionDescriptor(input.context);
+    this.evidence = input.evidence;
+    this.events = new PlaywrightEvidence(input.context, input.evidence);
+    this.observers = new PlaywrightObserverDispatcher(
+      options.executionObservers ?? [],
+      this.execution,
+      this.events
+    );
+  }
+
+  async start(): Promise<void> {
+    if (this.lifecycle !== "created") {
+      throw new Error(`Playwright adapter execution ${this.context.executionId} cannot start from ${this.lifecycle}`);
+    }
+
+    this.lifecycle = "starting";
+    await this.observers.executionStarted();
+
+    this.browser = this.options.browser ?? await launchBrowser(this.options);
+    this.ownsBrowser = this.options.browser === undefined;
+    this.driverContext = {
+      ...this.context,
+      browser: this.browser,
+      createBrowserContext: (input) => this.createBrowserContext(input)
+    };
+    this.driverExecution = this.options.driver.createExecution({
+      context: this.driverContext,
+      evidence: this.evidence
+    });
+    this.events.browserStarted({
+      owned: this.ownsBrowser,
+      headless: this.ownsBrowser ? this.options.headless ?? true : null,
+      driver: this.options.driver
+    });
+
+    await this.driverExecution.start();
+    this.lifecycle = "started";
+  }
+
+  async openEntry(operation: JourneyPlanOperation): Promise<void> {
+    await this.requireStartedDriver().openEntry(operation);
+  }
+
+  async assertState(operation: StatePlanOperation): Promise<void> {
+    const driver = this.requireStartedDriver();
+    const context = this.requireDriverContext();
+    const page = await driver.pageForOperation(operation);
+    const locator = await toPlaywrightObservationLocator(page, operation.target.bindings, {
+      operation,
+      context,
+      driver: this.options.driver
+    });
+
+    await assertPlaywrightLocator(locator, operation.target.expectedMatchCount, {
+      timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs
+    });
+
+    this.events.assertionCompleted(operation);
+
+    await this.observers.observe({
+      execution: this.execution,
+      expectedMatchCount: operation.target.expectedMatchCount,
+      locator,
+      operation,
+      page,
+      stage: "state-asserted"
+    });
+  }
+
+  async performTransition(
+    operation: TransitionPlanOperation,
+    decision: InputModalityDecision
+  ): Promise<void> {
+    const driver = this.requireStartedDriver();
+    const context = this.requireDriverContext();
+    const page = await driver.pageForOperation(operation);
+    const locator = await toPlaywrightObservationLocator(page, operation.activation.bindings, {
+      operation,
+      context,
+      driver: this.options.driver
+    });
+
+    await assertPlaywrightLocator(locator, 1, {
+      timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs
+    });
+
+    await this.observers.observe({
+      execution: this.execution,
+      decision,
+      expectedMatchCount: 1,
+      locator,
+      operation,
+      page,
+      stage: "transition-ready"
+    });
+
+    const text = decision.command === "keyboard-text-entry"
+      ? await driver.transitionValue(operation)
+      : undefined;
+
+    await activatePlaywrightLocator(locator, decision.command, text);
+    await driver.afterTransition(operation, decision);
+
+    this.events.transitionCompleted(operation, decision);
+  }
+
+  async recordControlFlow(operation: ControlFlowPlanOperation): Promise<void> {
+    const driver = this.requireStartedDriver();
+    await driver.recordControlFlow(operation);
+    await this.observers.observe({
+      execution: this.execution,
+      operation,
+      stage: "control-flow-recorded"
+    });
+  }
+
+  async close(input: JourneyAdapterCloseInput): Promise<void> {
+    if (this.lifecycle === "closed" || this.lifecycle === "closing") {
+      return;
+    }
+
+    this.lifecycle = "closing";
+
+    try {
+      await this.driverExecution?.close({ executionFailed: input.executionFailed });
+    } finally {
+      await closeTrackedBrowserContexts(this.browserContexts, this.events);
+      if (this.ownsBrowser && this.browser) {
+        await this.browser.close();
+      }
+      if (this.browser) {
+        this.events.browserStopped({ owned: this.ownsBrowser });
+      }
+      this.lifecycle = "closed";
+    }
+  }
+
+  private async createBrowserContext(
+    input: PlaywrightCreateBrowserContextInput = {}
+  ): Promise<BrowserContext> {
+    const browser = this.requireBrowser();
+    const id = `context-${String(this.browserContexts.length + 1).padStart(2, "0")}`;
+    const label = input.label ?? id;
+    const browserContext = await browser.newContext(this.options.contextOptions);
+    const record: BrowserContextRecord = {
+      id,
+      label,
+      browserContext
+    };
+
+    this.browserContexts.push(record);
+    this.events.browserContextCreated(record, input);
+
+    return browserContext;
+  }
+
+  private requireStartedDriver(): PlaywrightJourneyDriverExecution {
+    if (this.lifecycle !== "started" || !this.driverExecution) {
+      throw new Error(`Playwright adapter execution ${this.context.executionId} is not started`);
+    }
+
+    return this.driverExecution;
+  }
+
+  private requireDriverContext(): PlaywrightDriverExecutionContext {
+    if (!this.driverContext) {
+      throw new Error(`Playwright adapter execution ${this.context.executionId} has no driver context`);
+    }
+
+    return this.driverContext;
+  }
+
+  private requireBrowser(): Browser {
+    if (!this.browser) {
+      throw new Error(`Playwright adapter execution ${this.context.executionId} has no browser`);
+    }
+
+    return this.browser;
+  }
 }
 
 async function launchBrowser(options: PlaywrightAdapterOptions): Promise<Browser> {
@@ -375,292 +329,19 @@ async function launchBrowser(options: PlaywrightAdapterOptions): Promise<Browser
   });
 }
 
-async function createTrackedBrowserContext(
-  state: AdapterExecutionState,
-  context: AdapterExecutionContext,
-  options: PlaywrightAdapterOptions,
-  artifactOptions: ResolvedArtifactOptions,
-  input: PlaywrightCreateBrowserContextInput = {}
-): Promise<BrowserContext> {
-  const id = `context-${String(state.browserContexts.length + 1).padStart(2, "0")}`;
-  const label = input.label ?? id;
-  const browserContextOptions = await browserContextOptionsForArtifacts(options, artifactOptions);
-  const browserContext = await state.browser.newContext(browserContextOptions);
-  const record: BrowserContextRecord = {
-    id,
-    label,
-    browserContext,
-    pages: new Set(browserContext.pages()),
-    traceStarted: false
-  };
-
-  browserContext.on("page", (page) => {
-    record.pages.add(page);
-  });
-
-  state.browserContexts.push(record);
-  context.evidence.emit({
-    type: "playwright.context.created",
-    executionId: context.executionId,
-    profileId: context.profile.id,
-    ok: true,
-    data: {
-      id,
-      label,
-      operationId: input.operation?.id ?? null,
-      ...(input.data ? { input: input.data } : {})
-    }
-  });
-
-  if (artifactOptions.mode !== "off" && artifactOptions.traces) {
-    await browserContext.tracing.start({
-      screenshots: true,
-      snapshots: true,
-      sources: true
-    });
-    record.traceStarted = true;
-    context.evidence.emit({
-      type: "playwright.trace.started",
-      executionId: context.executionId,
-      profileId: context.profile.id,
-      ok: true,
-      data: { contextId: id, label }
-    });
-  }
-
-  return browserContext;
-}
-
-async function browserContextOptionsForArtifacts(
-  options: PlaywrightAdapterOptions,
-  artifactOptions: ResolvedArtifactOptions
-): Promise<BrowserContextOptions> {
-  const contextOptions: BrowserContextOptions = {
-    ...options.contextOptions
-  };
-  if (
-    artifactOptions.mode !== "off" &&
-    artifactOptions.videos &&
-    artifactOptions.sink &&
-    !contextOptions.recordVideo
-  ) {
-    const videoDir = artifactOptions.sink.outputPath("videos");
-    await mkdir(videoDir, { recursive: true });
-    contextOptions.recordVideo = { dir: videoDir };
-  }
-
-  return contextOptions;
-}
-
-async function captureScreenshotsAndStopTraces(
-  state: AdapterExecutionState,
-  context: AdapterExecutionContext,
-  artifactOptions: ResolvedArtifactOptions,
-  retainArtifacts: boolean
-): Promise<void> {
-  for (const browserContext of state.browserContexts) {
-    if (retainArtifacts && artifactOptions.screenshots) {
-      await captureScreenshots(browserContext, context, artifactOptions);
-    }
-
-    if (browserContext.traceStarted) {
-      await stopTrace(browserContext, context, artifactOptions, retainArtifacts);
-    }
-  }
-}
-
-async function captureScreenshots(
-  browserContext: BrowserContextRecord,
-  context: AdapterExecutionContext,
-  artifactOptions: ResolvedArtifactOptions
-): Promise<void> {
-  const sink = artifactOptions.sink;
-  if (!sink) return;
-
-  const pages = trackedPages(browserContext);
-  for (const [index, page] of pages.entries()) {
-    const path = sink.outputPath(
-      "screenshots",
-      `${safePathSegment(context.executionId)}-${safePathSegment(browserContext.label)}-page-${index + 1}.png`
-    );
-    try {
-      await ensureParentDir(path);
-      await page.screenshot({ path, fullPage: true });
-      await sink.attach(
-        `${context.executionId}-${browserContext.label}-page-${index + 1}.png`,
-        { path, contentType: "image/png" }
-      );
-      context.evidence.emit({
-        type: "playwright.screenshot.attached",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        ok: true,
-        data: { contextId: browserContext.id, label: browserContext.label, path }
-      });
-    } catch (error) {
-      emitArtifactFailure(context, "playwright.screenshot.failed", error, {
-        contextId: browserContext.id,
-        label: browserContext.label,
-        path
-      });
-    }
-  }
-}
-
-async function stopTrace(
-  browserContext: BrowserContextRecord,
-  context: AdapterExecutionContext,
-  artifactOptions: ResolvedArtifactOptions,
-  retainArtifacts: boolean
-): Promise<void> {
-  const sink = artifactOptions.sink;
-  const path = retainArtifacts && sink
-    ? sink.outputPath(
-        "traces",
-        `${safePathSegment(context.executionId)}-${safePathSegment(browserContext.label)}.zip`
-      )
-    : undefined;
-
-  try {
-    if (path) {
-      await ensureParentDir(path);
-      await browserContext.browserContext.tracing.stop({ path });
-      await sink?.attach(
-        `${context.executionId}-${browserContext.label}-trace.zip`,
-        { path, contentType: "application/zip" }
-      );
-      context.evidence.emit({
-        type: "playwright.trace.attached",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        ok: true,
-        data: { contextId: browserContext.id, label: browserContext.label, path }
-      });
-      return;
-    }
-
-    await browserContext.browserContext.tracing.stop();
-  } catch (error) {
-    emitArtifactFailure(context, "playwright.trace.failed", error, {
-      contextId: browserContext.id,
-      label: browserContext.label,
-      path: path ?? null
-    });
-  } finally {
-    browserContext.traceStarted = false;
-  }
-}
-
 async function closeTrackedBrowserContexts(
-  state: AdapterExecutionState,
-  context: AdapterExecutionContext
+  browserContexts: readonly BrowserContextRecord[],
+  evidence: PlaywrightEvidence
 ): Promise<void> {
   await Promise.all(
-    state.browserContexts.map(async (record) => {
+    browserContexts.map(async (record) => {
       try {
         await record.browserContext.close();
       } catch (error) {
-        emitArtifactFailure(context, "playwright.context.close.failed", error, {
-          contextId: record.id,
-          label: record.label
-        });
+        evidence.browserContextCloseFailed(record, error);
       }
     })
   );
-}
-
-async function attachVideos(
-  state: AdapterExecutionState,
-  context: AdapterExecutionContext,
-  artifactOptions: ResolvedArtifactOptions,
-  retainArtifacts: boolean
-): Promise<void> {
-  if (!artifactOptions.videos) return;
-
-  for (const browserContext of state.browserContexts) {
-    const pages = trackedPages(browserContext);
-    for (const [index, page] of pages.entries()) {
-      const video = page.video();
-      if (!video) continue;
-
-      try {
-        if (!retainArtifacts) {
-          await video.delete();
-          continue;
-        }
-
-        const path = await video.path();
-        await artifactOptions.sink?.attach(
-          `${context.executionId}-${browserContext.label}-page-${index + 1}.webm`,
-          { path, contentType: "video/webm" }
-        );
-        context.evidence.emit({
-          type: "playwright.video.attached",
-          executionId: context.executionId,
-          profileId: context.profile.id,
-          ok: true,
-          data: { contextId: browserContext.id, label: browserContext.label, path }
-        });
-      } catch (error) {
-        emitArtifactFailure(context, "playwright.video.failed", error, {
-          contextId: browserContext.id,
-          label: browserContext.label
-        });
-      }
-    }
-  }
-}
-
-async function notifyPlaywrightObservers(
-  observation: PlaywrightOperationObservation
-): Promise<void> {
-  const observers = observation.context.observers.filter(isPlaywrightJourneyObserver);
-
-  for (const observer of observers) {
-    try {
-      observation.context.evidence.emit({
-        type: "playwright.observer.operation.started",
-        executionId: observation.context.executionId,
-        profileId: observation.context.profile.id,
-        operationId: observation.operation.id,
-        operationKind: observation.operation.kind,
-        ok: true,
-        data: {
-          observer: componentData(observer),
-          stage: observation.stage
-        }
-      });
-      await observer.observePlaywrightOperation(observation);
-      observation.context.evidence.emit({
-        type: "playwright.observer.operation.completed",
-        executionId: observation.context.executionId,
-        profileId: observation.context.profile.id,
-        operationId: observation.operation.id,
-        operationKind: observation.operation.kind,
-        ok: true,
-        data: {
-          observer: componentData(observer),
-          stage: observation.stage
-        }
-      });
-    } catch (error) {
-      const evidenceError = errorToEvidence(error);
-      observation.context.evidence.emit({
-        type: "playwright.observer.operation.failed",
-        executionId: observation.context.executionId,
-        profileId: observation.context.profile.id,
-        operationId: observation.operation.id,
-        operationKind: observation.operation.kind,
-        ok: false,
-        data: {
-          observer: componentData(observer),
-          stage: observation.stage
-        },
-        error: evidenceError
-      });
-      throw error;
-    }
-  }
 }
 
 export async function toPlaywrightObservationLocator(
@@ -822,92 +503,6 @@ function accessibleNamePattern(value: string): RegExp {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function requireExecutionState(
-  executions: Map<string, AdapterExecutionState>,
-  executionId: string
-): AdapterExecutionState {
-  const state = executions.get(executionId);
-  if (!state) {
-    throw new Error(`No Playwright execution state for ${executionId}`);
-  }
-
-  return state;
-}
-
-function collectLocatorIds(locators: ResolvedAccessibleLocator[]): string[] {
-  return locators.flatMap((locator) => [locator.id, ...collectLocatorIds(locator.contexts)]);
-}
-
-function resolveArtifactOptions(
-  options: PlaywrightArtifactOptions | undefined
-): ResolvedArtifactOptions {
-  const mode = options?.mode ?? "off";
-  return {
-    mode,
-    sink: options?.sink,
-    traces: options?.traces ?? true,
-    screenshots: options?.screenshots ?? true,
-    videos: options?.videos ?? false
-  };
-}
-
-function shouldRetainArtifacts(
-  context: AdapterExecutionContext,
-  mode: PlaywrightArtifactMode
-): boolean {
-  if (mode === "always") return true;
-  if (mode === "off") return false;
-
-  return context.evidence.snapshot().some((event) =>
-    event.executionId === context.executionId &&
-    event.type === "profile.execution.failed" &&
-    event.ok === false
-  );
-}
-
-function trackedPages(record: BrowserContextRecord): Page[] {
-  return uniqueObjects([...record.pages, ...record.browserContext.pages()]);
-}
-
-function uniqueObjects<T>(values: T[]): T[] {
-  return [...new Set(values)];
-}
-
-async function ensureParentDir(path: string): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-}
-
-function safePathSegment(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "artifact";
-}
-
-function emitArtifactFailure(
-  context: AdapterExecutionContext,
-  type: string,
-  error: unknown,
-  data: JsonObject
-): void {
-  context.evidence.emit({
-    type,
-    executionId: context.executionId,
-    profileId: context.profile.id,
-    ok: false,
-    error: errorToEvidence(error),
-    data
-  });
-}
-
-function unique(values: string[]): string[] {
-  return [...new Set(values)];
-}
-
-function componentData(component: { name: string; version?: string }): JsonObject {
-  return {
-    name: component.name,
-    ...(component.version ? { version: component.version } : {})
-  };
 }
 
 function assertNever(value: never): never {

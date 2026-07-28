@@ -1,15 +1,21 @@
 import type { BrowserContext, Page } from "playwright";
 
 import type {
+  PlaywrightDriverCloseInput,
+  PlaywrightDriverExecutionInput,
   PlaywrightDriverExecutionContext,
-  PlaywrightJourneyDriver
+  PlaywrightJourneyDriver,
+  PlaywrightJourneyDriverExecution
 } from "@openuji/journey-adapter-playwright";
 import type {
   ControlFlowPlanOperation,
   InputModalityDecision,
+  JourneyPlan,
   JourneyPlanOperation,
+  JourneyProfile,
   TransitionPlanOperation
 } from "@openuji/journey-runner";
+import { NextcloudEvidence } from "./evidence/nextcloud-evidence.js";
 
 export type Awaitable<T> = T | Promise<T>;
 
@@ -24,7 +30,7 @@ export type NextcloudUserConfig = {
 };
 
 export type NextcloudActorSession = {
-  userId: string;
+  actorId: string;
   touchpointId: string;
   user: NextcloudUserConfig;
   touchpoint: NextcloudTouchpointConfig;
@@ -32,7 +38,12 @@ export type NextcloudActorSession = {
   page: Page;
 };
 
-export type NextcloudDriverContext = PlaywrightDriverExecutionContext & {
+export type NextcloudDriverContext = {
+  readonly runId: string;
+  readonly executionId: string;
+  readonly profileId: string;
+  readonly profile: JourneyProfile;
+  readonly plan: JourneyPlan;
   getSession(operation: JourneyPlanOperation): Promise<NextcloudActorSession>;
 };
 
@@ -74,197 +85,158 @@ export type NextcloudDriverOptions = {
   awaitApplicationSettled?: (session: NextcloudActorSession) => Awaitable<void>;
 };
 
-type ExecutionState = {
-  sessions: Map<string, NextcloudActorSession>;
-};
-
 export function nextcloudDriver(options: NextcloudDriverOptions): PlaywrightJourneyDriver {
   validateDriverOptions(options);
 
-  const executions = new Map<string, ExecutionState>();
-
-  const driver: PlaywrightJourneyDriver = {
+  return {
     name: "@openuji/journey-driver-nextcloud",
     version: "0.1.0",
 
-    async setupExecution(context) {
-      const driverContext = contextForExecution(context);
-      executions.set(context.executionId, { sessions: new Map() });
-      context.evidence.emit({
-        type: "nextcloud.execution.setup.started",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        ok: true
+    createExecution(input) {
+      return new NextcloudExecution(input, options);
+    }
+  };
+}
+
+class NextcloudExecution implements PlaywrightJourneyDriverExecution {
+  private readonly sessions = new Map<string, NextcloudActorSession>();
+  private readonly driverContext: PlaywrightDriverExecutionContext;
+  private readonly context: NextcloudDriverContext;
+  private readonly events: NextcloudEvidence;
+  private started = false;
+  private closed = false;
+
+  constructor(
+    input: PlaywrightDriverExecutionInput,
+    private readonly options: NextcloudDriverOptions
+  ) {
+    this.driverContext = input.context;
+    this.context = {
+      runId: input.context.runId,
+      executionId: input.context.executionId,
+      profileId: input.context.profile.id,
+      profile: input.context.profile,
+      plan: input.context.plan,
+      getSession: (operation) => this.getSession(operation)
+    };
+    this.events = new NextcloudEvidence(input.context, input.evidence);
+  }
+
+  async start(): Promise<void> {
+    this.assertOpen();
+    if (this.started) {
+      throw new Error(`Nextcloud execution ${this.context.executionId} has already started`);
+    }
+
+    this.events.executionSetupStarted();
+    await this.options.setupExecution?.(this.context);
+    this.started = true;
+    this.events.executionSetupCompleted();
+  }
+
+  async openEntry(operation: JourneyPlanOperation): Promise<void> {
+    this.assertOpen();
+    if (!operation.entryBinding) {
+      throw new Error(`Operation ${operation.id} has no entry binding to open`);
+    }
+
+    const handler = this.options.entries[operation.entryBinding.value];
+    if (!handler) {
+      throw new Error(`No Nextcloud entry handler for ${operation.entryBinding.value}`);
+    }
+
+    const session = await this.getSession(operation);
+    await handler({ session, operation, context: this.context });
+    await (this.options.awaitApplicationSettled ?? awaitNextcloudApplicationSettled)(session);
+
+    this.events.entryOpened(operation, session);
+  }
+
+  async pageForOperation(operation: JourneyPlanOperation): Promise<Page> {
+    return (await this.getSession(operation)).page;
+  }
+
+  async transitionValue(operation: TransitionPlanOperation): Promise<string | undefined> {
+    const session = await this.getSession(operation);
+    const provider = this.options.transitionValues?.[operation.transition.id];
+    if (typeof provider === "string") return provider;
+    if (typeof provider === "function") {
+      return provider({
+        operation,
+        context: this.context,
+        session
       });
-      await options.setupExecution?.(driverContext);
-      context.evidence.emit({
-        type: "nextcloud.execution.setup.completed",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        ok: true
-      });
-    },
+    }
 
-    async openEntry(operation, context) {
-      if (!operation.entryBinding) {
-        throw new Error(`Operation ${operation.id} has no entry binding to open`);
-      }
+    return undefined;
+  }
 
-      const driverContext = contextForExecution(context);
-      const handler = options.entries[operation.entryBinding.value];
-      if (!handler) {
-        throw new Error(`No Nextcloud entry handler for ${operation.entryBinding.value}`);
-      }
+  async afterTransition(
+    operation: TransitionPlanOperation,
+    decision: InputModalityDecision
+  ): Promise<void> {
+    const session = await this.getSession(operation);
 
-      const session = await getSession(operation, driverContext);
-      await handler({ session, operation, context: driverContext });
-      await (options.awaitApplicationSettled ?? awaitNextcloudApplicationSettled)(session);
-
-      context.evidence.emit({
-        type: "nextcloud.entry.opened",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        operationId: operation.id,
-        operationKind: operation.kind,
-        ok: true,
-        ujg: {
-          documentId: operation.documentId,
-          userId: operation.userId,
-          touchpointId: operation.touchpointId,
-          entryId: operation.entry.id,
-          entryBindingId: operation.entryBinding.id
-        },
-        data: {
-          entryBindingValue: operation.entryBinding.value,
-          baseURL: String(session.touchpoint.baseURL)
-        }
-      });
-    },
-
-    pageForOperation(operation, context) {
-      return getSession(operation, contextForExecution(context)).then((session) => session.page);
-    },
-
-    async transitionValue(input) {
-      const driverContext = contextForExecution(input.context);
-      const session = await getSession(input.operation, driverContext);
-      const provider = options.transitionValues?.[input.operation.transition.id];
-      if (typeof provider === "string") return provider;
-      if (typeof provider === "function") {
-        return provider({
-          operation: input.operation,
-          context: driverContext,
+    for (const effect of operation.effects) {
+      const handler = this.options.effectHandlers?.[effect.id];
+      if (handler) {
+        await handler({
+          operation,
+          effectId: effect.id,
+          decision,
+          context: this.context,
           session
         });
       }
-
-      return undefined;
-    },
-
-    async afterTransition(operation, decision, context) {
-      const driverContext = contextForExecution(context);
-      const session = await getSession(operation, driverContext);
-
-      for (const effect of operation.effects) {
-        const handler = options.effectHandlers?.[effect.id];
-        if (handler) {
-          await handler({
-            operation,
-            effectId: effect.id,
-            decision,
-            context: driverContext,
-            session
-          });
-        }
-      }
-
-      await (options.awaitApplicationSettled ?? awaitNextcloudApplicationSettled)(session);
-    },
-
-    async recordControlFlow(operation, context) {
-      context.evidence.emit({
-        type: "nextcloud.control-flow.recorded",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        operationId: operation.id,
-        operationKind: operation.kind,
-        ok: true,
-        ujg: {
-          documentId: operation.documentId,
-          transitionId: operation.transition.id,
-          userId: operation.userId,
-          touchpointId: operation.touchpointId,
-          entryId: operation.toEntry?.id
-        },
-        data: {
-          fromExitRef: operation.transition.fromExitRef ?? null,
-          toEntryRef: operation.transition.toEntryRef ?? null
-        }
-      });
-    },
-
-    async teardownExecution(context) {
-      const driverContext = contextForExecution(context);
-      const state = executions.get(context.executionId);
-
-      try {
-        await options.teardownExecution?.(driverContext);
-      } finally {
-        if (state) {
-          await Promise.all([...state.sessions.values()].map((session) => session.browserContext.close()));
-          executions.delete(context.executionId);
-        }
-      }
-
-      context.evidence.emit({
-        type: "nextcloud.execution.teardown.completed",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        ok: true
-      });
     }
-  };
 
-  function contextForExecution(context: PlaywrightDriverExecutionContext): NextcloudDriverContext {
-    return {
-      ...context,
-      getSession(operation) {
-        return getSession(operation, contextForExecution(context));
-      }
-    };
+    await (this.options.awaitApplicationSettled ?? awaitNextcloudApplicationSettled)(session);
   }
 
-  async function getSession(
-    operation: JourneyPlanOperation,
-    context: NextcloudDriverContext
-  ): Promise<NextcloudActorSession> {
-    const state = executions.get(context.executionId);
-    if (!state) {
-      throw new Error(`No Nextcloud execution state for ${context.executionId}`);
+  recordControlFlow(operation: ControlFlowPlanOperation): void {
+    this.assertOpen();
+    this.events.controlFlowRecorded(operation);
+  }
+
+  async close(_input: PlaywrightDriverCloseInput): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
+
+    try {
+      await this.options.teardownExecution?.(this.context);
+    } finally {
+      await Promise.all([...this.sessions.values()].map((session) => session.browserContext.close()));
+      this.sessions.clear();
     }
 
-    const sessionKey = `${operation.userId}\u0000${operation.touchpointId}`;
-    const existing = state.sessions.get(sessionKey);
+    this.events.executionTeardownCompleted();
+  }
+
+  private async getSession(operation: JourneyPlanOperation): Promise<NextcloudActorSession> {
+    this.assertOpen();
+
+    const sessionKey = `${operation.actorId}\u0000${operation.touchpointId}`;
+    const existing = this.sessions.get(sessionKey);
     if (existing) return existing;
 
-    const user = options.users[operation.userId];
-    if (!user) throw new Error(`No Nextcloud user config for ${operation.userId}`);
-    const touchpoint = options.touchpoints[operation.touchpointId];
+    const user = this.options.users[operation.actorId];
+    if (!user) throw new Error(`No Nextcloud user config for ${operation.actorId}`);
+    const touchpoint = this.options.touchpoints[operation.touchpointId];
     if (!touchpoint) {
       throw new Error(`No Nextcloud touchpoint config for ${operation.touchpointId}`);
     }
 
-    const browserContext = await context.createBrowserContext({
+    const browserContext = await this.driverContext.createBrowserContext({
       operation,
-      label: `${operation.userId}-${operation.touchpointId}`,
+      label: `${operation.actorId}-${operation.touchpointId}`,
       data: {
-        userId: operation.userId,
+        actorId: operation.actorId,
         touchpointId: operation.touchpointId
       }
     });
     const page = await browserContext.newPage();
     const session: NextcloudActorSession = {
-      userId: operation.userId,
+      actorId: operation.actorId,
       touchpointId: operation.touchpointId,
       user,
       touchpoint,
@@ -272,29 +244,19 @@ export function nextcloudDriver(options: NextcloudDriverOptions): PlaywrightJour
       page
     };
 
-    await (options.login ?? logInToNextcloud)(session);
-    state.sessions.set(sessionKey, session);
+    await (this.options.login ?? logInToNextcloud)(session);
+    this.sessions.set(sessionKey, session);
 
-    context.evidence.emit({
-      type: "nextcloud.actor.session.created",
-      executionId: context.executionId,
-      profileId: context.profile.id,
-      ok: true,
-      ujg: {
-        documentId: operation.documentId,
-        userId: operation.userId,
-        touchpointId: operation.touchpointId
-      },
-      data: {
-        username: user.username,
-        baseURL: String(touchpoint.baseURL)
-      }
-    });
+    this.events.actorSessionCreated(operation, session);
 
     return session;
   }
 
-  return driver;
+  private assertOpen(): void {
+    if (this.closed) {
+      throw new Error(`Nextcloud execution ${this.context.executionId} is closed`);
+    }
+  }
 }
 
 export function openNextcloudRoute(route: string): NextcloudEntryHandler {
