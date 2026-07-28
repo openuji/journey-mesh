@@ -4,6 +4,7 @@ import { readFile, readdir } from "node:fs/promises";
 import {
   activatePlaywrightLocator,
   playwrightAdapter,
+  type PlaywrightExecutionObserver,
   type PlaywrightOperationObservation,
   toPlaywrightObservationLocator,
   type PlaywrightCreateBrowserContextInput,
@@ -54,6 +55,7 @@ import {
   type ExecutionResult,
   type InputModalityDecision,
   type JourneyAdapter,
+  type JourneyExecutionDescriptor,
   type JourneyExecutionContext,
   type JourneyObserver,
   type JourneyPlan,
@@ -421,6 +423,86 @@ const tests: TestCase[] = [
         runnerSource.source.replace(/\s+/g, " "),
         /JourneyObserverRunCompletedInput = \{[^}]*evidence/
       );
+
+      for (const sourceFile of packageSources) {
+        for (const forbiddenPattern of [
+          "context.observers",
+          "observers: readonly JourneyObserver"
+        ]) {
+          assert.equal(
+            sourceFile.source.includes(forbiddenPattern),
+            false,
+            `execution contexts must not carry observer collections: ${forbiddenPattern} in ${sourceFile.path}`
+          );
+        }
+      }
+
+      for (const sourceFile of playwrightSources) {
+        for (const forbiddenPattern of [
+          "isPlaywrightJourneyObserver",
+          "filter(isPlaywright"
+        ]) {
+          assert.equal(
+            sourceFile.source.includes(forbiddenPattern),
+            false,
+            `Playwright observers must be explicitly configured: ${forbiddenPattern} in ${sourceFile.path}`
+          );
+        }
+      }
+
+      const playwrightAndAxeSources = packageSources.filter(
+        (sourceFile) =>
+          sourceFile.path.includes("/packages/journey-adapter-playwright/src/") ||
+          sourceFile.path.includes("/packages/journey-observer-axe/src/")
+      );
+      for (const sourceFile of playwrightAndAxeSources) {
+        assert.equal(
+          sourceFile.source.includes("JourneyObserver &"),
+          false,
+          `Playwright-specific observers must not inherit JourneyObserver: ${sourceFile.path}`
+        );
+      }
+
+      for (const sourceFile of nextcloudSources) {
+        for (const forbiddenPattern of [
+          "JourneyObserver",
+          "PlaywrightExecutionObserver"
+        ]) {
+          assert.equal(
+            sourceFile.source.includes(forbiddenPattern),
+            false,
+            `Nextcloud driver must not access observer roles: ${forbiddenPattern} in ${sourceFile.path}`
+          );
+        }
+      }
+
+      const observerInputSources = playwrightAndAxeSources.filter(
+        (sourceFile) =>
+          sourceFile.path.includes("/packages/journey-adapter-playwright/src/observers/") ||
+          sourceFile.path.includes("/packages/journey-observer-axe/src/")
+      );
+      for (const sourceFile of observerInputSources) {
+        assert.equal(
+          sourceFile.source.includes("context: PlaywrightDriverExecutionContext"),
+          false,
+          `Playwright observer inputs must not expose driver execution contexts: ${sourceFile.path}`
+        );
+      }
+
+      const testSources = await readTypeScriptSources(
+        new URL("../tests/", import.meta.url)
+      );
+      const exampleSources = await readTypeScriptSources(
+        new URL("../examples/", import.meta.url)
+      );
+      const forbiddenObserverCast = "as " + "JourneyObserver";
+      for (const sourceFile of [...packageSources, ...testSources, ...exampleSources]) {
+        assert.equal(
+          sourceFile.source.includes(forbiddenObserverCast),
+          false,
+          `Playwright observers must not be registered through JourneyObserver casts: ${sourceFile.path}`
+        );
+      }
 
       const ujgRefSetDefinitions = packageSources.filter((sourceFile) =>
         sourceFile.source.includes("UjgRefSet")
@@ -923,7 +1005,7 @@ const tests: TestCase[] = [
     }
   },
   {
-    name: "runner calls observer lifecycle hooks and passes observers into adapter contexts",
+    name: "runner calls observer lifecycle hooks with descriptors and keeps adapter contexts isolated",
     async run() {
       const sourcePlan = await loadFixturePlan();
       const plan: JourneyPlan = {
@@ -931,25 +1013,33 @@ const tests: TestCase[] = [
         operations: [stateOperation(sourcePlan, "urn:state:alice-files-ready")]
       };
       const calls: string[] = [];
+      const capabilityChecks: boolean[] = [];
       const observer: JourneyObserver = {
         name: "test-observer",
         onRunStarted(input) {
-          calls.push(`run-started:${input.runId}:${input.profiles.length}`);
+          calls.push(
+            `run-started:${input.runId}:${input.profiles[0]?.id ?? "none"}:${input.adapter.name}`
+          );
+          capabilityChecks.push(!("selectInputModality" in input.profiles[0]));
+          capabilityChecks.push(!("createExecution" in input.adapter));
         },
-        onExecutionStarted({ context }) {
-          calls.push(`execution-started:${context.executionId}:${context.observers.length}`);
+        onExecutionStarted({ execution }) {
+          calls.push(`execution-started:${execution.executionId}:${execution.profile.id}`);
+          capabilityChecks.push(!("selectInputModality" in execution.profile));
+          capabilityChecks.push(!("observers" in execution));
         },
-        onExecutionCompleted({ execution }) {
-          calls.push(`execution-completed:${execution.executionId}:${String(execution.ok)}`);
+        onExecutionCompleted({ execution, result }) {
+          calls.push(`execution-completed:${execution.executionId}:${String(result.ok)}`);
+          capabilityChecks.push(!("context" in result));
         },
         onRunCompleted({ result }) {
           calls.push(`run-completed:${result.executions.length}:${String(result.ok)}`);
         }
       };
-      const contextObserverCounts: number[] = [];
+      const adapterContextHasObservers: boolean[] = [];
       const adapter = fakeAdapter(calls, {
         onCreate(context) {
-          contextObserverCounts.push(context.observers.length);
+          adapterContextHasObservers.push("observers" in context);
         }
       });
 
@@ -962,12 +1052,13 @@ const tests: TestCase[] = [
       });
 
       assert.equal(result.ok, true);
-      assert.deepEqual(contextObserverCounts, [1]);
+      assert.deepEqual(adapterContextHasObservers, [false]);
+      assert.deepEqual(capabilityChecks, [true, true, true, true, true]);
       assert.deepEqual(calls.filter((call) => call.startsWith("run-")), [
-        "run-started:observer-run:1",
+        "run-started:observer-run:default:fake-adapter",
         "run-completed:1:true"
       ]);
-      assert.ok(calls.includes("execution-started:default-01:1"));
+      assert.ok(calls.includes("execution-started:default-01:default"));
       assert.ok(calls.includes("execution-completed:default-01:true"));
       assert.ok(result.evidence.events.some((event) => event.type === "observer.run-started.completed"));
       assert.ok(
@@ -1171,29 +1262,37 @@ const tests: TestCase[] = [
       ]);
 
       const observations: string[] = [];
+      const playwrightObserver: PlaywrightExecutionObserver = {
+        name: "characterization-playwright-observer",
+        onExecutionStarted({ execution }) {
+          observations.push(`started:${execution.executionId}`);
+        },
+        observeOperation(observation) {
+          observations.push(observation.stage);
+        }
+      };
       const playwrightObserverResult = await runJourney({
         plan: { ...sourcePlan, operations: [state] },
         adapter: playwrightAdapter({
           driver: artifactTestDriver([]),
           browser: new FakeBrowser(1) as never,
-          assertionTimeoutMs: 1
+          assertionTimeoutMs: 1,
+          executionObservers: [playwrightObserver]
         }),
         profiles: [defaultProfile()],
-        observers: [
-          {
-            name: "characterization-playwright-observer",
-            observePlaywrightOperation(observation: PlaywrightOperationObservation) {
-              observations.push(observation.stage);
-            }
-          } as JourneyObserver
-        ],
         runId: "characterization-playwright-observer"
       });
-      assert.deepEqual(observations, ["state-asserted"]);
+      assert.deepEqual(observations, ["started:default-01", "state-asserted"]);
       assertIncludesEventTypes(playwrightObserverResult, [
+        "playwright.observer.execution-started.started",
+        "playwright.observer.execution-started.completed",
         "playwright.observer.operation.started",
         "playwright.observer.operation.completed"
       ]);
+      assert.equal(
+        playwrightObserverResult.evidence.events.some((event) => event.type.startsWith("observer.")),
+        false
+      );
     }
   },
   {
@@ -1504,9 +1603,12 @@ const tests: TestCase[] = [
       };
       const browser = new FakeBrowser(1);
       const observations: string[] = [];
-      const observer: JourneyObserver = {
+      const observer: PlaywrightExecutionObserver = {
         name: "playwright-test-observer",
-        observePlaywrightOperation(observation: PlaywrightOperationObservation) {
+        onExecutionStarted({ execution }) {
+          observations.push(`execution-started:${execution.executionId}`);
+        },
+        observeOperation(observation: PlaywrightOperationObservation) {
           observations.push(
             `${observation.stage}:${observation.operation.kind}:${observation.operation.id}`
           );
@@ -1514,25 +1616,31 @@ const tests: TestCase[] = [
             assert.equal((observation.locator as unknown as FakeLocator).actions.length, 0);
           }
         }
-      } as JourneyObserver;
+      };
 
       const result = await runJourney({
         plan,
         adapter: playwrightAdapter({
           driver: artifactTestDriver([]),
           browser: browser as never,
-          assertionTimeoutMs: 1
+          assertionTimeoutMs: 1,
+          executionObservers: [observer]
         }),
-        profiles: [defaultProfile()],
-        observers: [observer]
+        profiles: [defaultProfile()]
       });
 
       assert.equal(result.ok, true);
       assert.deepEqual(observations.map((entry) => entry.split(":").slice(0, 2).join(":")), [
+        "execution-started:default-01",
         "state-asserted:state",
         "transition-ready:transition",
         "control-flow-recorded:control-flow"
       ]);
+      assert.ok(
+        result.evidence.events.some(
+          (event) => event.type === "playwright.observer.execution-started.completed"
+        )
+      );
       assert.ok(
         result.evidence.events.some((event) => event.type === "playwright.observer.operation.completed")
       );
@@ -1628,19 +1736,19 @@ const tests: TestCase[] = [
           return Promise.resolve(fakeAxeReport(input));
         }
       });
-      const context = fakeAxeContext(plan);
+      const execution = fakeAxeExecution(plan);
 
-      axe.onExecutionStarted?.({ context });
-      await axe.observePlaywrightOperation({
-        context,
+      axe.onExecutionStarted?.({ execution });
+      await axe.observeOperation?.({
+        execution,
         expectedMatchCount: 1,
         locator: new FakeAxeLocator() as never,
         operation: state,
         page: new FakeAxePage() as never,
         stage: "state-asserted"
       });
-      await axe.observePlaywrightOperation({
-        context,
+      await axe.observeOperation?.({
+        execution,
         decision: select(defaultProfile(), transition),
         expectedMatchCount: 1,
         locator: new FakeAxeLocator() as never,
@@ -1648,12 +1756,12 @@ const tests: TestCase[] = [
         page: new FakeAxePage() as never,
         stage: "transition-ready"
       });
-      await axe.observePlaywrightOperation({
-        context,
+      await axe.observeOperation?.({
+        execution,
         operation: controlFlow,
         stage: "control-flow-recorded"
       });
-      await axe.report(fakeRunResult(plan, [executionResult(context, true)]));
+      await axe.report(fakeRunResult(plan, [executionResult(execution, true)]));
 
       assert.equal(auditCalls.length, 2);
       assert.deepEqual([...wcag22Tags], [
@@ -1693,18 +1801,18 @@ const tests: TestCase[] = [
           return Promise.resolve(fakeAxeReport(input));
         }
       });
-      const context = fakeAxeContext(plan);
+      const execution = fakeAxeExecution(plan);
 
-      axe.onExecutionStarted?.({ context });
-      await axe.observePlaywrightOperation({
-        context,
+      axe.onExecutionStarted?.({ execution });
+      await axe.observeOperation?.({
+        execution,
         expectedMatchCount: 0,
         locator: new FakeAxeLocator() as never,
         operation: state,
         page: new FakeAxePage() as never,
         stage: "state-asserted"
       });
-      await axe.report(fakeRunResult(plan, [executionResult(context, true)]));
+      await axe.report(fakeRunResult(plan, [executionResult(execution, true)]));
 
       assert.equal(auditCalls, 0);
       assert.equal(axe.latestPathReport?.summary.skipped, 1);
@@ -1832,7 +1940,8 @@ const tests: TestCase[] = [
       assert.match(runSource, /UJG_EVIDENCE_STDOUT/);
       assert.match(runSource, /browser:\s*browser as Browser/);
       assert.match(runSource, /axeObserver/);
-      assert.match(runSource, /observers:\s*\[axe\]/);
+      assert.match(runSource, /executionObservers:\s*\[axe\]/);
+      assert.doesNotMatch(runSource, /observers:\s*\[axe\]/);
       assert.match(runSource, /reporters:\s*\[axe\]/);
       assert.match(runSource, /nextcloud-filesharing\.axe-path/);
     }
@@ -2402,7 +2511,6 @@ function fakeDriverContext(): PlaywrightDriverExecutionContext {
     executionId: "test-execution",
     profile: defaultProfile(),
     plan: { id: "test-plan", operations: [] },
-    observers: [],
     browser: undefined as never,
     createBrowserContext() {
       throw new Error("Unexpected test browser context creation");
@@ -2444,11 +2552,15 @@ function fakeDriverExecutionInput(context: PlaywrightDriverExecutionContext): {
   };
 }
 
-function fakeAxeContext(plan: JourneyPlan): PlaywrightDriverExecutionContext {
+function fakeAxeExecution(plan: JourneyPlan): JourneyExecutionDescriptor {
+  const profile = defaultProfile();
   return {
-    ...fakeDriverContext(),
     runId: "axe-run",
     executionId: "default-01",
+    profile: {
+      id: profile.id,
+      ...(profile.label ? { label: profile.label } : {})
+    },
     plan
   };
 }
@@ -2473,12 +2585,12 @@ function fakeRunResult(
 }
 
 function executionResult(
-  context: PlaywrightDriverExecutionContext,
+  execution: Pick<JourneyExecutionDescriptor, "executionId" | "profile">,
   ok: boolean
 ): ExecutionResult {
   return {
-    executionId: context.executionId,
-    profileId: context.profile.id,
+    executionId: execution.executionId,
+    profileId: execution.profile.id,
     ok
   };
 }
@@ -2499,18 +2611,18 @@ async function runStrictAxeObserver(strict: boolean): Promise<void> {
       return Promise.resolve(fakeAxeReport(input, { violations: 1 }));
     }
   });
-  const context = fakeAxeContext(plan);
+  const execution = fakeAxeExecution(plan);
 
-  axe.onExecutionStarted?.({ context });
-  await axe.observePlaywrightOperation({
-    context,
+  axe.onExecutionStarted?.({ execution });
+  await axe.observeOperation?.({
+    execution,
     expectedMatchCount: 1,
     locator: new FakeAxeLocator() as never,
     operation: state,
     page: new FakeAxePage() as never,
     stage: "state-asserted"
   });
-  await axe.report(fakeRunResult(plan, [executionResult(context, true)]));
+  await axe.report(fakeRunResult(plan, [executionResult(execution, true)]));
 }
 
 function fakeAxeReport(

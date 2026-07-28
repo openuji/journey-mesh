@@ -17,6 +17,13 @@ import {
 } from "@openuji/journey-evidence";
 import { ExecutionEvidence } from "./evidence/execution-evidence.js";
 import { RunEvidence } from "./evidence/run-evidence.js";
+import {
+  componentDescriptor,
+  executionDescriptor,
+  profileDescriptor
+} from "./observers/contracts.js";
+import { JourneyObserverDispatcher } from "./observers/journey-observer-dispatcher.js";
+import type { JourneyObserver } from "./observers/contracts.js";
 
 export {
   EvidenceRecorder,
@@ -72,12 +79,28 @@ export type {
   JsonValue
 } from "@openuji/journey-evidence";
 
+export {
+  componentDescriptor,
+  executionDescriptor,
+  profileDescriptor
+} from "./observers/contracts.js";
+
+export type {
+  JourneyComponentDescriptor,
+  JourneyExecutionDescriptor,
+  JourneyObserver,
+  JourneyObserverExecutionCompletedInput,
+  JourneyObserverExecutionStartedInput,
+  JourneyObserverRunCompletedInput,
+  JourneyObserverRunStartedInput,
+  JourneyProfileDescriptor
+} from "./observers/contracts.js";
+
 export type JourneyExecutionContext = {
   readonly runId: string;
   readonly executionId: string;
   readonly profile: JourneyProfile;
   readonly plan: JourneyPlan;
-  readonly observers: readonly JourneyObserver[];
 };
 
 /**
@@ -119,35 +142,6 @@ export type JourneyProfile = {
     operation: TransitionPlanOperation,
     context: JourneyExecutionContext
   ): Promise<InputModalityDecision> | InputModalityDecision;
-};
-
-export type JourneyObserver = {
-  name: string;
-  version?: string;
-  onRunStarted?(input: JourneyObserverRunStartedInput): Promise<void> | void;
-  onRunCompleted?(input: JourneyObserverRunCompletedInput): Promise<void> | void;
-  onExecutionStarted?(input: JourneyObserverExecutionInput): Promise<void> | void;
-  onExecutionCompleted?(input: JourneyObserverExecutionCompletedInput): Promise<void> | void;
-};
-
-export type JourneyObserverRunStartedInput = {
-  runId: string;
-  plan: JourneyPlan;
-  profiles: readonly JourneyProfile[];
-  adapter: JourneyAdapter;
-};
-
-export type JourneyObserverRunCompletedInput = {
-  result: RunResult;
-};
-
-export type JourneyObserverExecutionInput = {
-  context: JourneyExecutionContext;
-};
-
-export type JourneyObserverExecutionCompletedInput = {
-  context: JourneyExecutionContext;
-  execution: ExecutionResult;
 };
 
 export type JourneyReporter = {
@@ -197,21 +191,20 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
   const executions: ExecutionResult[] = [];
   const errors: EvidenceError[] = [];
   const observers = options.observers ?? [];
+  const observerDispatcher = new JourneyObserverDispatcher(observers, runEvidence);
 
   runEvidence.runStarted({
     plan: options.plan,
     profiles: options.profiles,
     adapter: options.adapter,
-    observers,
+    observers: observers.map(componentDescriptor),
     reporters: options.reporters ?? []
   });
 
-  const runStartError = await notifyRunStarted({
-    adapter: options.adapter,
-    observers,
+  const runStartError = await observerDispatcher.runStarted({
+    adapter: componentDescriptor(options.adapter),
     plan: options.plan,
-    profiles: options.profiles,
-    runEvidence,
+    profiles: options.profiles.map(profileDescriptor),
     runId
   });
   if (runStartError) {
@@ -238,9 +231,9 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
       runId,
       executionId,
       profile,
-      plan: options.plan,
-      observers
+      plan: options.plan
     };
+    const descriptor = executionDescriptor(context);
     const executionSink = scopeEvidenceToExecution(evidence, {
       executionId,
       profileId: profile.id
@@ -250,8 +243,10 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
     const execution = await runProfileExecution({
       adapter: options.adapter,
       context,
+      descriptor,
       executionEvidence,
       executionSink,
+      observerDispatcher,
       plan: options.plan,
       profile
     });
@@ -292,11 +287,7 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
     });
   }
 
-  const runCompletionError = await notifyRunCompleted({
-    observers,
-    result,
-    runEvidence
-  });
+  const runCompletionError = await observerDispatcher.runCompleted(result);
   if (runCompletionError) {
     ok = false;
     errors.push(runCompletionError);
@@ -330,15 +321,19 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
 async function runProfileExecution({
   adapter,
   context,
+  descriptor,
   executionEvidence,
   executionSink,
+  observerDispatcher,
   plan,
   profile
 }: {
   adapter: JourneyAdapter;
   context: JourneyExecutionContext;
+  descriptor: ReturnType<typeof executionDescriptor>;
   executionEvidence: ExecutionEvidence;
   executionSink: ExecutionEvidenceSink;
+  observerDispatcher: JourneyObserverDispatcher;
   plan: JourneyPlan;
   profile: JourneyProfile;
 }): Promise<ExecutionResult> {
@@ -350,7 +345,7 @@ async function runProfileExecution({
   executionEvidence.executionStarted();
 
   try {
-    await notifyExecutionStarted({ context, executionEvidence });
+    await observerDispatcher.executionStarted(descriptor, executionEvidence);
 
     executionEvidence.adapterStartStarted(adapter);
     adapterExecution = adapter.createExecution({
@@ -404,9 +399,10 @@ async function runProfileExecution({
     error: executionError
   };
   const observerCompletionError = await notifyExecutionCompleted({
-    context,
-    executionEvidence,
+    descriptor,
     execution: executionBeforeObserver,
+    executionEvidence,
+    observerDispatcher
   });
   if (observerCompletionError) {
     ok = false;
@@ -504,109 +500,18 @@ async function recordControlFlow({
   executionEvidence.controlFlowCompleted(operation);
 }
 
-async function notifyRunStarted({
-  adapter,
-  observers,
-  plan,
-  profiles,
-  runEvidence,
-  runId
-}: {
-  adapter: JourneyAdapter;
-  observers: readonly JourneyObserver[];
-  plan: JourneyPlan;
-  profiles: readonly JourneyProfile[];
-  runEvidence: RunEvidence;
-  runId: string;
-}): Promise<EvidenceError | undefined> {
-  for (const observer of observers) {
-    if (!observer.onRunStarted) continue;
-
-    try {
-      runEvidence.observerRunStarted(observer);
-      await observer.onRunStarted({ adapter, plan, profiles, runId });
-      runEvidence.observerRunStartCompleted(observer);
-    } catch (error) {
-      const evidenceError = errorToEvidence(error);
-      runEvidence.observerRunStartFailed(observer, evidenceError);
-      return evidenceError;
-    }
-  }
-
-  return undefined;
-}
-
-async function notifyRunCompleted({
-  observers,
-  result,
-  runEvidence
-}: {
-  observers: readonly JourneyObserver[];
-  result: RunResult;
-  runEvidence: RunEvidence;
-}): Promise<EvidenceError | undefined> {
-  for (const observer of observers) {
-    if (!observer.onRunCompleted) continue;
-
-    try {
-      runEvidence.observerRunCompleted(observer);
-      await observer.onRunCompleted({ result });
-      runEvidence.observerRunCompletionCompleted(observer);
-    } catch (error) {
-      const evidenceError = errorToEvidence(error);
-      runEvidence.observerRunCompletionFailed(observer, evidenceError);
-      return evidenceError;
-    }
-  }
-
-  return undefined;
-}
-
-async function notifyExecutionStarted({
-  context,
-  executionEvidence
-}: {
-  context: JourneyExecutionContext;
-  executionEvidence: ExecutionEvidence;
-}): Promise<void> {
-  for (const observer of context.observers) {
-    if (!observer.onExecutionStarted) continue;
-
-    try {
-      executionEvidence.observerExecutionStarted(observer);
-      await observer.onExecutionStarted({ context });
-      executionEvidence.observerExecutionStartCompleted(observer);
-    } catch (error) {
-      executionEvidence.observerExecutionStartFailed(observer, error);
-      throw error;
-    }
-  }
-}
-
 async function notifyExecutionCompleted({
-  context,
+  descriptor,
+  execution,
   executionEvidence,
-  execution
+  observerDispatcher
 }: {
-  context: JourneyExecutionContext;
-  executionEvidence: ExecutionEvidence;
+  descriptor: ReturnType<typeof executionDescriptor>;
   execution: ExecutionResult;
+  executionEvidence: ExecutionEvidence;
+  observerDispatcher: JourneyObserverDispatcher;
 }): Promise<EvidenceError | undefined> {
-  for (const observer of context.observers) {
-    if (!observer.onExecutionCompleted) continue;
-
-    try {
-      executionEvidence.observerExecutionCompleted(observer);
-      await observer.onExecutionCompleted({ context, execution });
-      executionEvidence.observerExecutionCompletionCompleted(observer);
-    } catch (error) {
-      const evidenceError = errorToEvidence(error);
-      executionEvidence.observerExecutionCompletionFailed(observer, evidenceError);
-      return evidenceError;
-    }
-  }
-
-  return undefined;
+  return observerDispatcher.executionCompleted(descriptor, execution, executionEvidence);
 }
 
 function safeSegment(value: string): string {

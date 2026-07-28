@@ -5,13 +5,12 @@ import { dirname } from "node:path";
 import type { Locator, Page } from "playwright";
 
 import type {
-  PlaywrightJourneyObserver,
+  PlaywrightExecutionObserver,
   PlaywrightOperationObservation
 } from "@openuji/journey-adapter-playwright";
 import type {
   ExecutionResult,
   JourneyOperationSource,
-  JourneyObserverExecutionInput,
   JourneyPlanSource,
   JourneyReporter,
   JourneySourceReferences,
@@ -190,7 +189,7 @@ export type AxeObserverOptions = {
   auditRunner?: AxeAuditRunner;
 };
 
-export type AxeObserver = PlaywrightJourneyObserver & JourneyReporter & {
+export type AxeObserver = PlaywrightExecutionObserver & JourneyReporter & {
   readonly latestPathReport?: AxePathAuditReport;
   readonly latestPathReportPath?: string;
 };
@@ -223,11 +222,11 @@ export function axeObserver(options: AxeObserverOptions): AxeObserver {
 
   function requireJourneyItem(observation: PlaywrightOperationObservation): AxeJourneyItem {
     const journeyItem = createAxeJourneyItem(
-      observation.context.profile.id,
-      observation.context.executionId,
+      observation.execution.profile.id,
+      observation.execution.executionId,
       observation.operation
     );
-    const key = itemKey(observation.context.executionId, observation.operation.id);
+    const key = itemKey(observation.execution.executionId, observation.operation.id);
     if (!itemInputs.has(key)) {
       setItem(key, initialAxePathItem(journeyItem, observation.operation));
     }
@@ -246,23 +245,23 @@ export function axeObserver(options: AxeObserverOptions): AxeObserver {
       return latestPathReportPath;
     },
 
-    onExecutionStarted({ context }: JourneyObserverExecutionInput) {
-      for (const operation of context.plan.operations) {
+    onExecutionStarted({ execution }) {
+      for (const operation of execution.plan.operations) {
         const journeyItem = createAxeJourneyItem(
-          context.profile.id,
-          context.executionId,
+          execution.profile.id,
+          execution.executionId,
           operation
         );
         setItem(
-          itemKey(context.executionId, operation.id),
+          itemKey(execution.executionId, operation.id),
           initialAxePathItem(journeyItem, operation)
         );
       }
     },
 
-    async observePlaywrightOperation(observation) {
+    async observeOperation(observation) {
       const journeyItem = requireJourneyItem(observation);
-      const key = itemKey(observation.context.executionId, observation.operation.id);
+      const key = itemKey(observation.execution.executionId, observation.operation.id);
 
       if (observation.stage === "control-flow-recorded") {
         setItem(

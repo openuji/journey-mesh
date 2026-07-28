@@ -19,9 +19,9 @@ import {
 import type {
   ExecutionResult,
   JourneyAdapter,
-  JourneyExecutionContext,
-  JourneyObserver
+  JourneyExecutionContext
 } from "../index.js";
+import type { JourneyObserver } from "../observers/contracts.js";
 
 export class ExecutionEvidence {
   constructor(

@@ -12,26 +12,36 @@ import {
   type Page
 } from "playwright";
 
-import type {
-  AccessibleFeature,
-  ControlFlowPlanOperation,
-  InputModalityDecision,
-  JourneyAdapter,
-  JourneyAdapterCloseInput,
-  JourneyAdapterExecution,
-  JourneyAdapterExecutionInput,
-  JourneyInteractionCommand,
-  JourneyExecutionContext,
-  JourneyObserver,
-  JourneyPlanOperation,
-  JsonObject,
-  ResolvedAccessibleLocator,
-  ResolvedObservationBinding,
-  StatePlanOperation,
-  TransitionPlanOperation
+import {
+  executionDescriptor,
+  type AccessibleFeature,
+  type ControlFlowPlanOperation,
+  type InputModalityDecision,
+  type JourneyAdapter,
+  type JourneyAdapterCloseInput,
+  type JourneyAdapterExecution,
+  type JourneyAdapterExecutionInput,
+  type JourneyInteractionCommand,
+  type JourneyExecutionContext,
+  type JourneyExecutionDescriptor,
+  type JourneyPlanOperation,
+  type JsonObject,
+  type ResolvedAccessibleLocator,
+  type ResolvedObservationBinding,
+  type StatePlanOperation,
+  type TransitionPlanOperation
 } from "@openuji/journey-runner";
 import type { ExecutionEvidenceSink } from "@openuji/journey-evidence";
 import { PlaywrightEvidence } from "./evidence/playwright-evidence.js";
+import type { PlaywrightExecutionObserver } from "./observers/contracts.js";
+import { PlaywrightObserverDispatcher } from "./observers/playwright-observer-dispatcher.js";
+
+export type {
+  PlaywrightExecutionObserver,
+  PlaywrightJourneyObserver,
+  PlaywrightObserverExecutionStartedInput,
+  PlaywrightOperationObservation
+} from "./observers/contracts.js";
 
 export type PlaywrightCreateBrowserContextInput = {
   operation?: JourneyPlanOperation;
@@ -97,44 +107,9 @@ export type PlaywrightJourneyDriverExecution = {
   close(input: PlaywrightDriverCloseInput): Promise<void> | void;
 };
 
-export type PlaywrightOperationObservation =
-  | {
-      stage: "state-asserted";
-      operation: StatePlanOperation;
-      context: PlaywrightDriverExecutionContext;
-      page: Page;
-      locator: Locator;
-      expectedMatchCount: number;
-    }
-  | {
-      stage: "transition-ready";
-      operation: TransitionPlanOperation;
-      context: PlaywrightDriverExecutionContext;
-      page: Page;
-      locator: Locator;
-      expectedMatchCount: 1;
-      decision: InputModalityDecision;
-    }
-  | {
-      stage: "control-flow-recorded";
-      operation: ControlFlowPlanOperation;
-      context: PlaywrightDriverExecutionContext;
-    };
-
-export type PlaywrightJourneyObserver = JourneyObserver & {
-  observePlaywrightOperation(
-    observation: PlaywrightOperationObservation
-  ): Promise<void> | void;
-};
-
-export function isPlaywrightJourneyObserver(
-  observer: JourneyObserver
-): observer is PlaywrightJourneyObserver {
-  return typeof (observer as { observePlaywrightOperation?: unknown }).observePlaywrightOperation === "function";
-}
-
 export type PlaywrightAdapterOptions = {
   driver: PlaywrightJourneyDriver;
+  executionObservers?: readonly PlaywrightExecutionObserver[];
   browser?: Browser;
   headless?: boolean;
   launchOptions?: LaunchOptions;
@@ -195,8 +170,10 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
   private driverExecution?: PlaywrightJourneyDriverExecution;
   private readonly browserContexts: BrowserContextRecord[] = [];
   private readonly context: JourneyExecutionContext;
+  private readonly execution: JourneyExecutionDescriptor;
   private readonly events: PlaywrightEvidence;
   private readonly evidence: ExecutionEvidenceSink;
+  private readonly observers: PlaywrightObserverDispatcher;
   private lifecycle: "created" | "starting" | "started" | "closing" | "closed" = "created";
 
   constructor(
@@ -205,8 +182,14 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     private readonly artifactOptions: ResolvedArtifactOptions
   ) {
     this.context = input.context;
+    this.execution = executionDescriptor(input.context);
     this.evidence = input.evidence;
     this.events = new PlaywrightEvidence(input.context, input.evidence);
+    this.observers = new PlaywrightObserverDispatcher(
+      options.executionObservers ?? [],
+      this.execution,
+      this.events
+    );
   }
 
   async start(): Promise<void> {
@@ -215,6 +198,8 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     }
 
     this.lifecycle = "starting";
+    await this.observers.executionStarted();
+
     this.browser = this.options.browser ?? await launchBrowser(this.options);
     this.ownsBrowser = this.options.browser === undefined;
     this.driverContext = {
@@ -256,14 +241,14 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
 
     this.events.assertionCompleted(operation);
 
-    await notifyPlaywrightObservers({
-      context,
+    await this.observers.observe({
+      execution: this.execution,
       expectedMatchCount: operation.target.expectedMatchCount,
       locator,
       operation,
       page,
       stage: "state-asserted"
-    }, this.events);
+    });
   }
 
   async performTransition(
@@ -283,15 +268,15 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
       timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs
     });
 
-    await notifyPlaywrightObservers({
-      context,
+    await this.observers.observe({
+      execution: this.execution,
       decision,
       expectedMatchCount: 1,
       locator,
       operation,
       page,
       stage: "transition-ready"
-    }, this.events);
+    });
 
     const text = decision.command === "keyboard-text-entry"
       ? await driver.transitionValue(operation)
@@ -305,13 +290,12 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
 
   async recordControlFlow(operation: ControlFlowPlanOperation): Promise<void> {
     const driver = this.requireStartedDriver();
-    const context = this.requireDriverContext();
     await driver.recordControlFlow(operation);
-    await notifyPlaywrightObservers({
-      context,
+    await this.observers.observe({
+      execution: this.execution,
       operation,
       stage: "control-flow-recorded"
-    }, this.events);
+    });
   }
 
   async close(input: JourneyAdapterCloseInput): Promise<void> {
@@ -564,24 +548,6 @@ async function attachVideos(
       } catch (error) {
         evidence.videoFailed(browserContext, index, error);
       }
-    }
-  }
-}
-
-async function notifyPlaywrightObservers(
-  observation: PlaywrightOperationObservation,
-  evidence: PlaywrightEvidence
-): Promise<void> {
-  const observers = observation.context.observers.filter(isPlaywrightJourneyObserver);
-
-  for (const observer of observers) {
-    try {
-      evidence.observerOperationStarted(observer, observation);
-      await observer.observePlaywrightOperation(observation);
-      evidence.observerOperationCompleted(observer, observation);
-    } catch (error) {
-      evidence.observerOperationFailed(observer, observation, error);
-      throw error;
     }
   }
 }

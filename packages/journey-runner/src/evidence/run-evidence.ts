@@ -8,17 +8,20 @@ import {
 
 import type {
   JourneyAdapter,
-  JourneyObserver,
   JourneyPlan,
   JourneyProfile,
   JourneyReporter
 } from "../index.js";
+import type {
+  JourneyComponentDescriptor,
+  JourneyObserver
+} from "../observers/contracts.js";
 
 export type RunStartedEvidenceInput = {
   readonly plan: JourneyPlan;
   readonly profiles: readonly JourneyProfile[];
   readonly adapter: JourneyAdapter;
-  readonly observers: readonly JourneyObserver[];
+  readonly observers: readonly JourneyComponentDescriptor[];
   readonly reporters: readonly JourneyReporter[];
 };
 

@@ -42,6 +42,7 @@ test("executes the federated file-sharing UJG journey", async ({ browser }, test
         adapter: playwrightAdapter({
           driver: nextcloudDriver(nextcloudEnvironment),
           browser: browser as Browser,
+          executionObservers: [axe],
           artifacts: {
             mode: artifactModeFromEnv(),
             sink: testInfoArtifactSink(testInfo),
@@ -51,7 +52,6 @@ test("executes the federated file-sharing UJG journey", async ({ browser }, test
           }
         }),
         profiles: [defaultProfile(), keyboardOnlyProfile()],
-        observers: [axe],
         reporters: [axe]
       });
 
