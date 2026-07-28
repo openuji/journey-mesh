@@ -1,136 +1,133 @@
+import { writeFile } from "node:fs/promises";
+
+import { expect, test, type Browser, type TestInfo } from "@playwright/test";
+
+import {
+  playwrightAdapter,
+  type PlaywrightArtifactMode,
+  type PlaywrightArtifactSink
+} from "@openuji/journey-adapter-playwright";
+import { nextcloudDriver } from "@openuji/journey-driver-nextcloud";
 import { compileUjgJourneyPlan } from "@openuji/journey-model-ujg";
 import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
-import { runJourney, type JourneyAdapter } from "@openuji/journey-runner";
+import { runJourney, type EvidenceError, type RunResult } from "@openuji/journey-runner";
+
+import {
+  nextcloudEnvironment,
+  validateNextcloudEnvironmentForPlan
+} from "./environment.js";
 
 const journey = new URL("./ujg/filesharing.ujg.jsonld", import.meta.url);
 
-const dummyAdapter: JourneyAdapter = {
-  name: "@openuji/journey-adapter-dummy",
-  version: "0.1.0",
+test("executes the federated file-sharing UJG journey", async ({ browser }, testInfo) => {
+  const plan = await compileUjgJourneyPlan(journey);
+  const preflightErrors = validateNextcloudEnvironmentForPlan(plan);
+  const result = preflightErrors.length > 0
+    ? preflightFailureResult({
+        documentId: plan.documentId,
+        errors: preflightErrors,
+        planId: plan.id
+      })
+    : await runJourney({
+        plan,
+        adapter: playwrightAdapter({
+          driver: nextcloudDriver(nextcloudEnvironment),
+          browser: browser as Browser,
+          artifacts: {
+            mode: artifactModeFromEnv(),
+            sink: testInfoArtifactSink(testInfo),
+            traces: false,
+            screenshots: true,
+            videos: true
+          }
+        }),
+        profiles: [defaultProfile(), keyboardOnlyProfile()]
+      });
 
-  setupExecution(context) {
-    context.evidence.emit({
-      type: "dummy-adapter.call",
-      executionId: context.executionId,
-      profileId: context.profile.id,
-      ok: true,
-      message: "setupExecution"
-    });
-  },
+  const evidencePath = await attachEvidence(testInfo, result);
+  printSummary(result, evidencePath);
 
-  openEntry(operation, context) {
-    context.evidence.emit({
-      type: "dummy-adapter.call",
-      executionId: context.executionId,
-      profileId: context.profile.id,
-      operationId: operation.id,
-      operationKind: operation.kind,
-      ok: true,
-      message: "openEntry",
-      ujg: {
-        documentId: operation.documentId,
-        entryId: operation.entry.id,
-        entryBindingId: operation.entryBinding?.id,
-        userId: operation.userId,
-        touchpointId: operation.touchpointId
-      },
-      data: {
-        entryBindingValue: operation.entryBinding?.value ?? null
-      }
-    });
-  },
-
-  assertState(operation, context) {
-    context.evidence.emit({
-      type: "dummy-adapter.call",
-      executionId: context.executionId,
-      profileId: context.profile.id,
-      operationId: operation.id,
-      operationKind: operation.kind,
-      ok: true,
-      message: "assertState",
-      ujg: {
-        documentId: operation.documentId,
-        stateId: operation.state.id,
-        surfaceId: operation.surface.id,
-        observationBindingIds: operation.target.bindings.map((binding) => binding.id),
-        locatorIds: operation.target.bindings.flatMap((binding) =>
-          binding.locators.map((locator) => locator.id)
-        )
-      },
-      data: {
-        expectedMatchCount: operation.target.expectedMatchCount
-      }
-    });
-  },
-
-  performTransition(operation, decision, context) {
-    context.evidence.emit({
-      type: "dummy-adapter.call",
-      executionId: context.executionId,
-      profileId: context.profile.id,
-      operationId: operation.id,
-      operationKind: operation.kind,
-      ok: true,
-      message: "performTransition",
-      ujg: {
-        documentId: operation.documentId,
-        transitionId: operation.transition.id,
-        surfaceId: operation.surface.id,
-        observationBindingIds: operation.activation.bindings.map((binding) => binding.id),
-        locatorIds: operation.activation.bindings.flatMap((binding) =>
-          binding.locators.map((locator) => locator.id)
-        ),
-        effectIds: operation.effects.map((effect) => effect.id)
-      },
-      data: {
-        command: decision.command,
-        inputModalityProfileId: decision.inputModalityProfile.id,
-        modalityId: decision.modality.id
-      }
-    });
-  },
-
-  recordControlFlow(operation, context) {
-    context.evidence.emit({
-      type: "dummy-adapter.call",
-      executionId: context.executionId,
-      profileId: context.profile.id,
-      operationId: operation.id,
-      operationKind: operation.kind,
-      ok: true,
-      message: "recordControlFlow",
-      ujg: {
-        documentId: operation.documentId,
-        transitionId: operation.transition.id,
-        entryId: operation.toEntry?.id,
-        userId: operation.userId,
-        touchpointId: operation.touchpointId
-      },
-      data: {
-        fromExitRef: operation.transition.fromExitRef ?? null,
-        toEntryRef: operation.transition.toEntryRef ?? null
-      }
-    });
-  },
-
-  teardownExecution(context) {
-    context.evidence.emit({
-      type: "dummy-adapter.call",
-      executionId: context.executionId,
-      profileId: context.profile.id,
-      ok: true,
-      message: "teardownExecution"
-    });
+  if (process.env.UJG_EVIDENCE_STDOUT === "1") {
+    console.log(JSON.stringify(result, null, 2));
   }
-};
 
-const plan = await compileUjgJourneyPlan(journey);
-const result = await runJourney({
-  plan,
-  adapter: dummyAdapter,
-  profiles: [defaultProfile(), keyboardOnlyProfile()]
+  expect(result.ok, failureSummary(result)).toBe(true);
 });
 
-console.log(JSON.stringify(result, null, 2));
-process.exitCode = result.ok ? 0 : 1;
+async function attachEvidence(testInfo: TestInfo, result: RunResult): Promise<string> {
+  const path = testInfo.outputPath("ujg-evidence.json");
+  await writeFile(path, JSON.stringify(result, null, 2));
+  await testInfo.attach("ujg-evidence.json", {
+    path,
+    contentType: "application/json"
+  });
+  return path;
+}
+
+function printSummary(result: RunResult, evidencePath: string): void {
+  console.log(`UJG journey ${result.ok ? "passed" : "failed"}: ${result.runId}`);
+  for (const execution of result.executions) {
+    const suffix = execution.ok
+      ? "ok"
+      : `failed: ${execution.error?.message ?? "unknown error"}`;
+    console.log(`  ${execution.profileId}: ${suffix}`);
+  }
+  if (result.executions.length === 0 && result.errors.length > 0) {
+    for (const error of result.errors) {
+      console.log(`  preflight: ${error.message}`);
+    }
+  }
+  console.log(`  evidence: ${evidencePath}`);
+  console.log("  report: pnpm --filter @openuji/example-nextcloud-filesharing e2e:report");
+}
+
+function artifactModeFromEnv(): PlaywrightArtifactMode {
+  const value = process.env.UJG_PLAYWRIGHT_ARTIFACTS;
+  if (value === "always" || value === "retain-on-failure" || value === "off") {
+    return value;
+  }
+  return "retain-on-failure";
+}
+
+function testInfoArtifactSink(testInfo: TestInfo): PlaywrightArtifactSink {
+  return {
+    outputPath(...pathSegments) {
+      return testInfo.outputPath(...pathSegments);
+    },
+    attach(name, attachment) {
+      return testInfo.attach(name, attachment);
+    }
+  };
+}
+
+function failureSummary(result: RunResult): string {
+  if (result.ok) return "UJG journey should pass";
+  return result.errors.map(formatError).join("\n\n") || "UJG journey failed";
+}
+
+function formatError(error: EvidenceError): string {
+  return `${error.name}: ${error.message}`;
+}
+
+function preflightFailureResult(input: {
+  documentId: string;
+  errors: string[];
+  planId: string;
+}): RunResult {
+  const errors: EvidenceError[] = input.errors.map((message) => ({
+    name: "PreflightError",
+    message
+  }));
+
+  return {
+    ok: false,
+    runId: `preflight-${new Date().toISOString()}`,
+    planId: input.planId,
+    documentId: input.documentId,
+    executions: [],
+    evidence: {
+      events: []
+    },
+    errors
+  };
+}

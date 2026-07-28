@@ -8,6 +8,6 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
-    { "path": "../journey-evidence" }
+    { "path": "../journey-evidence/tsconfig.json" }
   ]
 }

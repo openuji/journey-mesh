@@ -292,7 +292,7 @@ accessible:
     "urn:feature:expanded-true":
       label: "Expanded"
       accessibleFeatureName: "expanded"
-      accessibleFeatureValue: "true"
+      accessibleFeatureValue: "false"
 
   locators:
     "urn:locator:sharing-panel":

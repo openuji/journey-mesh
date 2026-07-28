@@ -1,6 +1,7 @@
 # journey-runner
 
-First migration iteration for a model-driven UJG journey runner.
+Model-driven UJG journey runner with a neutral runner boundary, a generic
+Playwright adapter, and a configurable Nextcloud driver.
 
 ## Commands
 
@@ -10,7 +11,24 @@ pnpm build
 pnpm typecheck
 pnpm lint
 pnpm test
-pnpm example:nextcloud:dummy
 ```
 
-`pnpm example:nextcloud:dummy` loads `examples/nextcloud-filesharing/ujg/filesharing.ujg.jsonld`, compiles it into a neutral plan, runs the plan once with `defaultProfile()` and once with `keyboardOnlyProfile()`, and prints normalized evidence JSON.
+## Nextcloud Example
+
+The Nextcloud file-sharing example owns its own scripts:
+
+```bash
+pnpm --filter @openuji/example-nextcloud-filesharing stack:up
+pnpm --filter @openuji/example-nextcloud-filesharing stack:provision
+pnpm --filter @openuji/example-nextcloud-filesharing stack:seed
+pnpm --filter @openuji/example-nextcloud-filesharing e2e
+pnpm --filter @openuji/example-nextcloud-filesharing e2e:report
+```
+
+The example loads `examples/nextcloud-filesharing/ujg/filesharing.ujg.jsonld`, configures the generic Playwright adapter and Nextcloud driver, runs `defaultProfile()` and `keyboardOnlyProfile()`, and attaches normalized evidence JSON to the Playwright test result. Set `UJG_EVIDENCE_STDOUT=1` to also print the full evidence JSON.
+
+Playwright traces are retained on failure by default. For a successful debug run with retained trace plus adapter screenshots/videos, use:
+
+```bash
+UJG_PLAYWRIGHT_ARTIFACTS=always pnpm --filter @openuji/example-nextcloud-filesharing e2e --trace on
+```

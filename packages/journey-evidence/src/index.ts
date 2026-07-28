@@ -178,6 +178,7 @@ export type UjgRefSet = {
   observationBindingIds?: string[];
   observationEventIds?: string[];
   locatorIds?: string[];
+  featureIds?: string[];
   effectIds?: string[];
   artifactIds?: string[];
 };

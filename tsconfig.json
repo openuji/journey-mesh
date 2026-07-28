@@ -1,11 +1,13 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/journey-evidence" },
-    { "path": "packages/journey-runner" },
-    { "path": "packages/journey-model-ujg" },
-    { "path": "packages/journey-profiles" },
-    { "path": "examples/nextcloud-filesharing" },
-    { "path": "tests" }
+    { "path": "packages/journey-evidence/tsconfig.json" },
+    { "path": "packages/journey-runner/tsconfig.json" },
+    { "path": "packages/journey-model-ujg/tsconfig.json" },
+    { "path": "packages/journey-profiles/tsconfig.json" },
+    { "path": "packages/journey-adapter-playwright/tsconfig.json" },
+    { "path": "packages/journey-driver-nextcloud/tsconfig.json" },
+    { "path": "examples/nextcloud-filesharing/tsconfig.json" },
+    { "path": "tests/tsconfig.json" }
   ]
 }

@@ -1,0 +1,74 @@
+name: ujg-nextcloud-federation
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    env_file:
+      - ${NEXTCLOUD_STACK_ENV_FILE:-.env.example}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-nextcloud}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nextcloud}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+
+  alice:
+    image: nextcloud:stable-apache
+    env_file:
+      - ${NEXTCLOUD_STACK_ENV_FILE:-.env.example}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${NEXTCLOUD_ALICE_PORT:-18081}:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${NEXTCLOUD_ALICE_DB:-nextcloud_alice}
+      POSTGRES_USER: ${NEXTCLOUD_ALICE_DB_USER:-nextcloud_alice}
+      POSTGRES_PASSWORD: ${NEXTCLOUD_ALICE_DB_PASSWORD:-nextcloud_alice}
+      NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER:-admin}
+      NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD:-UjgAdminPass2026!}
+      NEXTCLOUD_TRUSTED_DOMAINS: ${NEXTCLOUD_ALICE_HOST:-host.docker.internal} ${NEXTCLOUD_ALICE_HOST:-host.docker.internal}:${NEXTCLOUD_ALICE_PORT:-18081} alice localhost 127.0.0.1
+      OVERWRITEHOST: ${NEXTCLOUD_ALICE_HOST:-host.docker.internal}:${NEXTCLOUD_ALICE_PORT:-18081}
+      OVERWRITEPROTOCOL: http
+      OVERWRITECLIURL: ${NEXTCLOUD_ALICE_URL:-http://host.docker.internal:18081}
+    volumes:
+      - alice_nextcloud:/var/www/html
+
+  bob:
+    image: nextcloud:stable-apache
+    env_file:
+      - ${NEXTCLOUD_STACK_ENV_FILE:-.env.example}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${NEXTCLOUD_BOB_PORT:-18082}:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${NEXTCLOUD_BOB_DB:-nextcloud_bob}
+      POSTGRES_USER: ${NEXTCLOUD_BOB_DB_USER:-nextcloud_bob}
+      POSTGRES_PASSWORD: ${NEXTCLOUD_BOB_DB_PASSWORD:-nextcloud_bob}
+      NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER:-admin}
+      NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD:-UjgAdminPass2026!}
+      NEXTCLOUD_TRUSTED_DOMAINS: ${NEXTCLOUD_BOB_HOST:-host.docker.internal} ${NEXTCLOUD_BOB_HOST:-host.docker.internal}:${NEXTCLOUD_BOB_PORT:-18082} bob localhost 127.0.0.1
+      OVERWRITEHOST: ${NEXTCLOUD_BOB_HOST:-host.docker.internal}:${NEXTCLOUD_BOB_PORT:-18082}
+      OVERWRITEPROTOCOL: http
+      OVERWRITECLIURL: ${NEXTCLOUD_BOB_URL:-http://host.docker.internal:18082}
+    volumes:
+      - bob_nextcloud:/var/www/html
+
+volumes:
+  postgres:
+  alice_nextcloud:
+  bob_nextcloud:
