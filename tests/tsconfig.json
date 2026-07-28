@@ -1,0 +1,19 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "../.tmp/tests.tsbuildinfo"
+  },
+  "include": ["**/*.ts"],
+  "references": [
+    { "path": "../packages/journey-evidence/tsconfig.json" },
+    { "path": "../packages/journey-runner/tsconfig.json" },
+    { "path": "../packages/journey-model-ujg/tsconfig.json" },
+    { "path": "../packages/journey-profiles/tsconfig.json" },
+    { "path": "../packages/journey-adapter-playwright/tsconfig.json" },
+    { "path": "../packages/journey-driver-nextcloud/tsconfig.json" },
+    { "path": "../packages/journey-observer-axe/tsconfig.json" },
+    { "path": "../examples/nextcloud-filesharing/tsconfig.json" }
+  ]
+}

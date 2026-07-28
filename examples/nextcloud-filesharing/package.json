@@ -1,0 +1,26 @@
+{
+  "name": "@openuji/example-nextcloud-filesharing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openuji/journey-adapter-playwright": "workspace:*",
+    "@openuji/journey-driver-nextcloud": "workspace:*",
+    "@openuji/journey-model-ujg": "workspace:*",
+    "@openuji/journey-observer-axe": "workspace:*",
+    "@openuji/journey-profiles": "workspace:*",
+    "@openuji/journey-runner": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.0"
+  },
+  "scripts": {
+    "e2e": "playwright test --config playwright.config.ts",
+    "e2e:headed": "playwright test --config playwright.config.ts --headed",
+    "e2e:report": "playwright show-report playwright-report",
+    "stack:provision": "sh deployment/scripts/provision.sh",
+    "stack:reset": "sh deployment/scripts/reset.sh",
+    "stack:seed": "sh deployment/scripts/seed.sh",
+    "stack:up": "sh deployment/scripts/up.sh"
+  }
+}

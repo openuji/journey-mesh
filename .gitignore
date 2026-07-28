@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.tmp/
+examples/nextcloud-filesharing/playwright-report/
+examples/nextcloud-filesharing/test-results/
