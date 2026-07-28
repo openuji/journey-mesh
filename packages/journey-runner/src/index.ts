@@ -24,6 +24,7 @@ import {
 } from "./observers/contracts.js";
 import { JourneyObserverDispatcher } from "./observers/journey-observer-dispatcher.js";
 import type { JourneyObserver } from "./observers/contracts.js";
+import { ReporterPipeline } from "./reporters/reporter-pipeline.js";
 
 export {
   EvidenceRecorder,
@@ -265,18 +266,15 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
     runId
   });
 
-  for (const reporter of options.reporters ?? []) {
-    try {
-      runEvidence.reporterStarted(reporter);
-      await reporter.report(result);
-      runEvidence.reporterCompleted(reporter);
-    } catch (error) {
-      ok = false;
-      const evidenceError = errorToEvidence(error);
-      errors.push(evidenceError);
-      runEvidence.reporterFailed(reporter, evidenceError);
-    }
-
+  const reporterPipeline = new ReporterPipeline();
+  const reporterOutcome = await reporterPipeline.run({
+    reporters: options.reporters ?? [],
+    report: result,
+    evidence: runEvidence
+  });
+  if (reporterOutcome.errors.length > 0) {
+    ok = false;
+    errors.push(...reporterOutcome.errors);
     result = buildResult({
       errors,
       events: evidence.snapshot(),
