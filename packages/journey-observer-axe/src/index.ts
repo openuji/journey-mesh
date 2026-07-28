@@ -1,7 +1,7 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import type { TestInfo } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 import type { Locator, Page } from "playwright";
 
 import type {
@@ -140,6 +140,44 @@ export type AxePathAuditReport = {
   items: AxePathAuditItem[];
 };
 
+export type AxeAccessibilitySummaryEntry = {
+  id: string;
+  itemId: string;
+  auditId: string | null;
+  status: AxePathAuditItemStatus;
+  summary: AxeAuditSummary;
+  metrics: {
+    pageState: AxeAuditSummary;
+    matchedSurface: AxeAuditSummary;
+  };
+  sourceHtmlHref: string;
+  sourceScreenshotHref?: string;
+  reason?: string;
+  additionalItems?: AxeAccessibilitySummaryEntry[];
+};
+
+export type AxeAccessibilitySummaryProfile = {
+  states: Record<string, AxeAccessibilitySummaryEntry>;
+  transitions: Record<string, AxeAccessibilitySummaryEntry>;
+};
+
+export type AxeAccessibilitySummaryReport = {
+  schemaVersion: "ujg-fed-a11y.accessibility-summary-by-graph-id.v1";
+  generatedAt: string;
+  source: {
+    testResultDirectoryName?: string;
+    reportId: string;
+    reportMode: string;
+    reportCreatedAt: string;
+    delivery?: string;
+    aggregateHtmlHref: string;
+    summary: AxePathAuditSummary;
+  };
+  states?: Record<string, AxeAccessibilitySummaryEntry>;
+  transitions?: Record<string, AxeAccessibilitySummaryEntry>;
+  profiles?: Record<string, AxeAccessibilitySummaryProfile>;
+};
+
 export type AxePathAuditItemInput =
   | {
       itemId: string;
@@ -186,12 +224,18 @@ export type AxeObserverOptions = {
     fullPage?: boolean;
     timeoutMs?: number;
   };
+  accessibilitySummary?: {
+    delivery?: string;
+    artifactBaseHref?: string;
+  };
   auditRunner?: AxeAuditRunner;
 };
 
 export type AxeObserver = PlaywrightExecutionObserver & JourneyReporter & {
   readonly latestPathReport?: AxePathAuditReport;
   readonly latestPathReportPath?: string;
+  readonly latestAccessibilitySummaryReport?: AxeAccessibilitySummaryReport;
+  readonly latestAccessibilitySummaryReportPath?: string;
 };
 
 export const wcag22Tags = [
@@ -212,6 +256,8 @@ export function axeObserver(options: AxeObserverOptions): AxeObserver {
   const auditRunner = options.auditRunner ?? runAxeAudit;
   let latestPathReport: AxePathAuditReport | undefined;
   let latestPathReportPath: string | undefined;
+  let latestAccessibilitySummaryReport: AxeAccessibilitySummaryReport | undefined;
+  let latestAccessibilitySummaryReportPath: string | undefined;
 
   function setItem(key: string, item: AxePathAuditItemInput): void {
     if (!itemInputs.has(key)) {
@@ -243,6 +289,14 @@ export function axeObserver(options: AxeObserverOptions): AxeObserver {
 
     get latestPathReportPath() {
       return latestPathReportPath;
+    },
+
+    get latestAccessibilitySummaryReport() {
+      return latestAccessibilitySummaryReport;
+    },
+
+    get latestAccessibilitySummaryReportPath() {
+      return latestAccessibilitySummaryReportPath;
     },
 
     onExecutionStarted({ execution }) {
@@ -338,6 +392,17 @@ export function axeObserver(options: AxeObserverOptions): AxeObserver {
         })
       });
       latestPathReportPath = await attachAxePathAuditReport(options.testInfo, latestPathReport);
+      latestAccessibilitySummaryReport = buildAxeAccessibilitySummaryReport({
+        pathReport: latestPathReport,
+        generatedAt: latestPathReport.createdAt,
+        delivery: options.accessibilitySummary?.delivery,
+        artifactBaseHref: options.accessibilitySummary?.artifactBaseHref,
+        testResultDirectoryName: testResultDirectoryName(options.testInfo)
+      });
+      latestAccessibilitySummaryReportPath = await attachAxeAccessibilitySummaryReport(
+        options.testInfo,
+        latestAccessibilitySummaryReport
+      );
 
       if (strictFailureReports.length > 0) {
         throw new Error(strictFailureReports.map(axeFailureMessage).join("\n"));
@@ -392,6 +457,137 @@ export function buildAxePathAuditReport(input: {
     summary: summarizePathItems(items),
     items
   };
+}
+
+export function buildAxeAccessibilitySummaryReport(input: {
+  pathReport: AxePathAuditReport;
+  generatedAt?: string;
+  delivery?: string;
+  artifactBaseHref?: string;
+  testResultDirectoryName?: string;
+}): AxeAccessibilitySummaryReport {
+  const profiles = groupAccessibilityEntriesByProfile(input.pathReport, input.artifactBaseHref);
+  const profileIds = Object.keys(profiles);
+  const reportMode = profileIds.length > 1 ? "multi-profile" : profileIds[0] ?? "unprofiled";
+  const source = {
+    ...(input.testResultDirectoryName
+      ? { testResultDirectoryName: input.testResultDirectoryName }
+      : {}),
+    reportId: input.pathReport.reportId,
+    reportMode,
+    reportCreatedAt: input.pathReport.createdAt,
+    ...(input.delivery ? { delivery: input.delivery } : {}),
+    aggregateHtmlHref: artifactHref(
+      pathAuditHtmlFileName(input.pathReport.reportId),
+      input.artifactBaseHref
+    ),
+    summary: input.pathReport.summary
+  };
+
+  if (profileIds.length <= 1) {
+    const profile = profiles[profileIds[0] ?? ""] ?? emptyAccessibilitySummaryProfile();
+    return {
+      schemaVersion: "ujg-fed-a11y.accessibility-summary-by-graph-id.v1",
+      generatedAt: input.generatedAt ?? new Date().toISOString(),
+      source,
+      states: profile.states,
+      transitions: profile.transitions
+    };
+  }
+
+  return {
+    schemaVersion: "ujg-fed-a11y.accessibility-summary-by-graph-id.v1",
+    generatedAt: input.generatedAt ?? new Date().toISOString(),
+    source,
+    profiles
+  };
+}
+
+function groupAccessibilityEntriesByProfile(
+  report: AxePathAuditReport,
+  artifactBaseHref?: string
+): Record<string, AxeAccessibilitySummaryProfile> {
+  const profiles: Record<string, AxeAccessibilitySummaryProfile> = {};
+
+  for (const item of report.items) {
+    const target = accessibilityEntryTarget(item);
+    if (!target) continue;
+
+    const profileId = profileIdForItem(item);
+    const profile = profiles[profileId] ?? emptyAccessibilitySummaryProfile();
+    profiles[profileId] = profile;
+
+    const entry = accessibilitySummaryEntry(item, target.id, report.reportId, artifactBaseHref);
+    if (target.kind === "state") {
+      addAccessibilitySummaryEntry(profile.states, entry);
+    } else {
+      addAccessibilitySummaryEntry(profile.transitions, entry);
+    }
+  }
+
+  return profiles;
+}
+
+function emptyAccessibilitySummaryProfile(): AxeAccessibilitySummaryProfile {
+  return {
+    states: {},
+    transitions: {}
+  };
+}
+
+function accessibilityEntryTarget(
+  item: AxePathAuditItem
+): { kind: "state" | "transition"; id: string } | undefined {
+  const stateId = stringMetadataValue(item.metadata, "stateId");
+  if (stateId) return { kind: "state", id: stateId };
+
+  const transitionId = stringMetadataValue(item.metadata, "transitionId");
+  if (!transitionId || stringMetadataValue(item.metadata, "kind") === "control-flow") {
+    return undefined;
+  }
+  return { kind: "transition", id: transitionId };
+}
+
+function accessibilitySummaryEntry(
+  item: AxePathAuditItem,
+  id: string,
+  reportId: string,
+  artifactBaseHref?: string
+): AxeAccessibilitySummaryEntry {
+  const entry: AxeAccessibilitySummaryEntry = {
+    id,
+    itemId: item.itemId,
+    auditId: item.auditId ?? null,
+    status: item.status,
+    summary: item.summary ?? emptyAxeSummary(),
+    metrics: {
+      pageState: item.scanSummaries?.["page-state"] ?? emptyAxeSummary(),
+      matchedSurface: item.scanSummaries?.["matched-surface"] ?? emptyAxeSummary()
+    },
+    sourceHtmlHref: `${artifactHref(pathAuditHtmlFileName(reportId), artifactBaseHref)}#${item.itemId}`
+  };
+
+  if (item.sourceScreenshotHref) {
+    entry.sourceScreenshotHref = artifactHref(item.sourceScreenshotHref, artifactBaseHref);
+  }
+  if (item.reason) {
+    entry.reason = item.reason;
+  }
+
+  return entry;
+}
+
+function addAccessibilitySummaryEntry(
+  entries: Record<string, AxeAccessibilitySummaryEntry>,
+  entry: AxeAccessibilitySummaryEntry
+): void {
+  const existing = entries[entry.id];
+  if (!existing) {
+    entries[entry.id] = entry;
+    return;
+  }
+
+  existing.additionalItems = [...(existing.additionalItems ?? []), entry];
 }
 
 function buildAxeAuditReport(
@@ -735,6 +931,21 @@ async function attachAxePathAuditReport(
   return htmlPath;
 }
 
+async function attachAxeAccessibilitySummaryReport(
+  testInfo: TestInfo,
+  report: AxeAccessibilitySummaryReport
+): Promise<string> {
+  const jsonPath = testInfo.outputPath(accessibilitySummaryJsonFileName(report.source.reportId));
+
+  await writeFile(jsonPath, JSON.stringify(report, null, 2));
+  await testInfo.attach(`axe-accessibility-${report.source.reportId}.json`, {
+    path: jsonPath,
+    contentType: "application/json"
+  });
+
+  return jsonPath;
+}
+
 type AxeJourneyItem = {
   auditId: string;
   itemId: string;
@@ -1031,6 +1242,10 @@ function pathAuditHtmlFileName(reportId: string): string {
   return `${reportId}.html`;
 }
 
+function accessibilitySummaryJsonFileName(reportId: string): string {
+  return `axe-accessibility-${reportId}.json`;
+}
+
 function axeNodeHtmlHref(
   auditId: string,
   scanId: AxeAuditScanId,
@@ -1152,10 +1367,7 @@ function renderAxePathAuditHtml(
       ["Metadata", JSON.stringify(report.metadata, null, 2)]
     ]),
     renderPathSummary(report.summary),
-    "<section>",
-    "<h2>Path Items</h2>",
-    report.items.map(renderPathItem).join("\n"),
-    "</section>",
+    renderPathItemsByProfile(report.items),
     "</main>",
     "</body>",
     "</html>"
@@ -1203,6 +1415,36 @@ function renderPathItem(item: AxePathAuditItem): string {
     renderPathFindings(item),
     "</details>"
   ].join("\n");
+}
+
+function renderPathItemsByProfile(items: AxePathAuditItem[]): string {
+  const profiles = groupPathItemsByProfile(items);
+  return [
+    "<section>",
+    "<h2>Path Items</h2>",
+    ...profiles.map(({ profileId, profileItems }) => [
+      `<section class="profile-group" id="profile-${escapeAttribute(safeFileSegment(profileId))}">`,
+      `<h3>${escapeHtml(profileId)}</h3>`,
+      renderPathSummary(summarizePathItems(profileItems)),
+      profileItems.map(renderPathItem).join("\n"),
+      "</section>"
+    ].join("\n")),
+    "</section>"
+  ].join("\n");
+}
+
+function groupPathItemsByProfile(
+  items: AxePathAuditItem[]
+): Array<{ profileId: string; profileItems: AxePathAuditItem[] }> {
+  const groups = new Map<string, AxePathAuditItem[]>();
+  for (const item of items) {
+    const profileId = profileIdForItem(item);
+    const profileItems = groups.get(profileId) ?? [];
+    profileItems.push(item);
+    groups.set(profileId, profileItems);
+  }
+
+  return [...groups.entries()].map(([profileId, profileItems]) => ({ profileId, profileItems }));
 }
 
 function renderSourceScreenshot(item: AxePathAuditItem): string {
@@ -1280,6 +1522,25 @@ function urlPath(value: string): string {
   } catch {
     return value;
   }
+}
+
+function profileIdForItem(item: AxePathAuditItem): string {
+  return stringMetadataValue(item.metadata, "profileId") ?? item.groupId?.split(":")[0] ?? "unprofiled";
+}
+
+function stringMetadataValue(metadata: AxeAuditMetadata, key: string): string | undefined {
+  const value = metadata[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function artifactHref(href: string, artifactBaseHref: string | undefined): string {
+  if (!artifactBaseHref) return href;
+  const base = artifactBaseHref.endsWith("/") ? artifactBaseHref : `${artifactBaseHref}/`;
+  return `${base}${href.replace(/^\/+/, "")}`;
+}
+
+function testResultDirectoryName(testInfo: TestInfo): string | undefined {
+  return testInfo.outputDir ? basename(testInfo.outputDir) : undefined;
 }
 
 function addOptional(metadata: JsonObject, key: string, value: JsonValue | undefined): void {

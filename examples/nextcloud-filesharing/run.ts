@@ -79,7 +79,10 @@ function printSummary(result: RunResult, evidencePath: string, axe: AxeObserver)
   }
   console.log(`  evidence: ${evidencePath}`);
   if (axe.latestPathReportPath) {
-    console.log(`  axe: ${axe.latestPathReportPath}`);
+    console.log(`  axe html: ${axe.latestPathReportPath}`);
+  }
+  if (axe.latestAccessibilitySummaryReportPath) {
+    console.log(`  axe json: ${axe.latestAccessibilitySummaryReportPath}`);
   }
   console.log("  report: pnpm --filter @openuji/example-nextcloud-filesharing e2e:report");
 }

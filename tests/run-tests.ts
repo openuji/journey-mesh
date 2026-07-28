@@ -39,6 +39,7 @@ import {
 } from "@openuji/journey-model-ujg";
 import {
   axeObserver,
+  buildAxeAccessibilitySummaryReport,
   buildAxePathAuditReport,
   wcag22Tags,
   type AxeAuditReport,
@@ -1704,6 +1705,23 @@ const tests: TestCase[] = [
       assert.equal(axe.latestPathReport?.items[1].metadata.transitionId, transition.transition.id);
       assert.ok(testInfo.attachments.some((attachment) => attachment.name === "axe-path-test-path.json"));
       assert.ok(testInfo.attachments.some((attachment) => attachment.name === "axe-path-test-path.html"));
+      assert.ok(
+        testInfo.attachments.some((attachment) => attachment.name === "axe-accessibility-test-path.json")
+      );
+      assert.equal(axe.latestAccessibilitySummaryReport?.source.reportId, "test-path");
+      assert.equal(
+        axe.latestAccessibilitySummaryReport?.states?.[state.state.id]?.metrics.matchedSurface.passes,
+        1
+      );
+      assert.ok(axe.latestAccessibilitySummaryReportPath?.endsWith("axe-accessibility-test-path.json"));
+
+      const pathHtmlAttachment = testInfo.attachments.find(
+        (attachment) => attachment.name === "axe-path-test-path.html"
+      );
+      assert.ok(pathHtmlAttachment?.path);
+      const pathHtml = await readFile(pathHtmlAttachment.path, "utf8");
+      assert.match(pathHtml, /id="profile-default"/);
+      assert.match(pathHtml, new RegExp(`id="${axe.latestPathReport?.items[0].itemId}"`));
     }
   },
   {
@@ -1781,6 +1799,184 @@ const tests: TestCase[] = [
       assert.equal(report.items[0].sourceJsonHref, "default-000-start.axe.json");
       assert.equal(report.items[0].scanSummaries?.["page-state"].passes, 1);
       assert.equal(report.items[0].scanSummaries?.["matched-surface"].passes, 1);
+    }
+  },
+  {
+    name: "axe accessibility summary builder indexes single-profile states and transitions by graph id",
+    async run() {
+      const sourcePlan = await loadFixturePlan();
+      const state = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+      const transition = transitionOperation(sourcePlan, "urn:transition:alice-opens-file-menu");
+      const pathReport = buildAxePathAuditReport({
+        reportId: "summary-test",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        items: [
+          {
+            itemId: "default-000-alice-files-ready",
+            metadata: {
+              profileId: "default",
+              kind: "state",
+              stateId: state.state.id
+            },
+            report: fakeAxeReport({
+              auditId: "default-000-alice-files-ready",
+              metadata: {
+                profileId: "default",
+                kind: "state",
+                stateId: state.state.id
+              },
+              page: new FakeAxePage() as never
+            }),
+            sourceScreenshotHref: "default-000-alice-files-ready.source.playwright-screenshot.png"
+          },
+          {
+            itemId: "default-001-alice-opens-file-menu",
+            metadata: {
+              profileId: "default",
+              kind: "transition",
+              transitionId: transition.transition.id
+            },
+            report: fakeAxeReport({
+              auditId: "default-001-alice-opens-file-menu",
+              metadata: {
+                profileId: "default",
+                kind: "transition",
+                transitionId: transition.transition.id
+              },
+              page: new FakeAxePage() as never
+            })
+          }
+        ]
+      });
+
+      const summary = buildAxeAccessibilitySummaryReport({
+        pathReport,
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        delivery: "astro-hydration-prop",
+        artifactBaseHref: "/accessibility/filesharing/artifacts",
+        testResultDirectoryName: "accessible-filesharing"
+      });
+
+      assert.equal(summary.schemaVersion, "ujg-fed-a11y.accessibility-summary-by-graph-id.v1");
+      assert.equal(summary.source.reportMode, "default");
+      assert.equal(summary.source.delivery, "astro-hydration-prop");
+      assert.equal(
+        summary.source.aggregateHtmlHref,
+        "/accessibility/filesharing/artifacts/summary-test.html"
+      );
+      assert.equal(summary.states?.[state.state.id]?.auditId, "default-000-alice-files-ready");
+      assert.equal(summary.states?.[state.state.id]?.metrics.pageState.passes, 1);
+      assert.equal(
+        summary.states?.[state.state.id]?.sourceHtmlHref,
+        "/accessibility/filesharing/artifacts/summary-test.html#default-000-alice-files-ready"
+      );
+      assert.equal(
+        summary.states?.[state.state.id]?.sourceScreenshotHref,
+        "/accessibility/filesharing/artifacts/default-000-alice-files-ready.source.playwright-screenshot.png"
+      );
+      assert.equal(
+        summary.transitions?.[transition.transition.id]?.sourceHtmlHref,
+        "/accessibility/filesharing/artifacts/summary-test.html#default-001-alice-opens-file-menu"
+      );
+      assert.equal(summary.profiles, undefined);
+    }
+  },
+  {
+    name: "axe accessibility summary preserves skipped state reason and zero metrics",
+    async run() {
+      const sourcePlan = await loadFixturePlan();
+      const state = stateOperation(sourcePlan, "urn:state:bob-pending-share-offer-cleared");
+      const pathReport = buildAxePathAuditReport({
+        reportId: "skipped-summary",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        items: [
+          {
+            itemId: "default-012-bob-pending-share-offer-cleared",
+            metadata: {
+              profileId: "default",
+              kind: "state",
+              stateId: state.state.id
+            },
+            status: "skipped",
+            reason: "Expected match count 0 cannot be scoped to one matched locator.",
+            sourceScreenshotHref: "default-012-bob-pending-share-offer-cleared.source.playwright-screenshot.png"
+          }
+        ]
+      });
+
+      const summary = buildAxeAccessibilitySummaryReport({ pathReport });
+      const entry = summary.states?.[state.state.id];
+
+      assert.equal(entry?.auditId, null);
+      assert.equal(entry?.status, "skipped");
+      assert.equal(entry?.summary.violations, 0);
+      assert.equal(entry?.metrics.pageState.passes, 0);
+      assert.match(entry?.reason ?? "", /Expected match count 0/);
+      assert.equal(
+        entry?.sourceScreenshotHref,
+        "default-012-bob-pending-share-offer-cleared.source.playwright-screenshot.png"
+      );
+    }
+  },
+  {
+    name: "axe accessibility summary groups duplicate graph ids by profile",
+    async run() {
+      const sourcePlan = await loadFixturePlan();
+      const state = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+      const pathReport = buildAxePathAuditReport({
+        reportId: "multi-profile-summary",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        items: [
+          {
+            itemId: "default-000-alice-files-ready",
+            metadata: {
+              profileId: "default",
+              kind: "state",
+              stateId: state.state.id
+            },
+            report: fakeAxeReport({
+              auditId: "default-000-alice-files-ready",
+              metadata: {
+                profileId: "default",
+                kind: "state",
+                stateId: state.state.id
+              },
+              page: new FakeAxePage() as never
+            })
+          },
+          {
+            itemId: "keyboard-only-000-alice-files-ready",
+            metadata: {
+              profileId: "keyboard-only",
+              kind: "state",
+              stateId: state.state.id
+            },
+            report: fakeAxeReport({
+              auditId: "keyboard-only-000-alice-files-ready",
+              metadata: {
+                profileId: "keyboard-only",
+                kind: "state",
+                stateId: state.state.id
+              },
+              page: new FakeAxePage() as never
+            })
+          }
+        ]
+      });
+
+      const summary = buildAxeAccessibilitySummaryReport({ pathReport });
+
+      assert.equal(summary.source.reportMode, "multi-profile");
+      assert.equal(summary.states, undefined);
+      assert.equal(summary.transitions, undefined);
+      assert.equal(
+        summary.profiles?.default.states[state.state.id]?.itemId,
+        "default-000-alice-files-ready"
+      );
+      assert.equal(
+        summary.profiles?.["keyboard-only"].states[state.state.id]?.itemId,
+        "keyboard-only-000-alice-files-ready"
+      );
     }
   },
   {
@@ -1872,6 +2068,8 @@ const tests: TestCase[] = [
       assert.doesNotMatch(runSource, /observers:\s*\[axe\]/);
       assert.match(runSource, /reporters:\s*\[axe\]/);
       assert.match(runSource, /nextcloud-filesharing\.axe-path/);
+      assert.match(runSource, /latestAccessibilitySummaryReportPath/);
+      assert.match(runSource, /accessibility:/);
     }
   },
   {
