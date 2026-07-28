@@ -48,11 +48,11 @@ import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
 import {
   EvidenceRecorder,
   runJourney,
-  type AdapterExecutionContext,
   type ControlFlowPlanOperation,
   type ExecutionResult,
   type InputModalityDecision,
   type JourneyAdapter,
+  type JourneyExecutionContext,
   type JourneyObserver,
   type JourneyPlan,
   type JourneyPlanOperation,
@@ -278,6 +278,67 @@ const tests: TestCase[] = [
             sourceFile.source.includes(forbiddenPattern),
             false,
             `runtime packages must not inspect UJG-specific source fields: ${forbiddenPattern} in ${sourceFile.path}`
+          );
+        }
+      }
+
+      const runnerAndPlaywrightAdapterSources = packageSources.filter(
+        (sourceFile) =>
+          sourceFile.path.includes("/packages/journey-runner/src/") ||
+          sourceFile.path.includes("/packages/journey-adapter-playwright/src/")
+      );
+      for (const sourceFile of runnerAndPlaywrightAdapterSources) {
+        assert.doesNotMatch(
+          sourceFile.source,
+          /\bsetupExecution\s*\(|\bteardownExecution\s*\(/,
+          `runner and Playwright adapter must use execution sessions: ${sourceFile.path}`
+        );
+      }
+
+      for (const sourceFile of packageSources) {
+        const compactSource = sourceFile.source.replace(/\s+/g, " ");
+        assert.equal(
+          compactSource.includes("openEntry(operation, context)") ||
+            compactSource.includes("assertState(operation, context)") ||
+            compactSource.includes("recordControlFlow(operation, context)") ||
+            compactSource.includes("performTransition(operation, decision, context)"),
+          false,
+          `adapter operations must not receive context per method: ${sourceFile.path}`
+        );
+      }
+
+      const playwrightSources = packageSources.filter((sourceFile) =>
+        sourceFile.path.includes("/packages/journey-adapter-playwright/src/")
+      );
+      for (const sourceFile of playwrightSources) {
+        for (const forbiddenPattern of [
+          "AdapterExecutionState",
+          "requireExecutionState",
+          "undefined as unknown as",
+          "evidence.snapshot",
+          "PlaywrightTransitionValueInput"
+        ]) {
+          assert.equal(
+            sourceFile.source.includes(forbiddenPattern),
+            false,
+            `Playwright adapter must not retain old execution-state patterns: ${forbiddenPattern} in ${sourceFile.path}`
+          );
+        }
+      }
+
+      const nextcloudSources = packageSources.filter((sourceFile) =>
+        sourceFile.path.includes("/packages/journey-driver-nextcloud/src/")
+      );
+      for (const sourceFile of nextcloudSources) {
+        for (const forbiddenPattern of [
+          "ExecutionState",
+          "contextForExecution",
+          "executions.get(context.executionId)"
+        ]) {
+          assert.equal(
+            sourceFile.source.includes(forbiddenPattern),
+            false,
+            `Nextcloud driver must not retain old execution registry patterns: ${forbiddenPattern} in ${sourceFile.path}`
           );
         }
       }
@@ -517,6 +578,7 @@ const tests: TestCase[] = [
       );
       assert.equal(calls.filter((call) => call.includes(":setup")).length, 2);
       assert.equal(calls.filter((call) => call.includes(":teardown")).length, 2);
+      assert.equal(calls.filter((call) => call.includes(":create")).length, 2);
       assert.equal(calls.filter((call) => call.includes(":open:nextcloud.files")).length, 2);
       assert.equal(calls.filter((call) => call.includes(":open:nextcloud.pendingShares")).length, 2);
       assert.ok(result.evidence.events.some((event) => event.type === "profile.modality.selected"));
@@ -530,6 +592,59 @@ const tests: TestCase[] = [
           (event) => event.profileId === "keyboard-only" && event.type === "adapter.perform-transition.completed"
         )
       );
+    }
+  },
+  {
+    name: "runner creates one isolated adapter execution per profile",
+    async run() {
+      const plan: JourneyPlan = { id: "session-isolation-plan", operations: [] };
+      const calls: string[] = [];
+      const adapter: JourneyAdapter = {
+        name: "session-isolation-adapter",
+        createExecution(context) {
+          let localCounter = 0;
+          calls.push(`${context.executionId}:create`);
+
+          return {
+            start() {
+              localCounter += 1;
+              calls.push(`${context.executionId}:start:${localCounter}`);
+            },
+            openEntry() {
+              localCounter += 1;
+            },
+            assertState() {
+              localCounter += 1;
+            },
+            performTransition() {
+              localCounter += 1;
+            },
+            recordControlFlow() {
+              localCounter += 1;
+            },
+            close(input) {
+              localCounter += 1;
+              calls.push(`${context.executionId}:close:${localCounter}:${String(input.executionFailed)}`);
+            }
+          };
+        }
+      };
+
+      const result = await runJourney({
+        plan,
+        adapter,
+        profiles: [defaultProfile(), keyboardOnlyProfile()]
+      });
+
+      assert.equal(result.ok, true);
+      assert.deepEqual(calls, [
+        "default-01:create",
+        "default-01:start:1",
+        "default-01:close:2:false",
+        "keyboard-only-02:create",
+        "keyboard-only-02:start:1",
+        "keyboard-only-02:close:2:false"
+      ]);
     }
   },
   {
@@ -629,8 +744,12 @@ const tests: TestCase[] = [
     name: "runner records adapter failure and returns non-ok result",
     async run() {
       const plan = await loadFixturePlan();
+      const closeInputs: boolean[] = [];
       const adapter = fakeAdapter([], {
-        failStateId: "urn:state:alice-files-ready"
+        failStateId: "urn:state:alice-files-ready",
+        onClose(input) {
+          closeInputs.push(input.executionFailed);
+        }
       });
       const result = await runJourney({
         plan,
@@ -640,6 +759,7 @@ const tests: TestCase[] = [
 
       assert.equal(result.ok, false);
       assert.equal(result.executions[0].ok, false);
+      assert.deepEqual(closeInputs, [true]);
       assert.match(result.errors[0].message, /Injected state failure/);
       assert.ok(
         result.evidence.events.some(
@@ -651,6 +771,75 @@ const tests: TestCase[] = [
           (event) => event.references?.stateId === "urn:state:alice-files-ready"
         )
       );
+    }
+  },
+  {
+    name: "runner closes startup failures but skips close when adapter creation fails",
+    async run() {
+      const plan: JourneyPlan = { id: "adapter-startup-failure-plan", operations: [] };
+      const startupCalls: string[] = [];
+      const startupCloseInputs: boolean[] = [];
+      const startupResult = await runJourney({
+        plan,
+        adapter: fakeAdapter(startupCalls, {
+          failStart: true,
+          onClose(input) {
+            startupCloseInputs.push(input.executionFailed);
+          }
+        }),
+        profiles: [defaultProfile()]
+      });
+
+      assert.equal(startupResult.ok, false);
+      assert.deepEqual(startupCloseInputs, [true]);
+      assert.deepEqual(startupCalls, ["default:create", "default:setup", "default:teardown"]);
+
+      const creationCalls: string[] = [];
+      const creationCloseInputs: boolean[] = [];
+      const creationResult = await runJourney({
+        plan,
+        adapter: fakeAdapter(creationCalls, {
+          failCreate: true,
+          onClose(input) {
+            creationCloseInputs.push(input.executionFailed);
+          }
+        }),
+        profiles: [defaultProfile()]
+      });
+
+      assert.equal(creationResult.ok, false);
+      assert.deepEqual(creationCloseInputs, []);
+      assert.deepEqual(creationCalls, ["default:create"]);
+    }
+  },
+  {
+    name: "runner closes exactly once before execution-completed observer failures",
+    async run() {
+      const plan: JourneyPlan = { id: "observer-completion-failure-plan", operations: [] };
+      const closeInputs: boolean[] = [];
+      const calls: string[] = [];
+      const result = await runJourney({
+        plan,
+        adapter: fakeAdapter(calls, {
+          onClose(input) {
+            closeInputs.push(input.executionFailed);
+          }
+        }),
+        profiles: [defaultProfile()],
+        observers: [
+          {
+            name: "execution-completed-failure",
+            onExecutionCompleted() {
+              throw new Error("Injected execution completion observer failure");
+            }
+          }
+        ]
+      });
+
+      assert.equal(result.ok, false);
+      assert.deepEqual(closeInputs, [false]);
+      assert.equal(calls.filter((call) => call === "default:teardown").length, 1);
+      assert.match(result.errors[0].message, /Injected execution completion observer failure/);
     }
   },
   {
@@ -678,12 +867,11 @@ const tests: TestCase[] = [
         }
       };
       const contextObserverCounts: number[] = [];
-      const adapter = fakeAdapter(calls);
-      const originalSetup = adapter.setupExecution;
-      adapter.setupExecution = (context) => {
-        contextObserverCounts.push(context.observers.length);
-        return originalSetup(context);
-      };
+      const adapter = fakeAdapter(calls, {
+        onCreate(context) {
+          contextObserverCounts.push(context.observers.length);
+        }
+      });
 
       const result = await runJourney({
         plan,
@@ -874,6 +1062,161 @@ const tests: TestCase[] = [
     }
   },
   {
+    name: "playwright adapter enforces execution lifecycle and idempotent owned-browser close",
+    async run() {
+      const sourcePlan = await loadFixturePlan();
+      const operation = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+      const browser = new FakeBrowser(1);
+      let launchCalls = 0;
+      const adapter = playwrightAdapter({
+        driver: testPlaywrightDriver(),
+        browserType: {
+          async launch() {
+            launchCalls += 1;
+            return browser as never;
+          }
+        },
+        assertionTimeoutMs: 1
+      });
+      const execution = adapter.createExecution({
+        ...fakeDriverContext(),
+        plan: {
+          ...sourcePlan,
+          operations: [operation]
+        }
+      });
+
+      await assert.rejects(async () => {
+        await execution.assertState(operation);
+      }, /not started/);
+      await execution.start();
+      await execution.close({ executionFailed: false });
+      await execution.close({ executionFailed: false });
+      await assert.rejects(async () => {
+        await execution.assertState(operation);
+      }, /not started/);
+
+      assert.equal(launchCalls, 1);
+      assert.equal(browser.closeCalls, 1);
+    }
+  },
+  {
+    name: "playwright adapter releases attached browsers without closing them",
+    async run() {
+      const browser = new FakeBrowser(1);
+      const context = fakeDriverContext();
+      const adapter = playwrightAdapter({
+        driver: testPlaywrightDriver(),
+        browser: browser as never,
+        assertionTimeoutMs: 1
+      });
+      const execution = adapter.createExecution(context);
+
+      await execution.start();
+      await execution.close({ executionFailed: false });
+
+      assert.equal(browser.closeCalls, 0);
+      assert.ok(
+        context.evidence.snapshot().some((event) => event.type === "playwright.browser.released")
+      );
+    }
+  },
+  {
+    name: "playwright adapter cleans up browser after partial driver startup failure",
+    async run() {
+      const browser = new FakeBrowser(1);
+      const driverCloseInputs: boolean[] = [];
+      const driver: PlaywrightJourneyDriver = {
+        name: "failing-start-driver",
+        createExecution() {
+          return {
+            start() {
+              throw new Error("Injected Playwright driver startup failure");
+            },
+            openEntry() {
+              return undefined;
+            },
+            pageForOperation() {
+              return new FakeLocator("page") as never;
+            },
+            transitionValue() {
+              return undefined;
+            },
+            afterTransition() {
+              return undefined;
+            },
+            recordControlFlow() {
+              return undefined;
+            },
+            close(input) {
+              driverCloseInputs.push(input.executionFailed);
+            }
+          };
+        }
+      };
+      const adapter = playwrightAdapter({
+        driver,
+        browserType: {
+          async launch() {
+            return browser as never;
+          }
+        },
+        assertionTimeoutMs: 1
+      });
+      const execution = adapter.createExecution(fakeDriverContext());
+
+      await assert.rejects(async () => {
+        await execution.start();
+      }, /Injected Playwright driver startup failure/);
+      await execution.close({ executionFailed: true });
+
+      assert.equal(browser.closeCalls, 1);
+      assert.deepEqual(driverCloseInputs, [true]);
+    }
+  },
+  {
+    name: "playwright adapter retains artifacts from explicit close failure input",
+    async run() {
+      const sourcePlan = await loadFixturePlan();
+      const operation = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+      const browser = new FakeBrowser(1);
+      const sink = new FakeArtifactSink();
+      const contextInputs: PlaywrightCreateBrowserContextInput[] = [];
+      const context = {
+        ...fakeDriverContext(),
+        plan: {
+          ...sourcePlan,
+          operations: [operation]
+        }
+      };
+      const execution = playwrightAdapter({
+        driver: artifactTestDriver(contextInputs),
+        browser: browser as never,
+        assertionTimeoutMs: 1,
+        artifacts: {
+          mode: "retain-on-failure",
+          sink,
+          traces: true,
+          screenshots: true,
+          videos: true
+        }
+      }).createExecution(context);
+
+      await execution.start();
+      await execution.openEntry(operation);
+      await execution.close({ executionFailed: true });
+
+      assert.equal(
+        context.evidence.snapshot().some((event) => event.type === "profile.execution.failed"),
+        false
+      );
+      assert.equal(contextInputs.length, 1);
+      assert.ok(sink.attachments.some((attachment) => attachment.name.endsWith("-trace.zip")));
+      assert.ok(sink.attachments.some((attachment) => attachment.name.endsWith(".png")));
+      assert.ok(sink.attachments.some((attachment) => attachment.name.endsWith(".webm")));
+    }
+  },
+  {
     name: "playwright adapter notifies observers for state, transition, and control-flow operations",
     async run() {
       const sourcePlan = await loadFixturePlan();
@@ -925,12 +1268,13 @@ const tests: TestCase[] = [
     }
   },
   {
-    name: "nextcloud driver creates actor sessions through adapter context hook",
+    name: "nextcloud driver owns actor sessions per driver execution",
     async run() {
       const plan = await loadFixturePlan();
       const operation = stateOperation(plan, "urn:state:alice-files-ready");
       const createdInputs: PlaywrightCreateBrowserContextInput[] = [];
       const browserContext = new FakeBrowserContext(1);
+      const entryContexts: unknown[] = [];
       const context: PlaywrightDriverExecutionContext = {
         ...fakeDriverContext(),
         createBrowserContext(input) {
@@ -946,20 +1290,47 @@ const tests: TestCase[] = [
           "urn:user:alice": { username: "alice", password: "secret" }
         },
         entries: {
-          "nextcloud.files": () => undefined
+          "nextcloud.files": ({ context }) => {
+            entryContexts.push(context);
+          }
         },
         login: () => undefined,
         awaitApplicationSettled: () => undefined
       });
 
-      await driver.setupExecution(context);
-      await driver.openEntry(operation, context);
-      await driver.teardownExecution(context);
+      const execution = driver.createExecution(context);
+      await execution.start();
+      await execution.openEntry(operation);
+      await execution.openEntry(operation);
+      await execution.close({ executionFailed: false });
 
       assert.equal(createdInputs.length, 1);
       assert.equal(createdInputs[0].operation?.id, operation.id);
       assert.equal(createdInputs[0].label, "urn:user:alice-urn:touchpoint:nextcloud-a");
+      assert.equal(entryContexts.length, 2);
+      assert.equal(entryContexts[0], entryContexts[1]);
       assert.equal(browserContext.closed, true);
+
+      const secondCreatedInputs: PlaywrightCreateBrowserContextInput[] = [];
+      const secondBrowserContext = new FakeBrowserContext(1);
+      const secondContext: PlaywrightDriverExecutionContext = {
+        ...fakeDriverContext(),
+        executionId: "second-execution",
+        createBrowserContext(input) {
+          secondCreatedInputs.push(input ?? {});
+          return Promise.resolve(secondBrowserContext as never);
+        }
+      };
+      const secondExecution = driver.createExecution(secondContext);
+      await secondExecution.start();
+      await secondExecution.openEntry(operation);
+      await secondExecution.close({ executionFailed: false });
+
+      assert.equal(secondCreatedInputs.length, 1);
+      assert.notEqual(secondBrowserContext, browserContext);
+      assert.equal(secondBrowserContext.closed, true);
+      assert.equal(browserContext.closeCalls, 1);
+      assert.equal(secondBrowserContext.closeCalls, 1);
     }
   },
   {
@@ -1331,7 +1702,7 @@ function select(
   profile: ReturnType<typeof defaultProfile>,
   operation: TransitionPlanOperation
 ): InputModalityDecision {
-  return profile.selectInputModality(operation, {} as AdapterExecutionContext) as InputModalityDecision;
+  return profile.selectInputModality(operation, {} as JourneyExecutionContext) as InputModalityDecision;
 }
 
 function cloneOperation(operation: TransitionPlanOperation): TransitionPlanOperation {
@@ -1340,36 +1711,63 @@ function cloneOperation(operation: TransitionPlanOperation): TransitionPlanOpera
 
 function fakeAdapter(
   calls: string[],
-  options: { failStateId?: string } = {}
+  options: {
+    failCreate?: boolean;
+    failStart?: boolean;
+    failStateId?: string;
+    failClose?: boolean;
+    onCreate?: (context: JourneyExecutionContext) => void;
+    onClose?: (
+      input: { readonly executionFailed: boolean },
+      context: JourneyExecutionContext
+    ) => void;
+  } = {}
 ): JourneyAdapter {
   return {
     name: "fake-adapter",
 
-    setupExecution(context) {
-      calls.push(`${context.profile.id}:setup`);
-    },
-
-    openEntry(operation, context) {
-      calls.push(`${context.profile.id}:open:${operation.entryBinding?.value ?? "none"}`);
-    },
-
-    assertState(operation, context) {
-      calls.push(`${context.profile.id}:state:${operation.state.id}`);
-      if (operation.state.id === options.failStateId) {
-        throw new Error(`Injected state failure for ${operation.state.id}`);
+    createExecution(context) {
+      calls.push(`${context.profile.id}:create`);
+      if (options.failCreate) {
+        throw new Error("Injected adapter creation failure");
       }
-    },
+      options.onCreate?.(context);
 
-    performTransition(operation, decision, context) {
-      calls.push(`${context.profile.id}:transition:${operation.transition.id}:${decision.command}`);
-    },
+      return {
+        start() {
+          calls.push(`${context.profile.id}:setup`);
+          if (options.failStart) {
+            throw new Error("Injected adapter startup failure");
+          }
+        },
 
-    recordControlFlow(operation, context) {
-      calls.push(`${context.profile.id}:control-flow:${operation.transition.id}`);
-    },
+        openEntry(operation) {
+          calls.push(`${context.profile.id}:open:${operation.entryBinding?.value ?? "none"}`);
+        },
 
-    teardownExecution(context) {
-      calls.push(`${context.profile.id}:teardown`);
+        assertState(operation) {
+          calls.push(`${context.profile.id}:state:${operation.state.id}`);
+          if (operation.state.id === options.failStateId) {
+            throw new Error(`Injected state failure for ${operation.state.id}`);
+          }
+        },
+
+        performTransition(operation, decision) {
+          calls.push(`${context.profile.id}:transition:${operation.transition.id}:${decision.command}`);
+        },
+
+        recordControlFlow(operation) {
+          calls.push(`${context.profile.id}:control-flow:${operation.transition.id}`);
+        },
+
+        close(input) {
+          options.onClose?.(input, context);
+          calls.push(`${context.profile.id}:teardown`);
+          if (options.failClose) {
+            throw new Error("Injected adapter close failure");
+          }
+        }
+      };
     }
   };
 }
@@ -1416,37 +1814,41 @@ async function runArtifactJourney(input: {
 function artifactTestDriver(
   contextInputs: PlaywrightCreateBrowserContextInput[]
 ): PlaywrightJourneyDriver {
-  let page: FakeArtifactPage | undefined;
-
   return {
     name: "artifact-test-driver",
-    setupExecution() {
-      return undefined;
-    },
-    async openEntry(operation, context) {
-      const input = {
-        operation,
-        label: "artifact-actor"
+    createExecution(context) {
+      let page: FakeArtifactPage | undefined;
+
+      return {
+        start() {
+          return undefined;
+        },
+        async openEntry(operation) {
+          const input = {
+            operation,
+            label: "artifact-actor"
+          };
+          contextInputs.push(input);
+          const browserContext = await context.createBrowserContext(input);
+          page = await browserContext.newPage() as unknown as FakeArtifactPage;
+        },
+        pageForOperation() {
+          if (!page) throw new Error("Artifact test page was not created");
+          return page as never;
+        },
+        transitionValue() {
+          return undefined;
+        },
+        afterTransition() {
+          return undefined;
+        },
+        recordControlFlow() {
+          return undefined;
+        },
+        close() {
+          return undefined;
+        }
       };
-      contextInputs.push(input);
-      const browserContext = await context.createBrowserContext(input);
-      page = await browserContext.newPage() as unknown as FakeArtifactPage;
-    },
-    pageForOperation() {
-      if (!page) throw new Error("Artifact test page was not created");
-      return page as never;
-    },
-    transitionValue() {
-      return undefined;
-    },
-    afterTransition() {
-      return undefined;
-    },
-    recordControlFlow() {
-      return undefined;
-    },
-    teardownExecution() {
-      return undefined;
     }
   };
 }
@@ -1512,6 +1914,7 @@ class FakeLocator {
 class FakeBrowser {
   readonly contexts: FakeBrowserContext[] = [];
   closed = false;
+  closeCalls = 0;
 
   constructor(private readonly locatorCount: number) {}
 
@@ -1522,6 +1925,7 @@ class FakeBrowser {
   }
 
   async close(): Promise<void> {
+    this.closeCalls += 1;
     this.closed = true;
   }
 }
@@ -1530,6 +1934,7 @@ class FakeBrowserContext {
   readonly pagesList: FakeArtifactPage[] = [];
   readonly tracing = new FakeTracing();
   closed = false;
+  closeCalls = 0;
   private readonly pageListeners: Array<(page: FakeArtifactPage) => void> = [];
 
   constructor(
@@ -1558,6 +1963,7 @@ class FakeBrowserContext {
   }
 
   async close(): Promise<void> {
+    this.closeCalls += 1;
     this.closed = true;
   }
 }
@@ -1626,26 +2032,30 @@ class FakeArtifactSink {
 function testPlaywrightDriver(): PlaywrightJourneyDriver {
   return {
     name: "feature-resolving-driver",
-    setupExecution() {
-      return undefined;
-    },
-    openEntry() {
-      return undefined;
-    },
-    pageForOperation() {
-      return new FakeLocator("page") as never;
-    },
-    transitionValue() {
-      return undefined;
-    },
-    afterTransition() {
-      return undefined;
-    },
-    recordControlFlow() {
-      return undefined;
-    },
-    teardownExecution() {
-      return undefined;
+    createExecution() {
+      return {
+        start() {
+          return undefined;
+        },
+        openEntry() {
+          return undefined;
+        },
+        pageForOperation() {
+          return new FakeLocator("page") as never;
+        },
+        transitionValue() {
+          return undefined;
+        },
+        afterTransition() {
+          return undefined;
+        },
+        recordControlFlow() {
+          return undefined;
+        },
+        close() {
+          return undefined;
+        }
+      };
     }
   };
 }

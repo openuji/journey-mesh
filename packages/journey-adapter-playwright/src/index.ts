@@ -14,11 +14,13 @@ import {
 
 import type {
   AccessibleFeature,
-  AdapterExecutionContext,
   ControlFlowPlanOperation,
   InputModalityDecision,
   JourneyAdapter,
+  JourneyAdapterCloseInput,
+  JourneyAdapterExecution,
   JourneyInteractionCommand,
+  JourneyExecutionContext,
   JourneyObserver,
   JourneyPlanOperation,
   JsonObject,
@@ -57,43 +59,36 @@ export type PlaywrightArtifactOptions = {
   videos?: boolean;
 };
 
-export type PlaywrightDriverExecutionContext = AdapterExecutionContext & {
+export type PlaywrightDriverExecutionContext = JourneyExecutionContext & {
   browser: Browser;
   createBrowserContext(
     input?: PlaywrightCreateBrowserContextInput
   ): Promise<BrowserContext>;
 };
 
-export type PlaywrightTransitionValueInput = {
-  operation: TransitionPlanOperation;
-  context: PlaywrightDriverExecutionContext;
+export type PlaywrightDriverCloseInput = {
+  readonly executionFailed: boolean;
 };
 
 export type PlaywrightJourneyDriver = {
-  name: string;
-  version?: string;
-  setupExecution(context: PlaywrightDriverExecutionContext): Promise<void> | void;
-  openEntry(
-    operation: JourneyPlanOperation,
+  readonly name: string;
+  readonly version?: string;
+  createExecution(
     context: PlaywrightDriverExecutionContext
-  ): Promise<void> | void;
-  pageForOperation(
-    operation: JourneyPlanOperation,
-    context: PlaywrightDriverExecutionContext
-  ): Promise<Page> | Page;
-  transitionValue(
-    input: PlaywrightTransitionValueInput
-  ): Promise<string | undefined> | string | undefined;
+  ): PlaywrightJourneyDriverExecution;
+};
+
+export type PlaywrightJourneyDriverExecution = {
+  start(): Promise<void> | void;
+  openEntry(operation: JourneyPlanOperation): Promise<void> | void;
+  pageForOperation(operation: JourneyPlanOperation): Promise<Page> | Page;
+  transitionValue(operation: TransitionPlanOperation): Promise<string | undefined> | string | undefined;
   afterTransition(
     operation: TransitionPlanOperation,
-    decision: InputModalityDecision,
-    context: PlaywrightDriverExecutionContext
+    decision: InputModalityDecision
   ): Promise<void> | void;
-  recordControlFlow(
-    operation: ControlFlowPlanOperation,
-    context: PlaywrightDriverExecutionContext
-  ): Promise<void> | void;
-  teardownExecution(context: PlaywrightDriverExecutionContext): Promise<void> | void;
+  recordControlFlow(operation: ControlFlowPlanOperation): Promise<void> | void;
+  close(input: PlaywrightDriverCloseInput): Promise<void> | void;
 };
 
 export type PlaywrightOperationObservation =
@@ -151,13 +146,6 @@ type LocatorResolutionOptions = {
   context?: PlaywrightDriverExecutionContext;
 };
 
-type AdapterExecutionState = {
-  browser: Browser;
-  ownsBrowser: boolean;
-  context: PlaywrightDriverExecutionContext;
-  browserContexts: BrowserContextRecord[];
-};
-
 type BrowserContextRecord = {
   id: string;
   label: string;
@@ -178,7 +166,6 @@ const roleOptionFeatureNames = new Set(["expanded"]);
 const defaultAssertionTimeoutMs = 30_000;
 
 export function playwrightAdapter(options: PlaywrightAdapterOptions): JourneyAdapter {
-  const executions = new Map<string, AdapterExecutionState>();
   const artifactOptions = resolveArtifactOptions(options.artifacts);
 
   if (artifactOptions.mode !== "off" && !artifactOptions.sink) {
@@ -189,167 +176,272 @@ export function playwrightAdapter(options: PlaywrightAdapterOptions): JourneyAda
     name: "@openuji/journey-adapter-playwright",
     version: "0.1.0",
 
-    async setupExecution(context) {
-      const browser = options.browser ?? await launchBrowser(options);
-      const state: AdapterExecutionState = {
-        browser,
-        ownsBrowser: !options.browser,
-        context: undefined as unknown as PlaywrightDriverExecutionContext,
-        browserContexts: []
-      };
-      const driverContext: PlaywrightDriverExecutionContext = {
-        ...context,
-        browser,
-        createBrowserContext(input) {
-          return createTrackedBrowserContext(state, context, options, artifactOptions, input);
-        }
-      };
-      state.context = driverContext;
+    createExecution(context) {
+      return new PlaywrightAdapterExecution(context, options, artifactOptions);
+    }
+  };
+}
 
-      executions.set(context.executionId, {
-        browser,
-        ownsBrowser: state.ownsBrowser,
-        context: driverContext,
-        browserContexts: state.browserContexts
-      });
+class PlaywrightAdapterExecution implements JourneyAdapterExecution {
+  private browser?: Browser;
+  private ownsBrowser = false;
+  private driverContext?: PlaywrightDriverExecutionContext;
+  private driverExecution?: PlaywrightJourneyDriverExecution;
+  private readonly browserContexts: BrowserContextRecord[] = [];
+  private lifecycle: "created" | "starting" | "started" | "closing" | "closed" = "created";
 
-      context.evidence.emit({
-        type: state.ownsBrowser ? "playwright.browser.launched" : "playwright.browser.attached",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        ok: true,
-        data: {
-          headless: state.ownsBrowser ? options.headless ?? true : null,
-          owned: state.ownsBrowser,
-          driver: componentData(options.driver)
-        }
-      });
+  constructor(
+    private readonly context: JourneyExecutionContext,
+    private readonly options: PlaywrightAdapterOptions,
+    private readonly artifactOptions: ResolvedArtifactOptions
+  ) {}
 
-      await options.driver.setupExecution(driverContext);
-    },
+  async start(): Promise<void> {
+    if (this.lifecycle !== "created") {
+      throw new Error(`Playwright adapter execution ${this.context.executionId} cannot start from ${this.lifecycle}`);
+    }
 
-    async openEntry(operation, context) {
-      const state = requireExecutionState(executions, context.executionId);
-      await options.driver.openEntry(operation, state.context);
-    },
+    this.lifecycle = "starting";
+    this.browser = this.options.browser ?? await launchBrowser(this.options);
+    this.ownsBrowser = this.options.browser === undefined;
+    this.driverContext = {
+      ...this.context,
+      browser: this.browser,
+      createBrowserContext: (input) => this.createBrowserContext(input)
+    };
+    this.driverExecution = this.options.driver.createExecution(this.driverContext);
 
-    async assertState(operation, context) {
-      const state = requireExecutionState(executions, context.executionId);
-      const page = await options.driver.pageForOperation(operation, state.context);
-      const locator = await toPlaywrightObservationLocator(page, operation.target.bindings, {
-        operation,
-        context: state.context,
-        driver: options.driver
-      });
+    this.context.evidence.emit({
+      type: this.ownsBrowser ? "playwright.browser.launched" : "playwright.browser.attached",
+      executionId: this.context.executionId,
+      profileId: this.context.profile.id,
+      ok: true,
+      data: {
+        headless: this.ownsBrowser ? this.options.headless ?? true : null,
+        owned: this.ownsBrowser,
+        driver: componentData(this.options.driver)
+      }
+    });
 
-      await assertPlaywrightLocator(locator, operation.target.expectedMatchCount, {
-        timeoutMs: options.assertionTimeoutMs ?? defaultAssertionTimeoutMs
-      });
+    await this.driverExecution.start();
+    this.lifecycle = "started";
+  }
 
-      context.evidence.emit({
-        type: "playwright.assertion.completed",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        operationId: operation.id,
-        operationKind: operation.kind,
-        ok: true,
-        references: referencesForOperation(context.plan, operation),
-        data: {
-          expectedMatchCount: operation.target.expectedMatchCount
-        }
-      });
+  async openEntry(operation: JourneyPlanOperation): Promise<void> {
+    await this.requireStartedDriver().openEntry(operation);
+  }
 
-      await notifyPlaywrightObservers({
-        context: state.context,
-        expectedMatchCount: operation.target.expectedMatchCount,
-        locator,
-        operation,
-        page,
-        stage: "state-asserted"
-      });
-    },
+  async assertState(operation: StatePlanOperation): Promise<void> {
+    const driver = this.requireStartedDriver();
+    const context = this.requireDriverContext();
+    const page = await driver.pageForOperation(operation);
+    const locator = await toPlaywrightObservationLocator(page, operation.target.bindings, {
+      operation,
+      context,
+      driver: this.options.driver
+    });
 
-    async performTransition(operation, decision, context) {
-      const state = requireExecutionState(executions, context.executionId);
-      const page = await options.driver.pageForOperation(operation, state.context);
-      const locator = await toPlaywrightObservationLocator(page, operation.activation.bindings, {
-        operation,
-        context: state.context,
-        driver: options.driver
-      });
+    await assertPlaywrightLocator(locator, operation.target.expectedMatchCount, {
+      timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs
+    });
 
-      await assertPlaywrightLocator(locator, 1, {
-        timeoutMs: options.assertionTimeoutMs ?? defaultAssertionTimeoutMs
-      });
+    context.evidence.emit({
+      type: "playwright.assertion.completed",
+      executionId: context.executionId,
+      profileId: context.profile.id,
+      operationId: operation.id,
+      operationKind: operation.kind,
+      ok: true,
+      references: referencesForOperation(context.plan, operation),
+      data: {
+        expectedMatchCount: operation.target.expectedMatchCount
+      }
+    });
 
-      await notifyPlaywrightObservers({
-        context: state.context,
-        decision,
-        expectedMatchCount: 1,
-        locator,
-        operation,
-        page,
-        stage: "transition-ready"
-      });
+    await notifyPlaywrightObservers({
+      context,
+      expectedMatchCount: operation.target.expectedMatchCount,
+      locator,
+      operation,
+      page,
+      stage: "state-asserted"
+    });
+  }
 
-      const text = decision.command === "keyboard-text-entry"
-        ? await options.driver.transitionValue({ operation, context: state.context })
-        : undefined;
+  async performTransition(
+    operation: TransitionPlanOperation,
+    decision: InputModalityDecision
+  ): Promise<void> {
+    const driver = this.requireStartedDriver();
+    const context = this.requireDriverContext();
+    const page = await driver.pageForOperation(operation);
+    const locator = await toPlaywrightObservationLocator(page, operation.activation.bindings, {
+      operation,
+      context,
+      driver: this.options.driver
+    });
 
-      await activatePlaywrightLocator(locator, decision.command, text);
-      await options.driver.afterTransition(operation, decision, state.context);
+    await assertPlaywrightLocator(locator, 1, {
+      timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs
+    });
 
-      context.evidence.emit({
-        type: "playwright.transition.completed",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        operationId: operation.id,
-        operationKind: operation.kind,
-        ok: true,
-        references: referencesForOperation(context.plan, operation),
-        data: {
-          command: decision.command,
-          inputModalityProfileId: decision.inputModalityProfile.id,
-          modalityId: decision.modality.id
-        }
-      });
-    },
+    await notifyPlaywrightObservers({
+      context,
+      decision,
+      expectedMatchCount: 1,
+      locator,
+      operation,
+      page,
+      stage: "transition-ready"
+    });
 
-    async recordControlFlow(operation, context) {
-      const state = requireExecutionState(executions, context.executionId);
-      await options.driver.recordControlFlow(operation, state.context);
-      await notifyPlaywrightObservers({
-        context: state.context,
-        operation,
-        stage: "control-flow-recorded"
-      });
-    },
+    const text = decision.command === "keyboard-text-entry"
+      ? await driver.transitionValue(operation)
+      : undefined;
 
-    async teardownExecution(context) {
-      const state = executions.get(context.executionId);
-      if (!state) return;
+    await activatePlaywrightLocator(locator, decision.command, text);
+    await driver.afterTransition(operation, decision);
 
-      const retainArtifacts = shouldRetainArtifacts(context, artifactOptions.mode);
+    context.evidence.emit({
+      type: "playwright.transition.completed",
+      executionId: context.executionId,
+      profileId: context.profile.id,
+      operationId: operation.id,
+      operationKind: operation.kind,
+      ok: true,
+      references: referencesForOperation(context.plan, operation),
+      data: {
+        command: decision.command,
+        inputModalityProfileId: decision.inputModalityProfile.id,
+        modalityId: decision.modality.id
+      }
+    });
+  }
 
-      try {
-        await captureScreenshotsAndStopTraces(state, context, artifactOptions, retainArtifacts);
-        await options.driver.teardownExecution(state.context);
-      } finally {
-        await closeTrackedBrowserContexts(state, context);
-        await attachVideos(state, context, artifactOptions, retainArtifacts);
-        if (state.ownsBrowser) {
-          await state.browser.close();
-        }
-        executions.delete(context.executionId);
-        context.evidence.emit({
-          type: state.ownsBrowser ? "playwright.browser.closed" : "playwright.browser.released",
-          executionId: context.executionId,
-          profileId: context.profile.id,
+  async recordControlFlow(operation: ControlFlowPlanOperation): Promise<void> {
+    const driver = this.requireStartedDriver();
+    const context = this.requireDriverContext();
+    await driver.recordControlFlow(operation);
+    await notifyPlaywrightObservers({
+      context,
+      operation,
+      stage: "control-flow-recorded"
+    });
+  }
+
+  async close(input: JourneyAdapterCloseInput): Promise<void> {
+    if (this.lifecycle === "closed" || this.lifecycle === "closing") {
+      return;
+    }
+
+    this.lifecycle = "closing";
+    const retainArtifacts = shouldRetainArtifacts(input.executionFailed, this.artifactOptions.mode);
+
+    try {
+      await captureScreenshotsAndStopTraces(
+        this.browserContexts,
+        this.context,
+        this.artifactOptions,
+        retainArtifacts
+      );
+      await this.driverExecution?.close({ executionFailed: input.executionFailed });
+    } finally {
+      await closeTrackedBrowserContexts(this.browserContexts, this.context);
+      await attachVideos(this.browserContexts, this.context, this.artifactOptions, retainArtifacts);
+      if (this.ownsBrowser && this.browser) {
+        await this.browser.close();
+      }
+      if (this.browser) {
+        this.context.evidence.emit({
+          type: this.ownsBrowser ? "playwright.browser.closed" : "playwright.browser.released",
+          executionId: this.context.executionId,
+          profileId: this.context.profile.id,
           ok: true
         });
       }
+      this.lifecycle = "closed";
     }
-  };
+  }
+
+  private async createBrowserContext(
+    input: PlaywrightCreateBrowserContextInput = {}
+  ): Promise<BrowserContext> {
+    const browser = this.requireBrowser();
+    const id = `context-${String(this.browserContexts.length + 1).padStart(2, "0")}`;
+    const label = input.label ?? id;
+    const browserContextOptions = await browserContextOptionsForArtifacts(
+      this.options,
+      this.artifactOptions
+    );
+    const browserContext = await browser.newContext(browserContextOptions);
+    const record: BrowserContextRecord = {
+      id,
+      label,
+      browserContext,
+      pages: new Set(browserContext.pages()),
+      traceStarted: false
+    };
+
+    browserContext.on("page", (page) => {
+      record.pages.add(page);
+    });
+
+    this.browserContexts.push(record);
+    this.context.evidence.emit({
+      type: "playwright.context.created",
+      executionId: this.context.executionId,
+      profileId: this.context.profile.id,
+      ok: true,
+      data: {
+        id,
+        label,
+        operationId: input.operation?.id ?? null,
+        ...(input.data ? { input: input.data } : {})
+      }
+    });
+
+    if (this.artifactOptions.mode !== "off" && this.artifactOptions.traces) {
+      await browserContext.tracing.start({
+        screenshots: true,
+        snapshots: true,
+        sources: true
+      });
+      record.traceStarted = true;
+      this.context.evidence.emit({
+        type: "playwright.trace.started",
+        executionId: this.context.executionId,
+        profileId: this.context.profile.id,
+        ok: true,
+        data: { contextId: id, label }
+      });
+    }
+
+    return browserContext;
+  }
+
+  private requireStartedDriver(): PlaywrightJourneyDriverExecution {
+    if (this.lifecycle !== "started" || !this.driverExecution) {
+      throw new Error(`Playwright adapter execution ${this.context.executionId} is not started`);
+    }
+
+    return this.driverExecution;
+  }
+
+  private requireDriverContext(): PlaywrightDriverExecutionContext {
+    if (!this.driverContext) {
+      throw new Error(`Playwright adapter execution ${this.context.executionId} has no driver context`);
+    }
+
+    return this.driverContext;
+  }
+
+  private requireBrowser(): Browser {
+    if (!this.browser) {
+      throw new Error(`Playwright adapter execution ${this.context.executionId} has no browser`);
+    }
+
+    return this.browser;
+  }
 }
 
 async function launchBrowser(options: PlaywrightAdapterOptions): Promise<Browser> {
@@ -358,62 +450,6 @@ async function launchBrowser(options: PlaywrightAdapterOptions): Promise<Browser
     headless: options.headless ?? true,
     ...options.launchOptions
   });
-}
-
-async function createTrackedBrowserContext(
-  state: AdapterExecutionState,
-  context: AdapterExecutionContext,
-  options: PlaywrightAdapterOptions,
-  artifactOptions: ResolvedArtifactOptions,
-  input: PlaywrightCreateBrowserContextInput = {}
-): Promise<BrowserContext> {
-  const id = `context-${String(state.browserContexts.length + 1).padStart(2, "0")}`;
-  const label = input.label ?? id;
-  const browserContextOptions = await browserContextOptionsForArtifacts(options, artifactOptions);
-  const browserContext = await state.browser.newContext(browserContextOptions);
-  const record: BrowserContextRecord = {
-    id,
-    label,
-    browserContext,
-    pages: new Set(browserContext.pages()),
-    traceStarted: false
-  };
-
-  browserContext.on("page", (page) => {
-    record.pages.add(page);
-  });
-
-  state.browserContexts.push(record);
-  context.evidence.emit({
-    type: "playwright.context.created",
-    executionId: context.executionId,
-    profileId: context.profile.id,
-    ok: true,
-    data: {
-      id,
-      label,
-      operationId: input.operation?.id ?? null,
-      ...(input.data ? { input: input.data } : {})
-    }
-  });
-
-  if (artifactOptions.mode !== "off" && artifactOptions.traces) {
-    await browserContext.tracing.start({
-      screenshots: true,
-      snapshots: true,
-      sources: true
-    });
-    record.traceStarted = true;
-    context.evidence.emit({
-      type: "playwright.trace.started",
-      executionId: context.executionId,
-      profileId: context.profile.id,
-      ok: true,
-      data: { contextId: id, label }
-    });
-  }
-
-  return browserContext;
 }
 
 async function browserContextOptionsForArtifacts(
@@ -438,12 +474,12 @@ async function browserContextOptionsForArtifacts(
 }
 
 async function captureScreenshotsAndStopTraces(
-  state: AdapterExecutionState,
-  context: AdapterExecutionContext,
+  browserContexts: readonly BrowserContextRecord[],
+  context: JourneyExecutionContext,
   artifactOptions: ResolvedArtifactOptions,
   retainArtifacts: boolean
 ): Promise<void> {
-  for (const browserContext of state.browserContexts) {
+  for (const browserContext of browserContexts) {
     if (retainArtifacts && artifactOptions.screenshots) {
       await captureScreenshots(browserContext, context, artifactOptions);
     }
@@ -456,7 +492,7 @@ async function captureScreenshotsAndStopTraces(
 
 async function captureScreenshots(
   browserContext: BrowserContextRecord,
-  context: AdapterExecutionContext,
+  context: JourneyExecutionContext,
   artifactOptions: ResolvedArtifactOptions
 ): Promise<void> {
   const sink = artifactOptions.sink;
@@ -494,7 +530,7 @@ async function captureScreenshots(
 
 async function stopTrace(
   browserContext: BrowserContextRecord,
-  context: AdapterExecutionContext,
+  context: JourneyExecutionContext,
   artifactOptions: ResolvedArtifactOptions,
   retainArtifacts: boolean
 ): Promise<void> {
@@ -537,11 +573,11 @@ async function stopTrace(
 }
 
 async function closeTrackedBrowserContexts(
-  state: AdapterExecutionState,
-  context: AdapterExecutionContext
+  browserContexts: readonly BrowserContextRecord[],
+  context: JourneyExecutionContext
 ): Promise<void> {
   await Promise.all(
-    state.browserContexts.map(async (record) => {
+    browserContexts.map(async (record) => {
       try {
         await record.browserContext.close();
       } catch (error) {
@@ -555,14 +591,14 @@ async function closeTrackedBrowserContexts(
 }
 
 async function attachVideos(
-  state: AdapterExecutionState,
-  context: AdapterExecutionContext,
+  browserContexts: readonly BrowserContextRecord[],
+  context: JourneyExecutionContext,
   artifactOptions: ResolvedArtifactOptions,
   retainArtifacts: boolean
 ): Promise<void> {
   if (!artifactOptions.videos) return;
 
-  for (const browserContext of state.browserContexts) {
+  for (const browserContext of browserContexts) {
     const pages = trackedPages(browserContext);
     for (const [index, page] of pages.entries()) {
       const video = page.video();
@@ -809,18 +845,6 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function requireExecutionState(
-  executions: Map<string, AdapterExecutionState>,
-  executionId: string
-): AdapterExecutionState {
-  const state = executions.get(executionId);
-  if (!state) {
-    throw new Error(`No Playwright execution state for ${executionId}`);
-  }
-
-  return state;
-}
-
 function collectLocatorIds(locators: ResolvedAccessibleLocator[]): string[] {
   return locators.flatMap((locator) => [locator.id, ...collectLocatorIds(locator.contexts)]);
 }
@@ -839,17 +863,12 @@ function resolveArtifactOptions(
 }
 
 function shouldRetainArtifacts(
-  context: AdapterExecutionContext,
+  executionFailed: boolean,
   mode: PlaywrightArtifactMode
 ): boolean {
   if (mode === "always") return true;
   if (mode === "off") return false;
-
-  return context.evidence.snapshot().some((event) =>
-    event.executionId === context.executionId &&
-    event.type === "profile.execution.failed" &&
-    event.ok === false
-  );
+  return executionFailed;
 }
 
 function trackedPages(record: BrowserContextRecord): Page[] {
@@ -869,7 +888,7 @@ function safePathSegment(value: string): string {
 }
 
 function emitArtifactFailure(
-  context: AdapterExecutionContext,
+  context: JourneyExecutionContext,
   type: string,
   error: unknown,
   data: JsonObject

@@ -67,37 +67,40 @@ export type {
   JsonValue
 } from "@openuji/journey-evidence";
 
-export type AdapterExecutionContext = {
-  runId: string;
-  executionId: string;
-  profile: JourneyProfile;
-  plan: JourneyPlan;
-  evidence: EvidenceRecorder;
-  observers: readonly JourneyObserver[];
+export type JourneyExecutionContext = {
+  readonly runId: string;
+  readonly executionId: string;
+  readonly profile: JourneyProfile;
+  readonly plan: JourneyPlan;
+  readonly evidence: EvidenceRecorder;
+  readonly observers: readonly JourneyObserver[];
+};
+
+/**
+ * @deprecated Use JourneyExecutionContext.
+ */
+export type AdapterExecutionContext = JourneyExecutionContext;
+
+export type JourneyAdapterCloseInput = {
+  readonly executionFailed: boolean;
 };
 
 export type JourneyAdapter = {
-  name: string;
-  version?: string;
-  setupExecution(context: AdapterExecutionContext): Promise<void> | void;
-  openEntry(
-    operation: JourneyPlanOperation,
-    context: AdapterExecutionContext
-  ): Promise<void> | void;
-  assertState(
-    operation: StatePlanOperation,
-    context: AdapterExecutionContext
-  ): Promise<void> | void;
+  readonly name: string;
+  readonly version?: string;
+  createExecution(context: JourneyExecutionContext): JourneyAdapterExecution;
+};
+
+export type JourneyAdapterExecution = {
+  start(): Promise<void> | void;
+  openEntry(operation: JourneyPlanOperation): Promise<void> | void;
+  assertState(operation: StatePlanOperation): Promise<void> | void;
   performTransition(
     operation: TransitionPlanOperation,
-    decision: InputModalityDecision,
-    context: AdapterExecutionContext
+    decision: InputModalityDecision
   ): Promise<void> | void;
-  recordControlFlow(
-    operation: ControlFlowPlanOperation,
-    context: AdapterExecutionContext
-  ): Promise<void> | void;
-  teardownExecution(context: AdapterExecutionContext): Promise<void> | void;
+  recordControlFlow(operation: ControlFlowPlanOperation): Promise<void> | void;
+  close(input: JourneyAdapterCloseInput): Promise<void> | void;
 };
 
 export type JourneyProfile = {
@@ -105,7 +108,7 @@ export type JourneyProfile = {
   label?: string;
   selectInputModality(
     operation: TransitionPlanOperation,
-    context: AdapterExecutionContext
+    context: JourneyExecutionContext
   ): Promise<InputModalityDecision> | InputModalityDecision;
 };
 
@@ -132,11 +135,11 @@ export type JourneyObserverRunCompletedInput = {
 };
 
 export type JourneyObserverExecutionInput = {
-  context: AdapterExecutionContext;
+  context: JourneyExecutionContext;
 };
 
 export type JourneyObserverExecutionCompletedInput = {
-  context: AdapterExecutionContext;
+  context: JourneyExecutionContext;
   execution: ExecutionResult;
 };
 
@@ -233,7 +236,7 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
 
   for (const [profileIndex, profile] of options.profiles.entries()) {
     const executionId = `${safeSegment(profile.id)}-${String(profileIndex + 1).padStart(2, "0")}`;
-    const context: AdapterExecutionContext = {
+    const context: JourneyExecutionContext = {
       runId,
       executionId,
       profile,
@@ -348,7 +351,7 @@ async function runProfileExecution({
   profile
 }: {
   adapter: JourneyAdapter;
-  context: AdapterExecutionContext;
+  context: JourneyExecutionContext;
   evidence: EvidenceRecorder;
   observers: readonly JourneyObserver[];
   plan: JourneyPlan;
@@ -357,6 +360,7 @@ async function runProfileExecution({
   let ok = true;
   let executionError: EvidenceError | undefined;
   const currentEntryByActor = new Map<string, string>();
+  let adapterExecution: JourneyAdapterExecution | undefined;
 
   evidence.emit({
     type: "profile.execution.started",
@@ -377,7 +381,8 @@ async function runProfileExecution({
       ok: true,
       data: componentData(adapter)
     });
-    await adapter.setupExecution(context);
+    adapterExecution = adapter.createExecution(context);
+    await adapterExecution.start();
     evidence.emit({
       type: "adapter.setup.completed",
       executionId: context.executionId,
@@ -388,14 +393,14 @@ async function runProfileExecution({
 
     for (const operation of plan.operations) {
       evidence.emit(operationEvent(operation, context, "operation.started", true));
-      await ensureEntryOpen({ adapter, context, currentEntryByActor, evidence, operation });
+      await ensureEntryOpen({ adapterExecution, context, currentEntryByActor, evidence, operation });
 
       if (operation.kind === "state") {
-        await assertState({ adapter, context, evidence, operation });
+        await assertState({ adapterExecution, context, evidence, operation });
       } else if (operation.kind === "transition") {
-        await performTransition({ adapter, context, evidence, operation, profile });
+        await performTransition({ adapterExecution, context, evidence, operation, profile });
       } else {
-        await recordControlFlow({ adapter, context, evidence, operation });
+        await recordControlFlow({ adapterExecution, context, evidence, operation });
       }
 
       evidence.emit(operationEvent(operation, context, "operation.completed", true));
@@ -411,33 +416,35 @@ async function runProfileExecution({
       error: executionError
     });
   } finally {
-    try {
-      evidence.emit({
-        type: "adapter.teardown.started",
-        executionId: context.executionId,
-        profileId: profile.id,
-        ok: true,
-        data: componentData(adapter)
-      });
-      await adapter.teardownExecution(context);
-      evidence.emit({
-        type: "adapter.teardown.completed",
-        executionId: context.executionId,
-        profileId: profile.id,
-        ok: true,
-        data: componentData(adapter)
-      });
-    } catch (error) {
-      ok = false;
-      executionError = errorToEvidence(error);
-      evidence.emit({
-        type: "adapter.teardown.failed",
-        executionId: context.executionId,
-        profileId: profile.id,
-        ok: false,
-        error: executionError,
-        data: componentData(adapter)
-      });
+    if (adapterExecution) {
+      try {
+        evidence.emit({
+          type: "adapter.teardown.started",
+          executionId: context.executionId,
+          profileId: profile.id,
+          ok: true,
+          data: componentData(adapter)
+        });
+        await adapterExecution.close({ executionFailed: !ok });
+        evidence.emit({
+          type: "adapter.teardown.completed",
+          executionId: context.executionId,
+          profileId: profile.id,
+          ok: true,
+          data: componentData(adapter)
+        });
+      } catch (error) {
+        ok = false;
+        executionError = errorToEvidence(error);
+        evidence.emit({
+          type: "adapter.teardown.failed",
+          executionId: context.executionId,
+          profileId: profile.id,
+          ok: false,
+          error: executionError,
+          data: componentData(adapter)
+        });
+      }
     }
   }
 
@@ -475,14 +482,14 @@ async function runProfileExecution({
 }
 
 async function ensureEntryOpen({
-  adapter,
+  adapterExecution,
   context,
   currentEntryByActor,
   evidence,
   operation
 }: {
-  adapter: JourneyAdapter;
-  context: AdapterExecutionContext;
+  adapterExecution: JourneyAdapterExecution;
+  context: JourneyExecutionContext;
   currentEntryByActor: Map<string, string>;
   evidence: EvidenceRecorder;
   operation: JourneyPlanOperation;
@@ -495,7 +502,7 @@ async function ensureEntryOpen({
   evidence.emit(operationEvent(operation, context, "adapter.open-entry.started", true, {
     entryBindingValue: operation.entryBinding.value
   }));
-  await adapter.openEntry(operation, context);
+  await adapterExecution.openEntry(operation);
   currentEntryByActor.set(operation.actorId, entryKey);
   evidence.emit(operationEvent(operation, context, "adapter.open-entry.completed", true, {
     entryBindingValue: operation.entryBinding.value
@@ -503,34 +510,34 @@ async function ensureEntryOpen({
 }
 
 async function assertState({
-  adapter,
+  adapterExecution,
   context,
   evidence,
   operation
 }: {
-  adapter: JourneyAdapter;
-  context: AdapterExecutionContext;
+  adapterExecution: JourneyAdapterExecution;
+  context: JourneyExecutionContext;
   evidence: EvidenceRecorder;
   operation: StatePlanOperation;
 }): Promise<void> {
   evidence.emit(operationEvent(operation, context, "adapter.assert-state.started", true, {
     expectedMatchCount: operation.target.expectedMatchCount
   }));
-  await adapter.assertState(operation, context);
+  await adapterExecution.assertState(operation);
   evidence.emit(operationEvent(operation, context, "adapter.assert-state.completed", true, {
     expectedMatchCount: operation.target.expectedMatchCount
   }));
 }
 
 async function performTransition({
-  adapter,
+  adapterExecution,
   context,
   evidence,
   operation,
   profile
 }: {
-  adapter: JourneyAdapter;
-  context: AdapterExecutionContext;
+  adapterExecution: JourneyAdapterExecution;
+  context: JourneyExecutionContext;
   evidence: EvidenceRecorder;
   operation: TransitionPlanOperation;
   profile: JourneyProfile;
@@ -546,7 +553,7 @@ async function performTransition({
   evidence.emit(operationEvent(operation, context, "adapter.perform-transition.started", true, {
     command: decision.command
   }));
-  await adapter.performTransition(operation, decision, context);
+  await adapterExecution.performTransition(operation, decision);
   evidence.emit(operationEvent(operation, context, "adapter.perform-transition.completed", true, {
     command: decision.command
   }));
@@ -561,18 +568,18 @@ async function performTransition({
 }
 
 async function recordControlFlow({
-  adapter,
+  adapterExecution,
   context,
   evidence,
   operation
 }: {
-  adapter: JourneyAdapter;
-  context: AdapterExecutionContext;
+  adapterExecution: JourneyAdapterExecution;
+  context: JourneyExecutionContext;
   evidence: EvidenceRecorder;
   operation: ControlFlowPlanOperation;
 }): Promise<void> {
   evidence.emit(operationEvent(operation, context, "adapter.control-flow.started", true));
-  await adapter.recordControlFlow(operation, context);
+  await adapterExecution.recordControlFlow(operation);
   evidence.emit(operationEvent(operation, context, "adapter.control-flow.completed", true));
 }
 
@@ -665,7 +672,7 @@ async function notifyExecutionStarted({
   evidence,
   observers
 }: {
-  context: AdapterExecutionContext;
+  context: JourneyExecutionContext;
   evidence: EvidenceRecorder;
   observers: readonly JourneyObserver[];
 }): Promise<void> {
@@ -709,7 +716,7 @@ async function notifyExecutionCompleted({
   execution,
   observers
 }: {
-  context: AdapterExecutionContext;
+  context: JourneyExecutionContext;
   evidence: EvidenceRecorder;
   execution: ExecutionResult;
   observers: readonly JourneyObserver[];
@@ -752,7 +759,7 @@ async function notifyExecutionCompleted({
 
 function operationEvent(
   operation: JourneyPlanOperation,
-  context: AdapterExecutionContext,
+  context: JourneyExecutionContext,
   type: string,
   ok: boolean,
   data?: JsonObject
