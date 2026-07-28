@@ -2,6 +2,7 @@ import type { BrowserContext, Page } from "playwright";
 
 import type {
   PlaywrightDriverCloseInput,
+  PlaywrightDriverExecutionInput,
   PlaywrightDriverExecutionContext,
   PlaywrightJourneyDriver,
   PlaywrightJourneyDriverExecution
@@ -9,10 +10,12 @@ import type {
 import type {
   ControlFlowPlanOperation,
   InputModalityDecision,
+  JourneyPlan,
   JourneyPlanOperation,
+  JourneyProfile,
   TransitionPlanOperation
 } from "@openuji/journey-runner";
-import { referencesForOperation } from "@openuji/journey-evidence";
+import { NextcloudEvidence } from "./evidence/nextcloud-evidence.js";
 
 export type Awaitable<T> = T | Promise<T>;
 
@@ -35,7 +38,12 @@ export type NextcloudActorSession = {
   page: Page;
 };
 
-export type NextcloudDriverContext = PlaywrightDriverExecutionContext & {
+export type NextcloudDriverContext = {
+  readonly runId: string;
+  readonly executionId: string;
+  readonly profileId: string;
+  readonly profile: JourneyProfile;
+  readonly plan: JourneyPlan;
   getSession(operation: JourneyPlanOperation): Promise<NextcloudActorSession>;
 };
 
@@ -84,26 +92,34 @@ export function nextcloudDriver(options: NextcloudDriverOptions): PlaywrightJour
     name: "@openuji/journey-driver-nextcloud",
     version: "0.1.0",
 
-    createExecution(context) {
-      return new NextcloudExecution(context, options);
+    createExecution(input) {
+      return new NextcloudExecution(input, options);
     }
   };
 }
 
 class NextcloudExecution implements PlaywrightJourneyDriverExecution {
   private readonly sessions = new Map<string, NextcloudActorSession>();
+  private readonly driverContext: PlaywrightDriverExecutionContext;
   private readonly context: NextcloudDriverContext;
+  private readonly events: NextcloudEvidence;
   private started = false;
   private closed = false;
 
   constructor(
-    context: PlaywrightDriverExecutionContext,
+    input: PlaywrightDriverExecutionInput,
     private readonly options: NextcloudDriverOptions
   ) {
+    this.driverContext = input.context;
     this.context = {
-      ...context,
+      runId: input.context.runId,
+      executionId: input.context.executionId,
+      profileId: input.context.profile.id,
+      profile: input.context.profile,
+      plan: input.context.plan,
       getSession: (operation) => this.getSession(operation)
     };
+    this.events = new NextcloudEvidence(input.context, input.evidence);
   }
 
   async start(): Promise<void> {
@@ -112,20 +128,10 @@ class NextcloudExecution implements PlaywrightJourneyDriverExecution {
       throw new Error(`Nextcloud execution ${this.context.executionId} has already started`);
     }
 
-    this.context.evidence.emit({
-      type: "nextcloud.execution.setup.started",
-      executionId: this.context.executionId,
-      profileId: this.context.profile.id,
-      ok: true
-    });
+    this.events.executionSetupStarted();
     await this.options.setupExecution?.(this.context);
     this.started = true;
-    this.context.evidence.emit({
-      type: "nextcloud.execution.setup.completed",
-      executionId: this.context.executionId,
-      profileId: this.context.profile.id,
-      ok: true
-    });
+    this.events.executionSetupCompleted();
   }
 
   async openEntry(operation: JourneyPlanOperation): Promise<void> {
@@ -143,19 +149,7 @@ class NextcloudExecution implements PlaywrightJourneyDriverExecution {
     await handler({ session, operation, context: this.context });
     await (this.options.awaitApplicationSettled ?? awaitNextcloudApplicationSettled)(session);
 
-    this.context.evidence.emit({
-      type: "nextcloud.entry.opened",
-      executionId: this.context.executionId,
-      profileId: this.context.profile.id,
-      operationId: operation.id,
-      operationKind: operation.kind,
-      ok: true,
-      references: referencesForOperation(this.context.plan, operation),
-      data: {
-        entryBindingValue: operation.entryBinding.value,
-        baseURL: String(session.touchpoint.baseURL)
-      }
-    });
+    this.events.entryOpened(operation, session);
   }
 
   async pageForOperation(operation: JourneyPlanOperation): Promise<Page> {
@@ -201,19 +195,7 @@ class NextcloudExecution implements PlaywrightJourneyDriverExecution {
 
   recordControlFlow(operation: ControlFlowPlanOperation): void {
     this.assertOpen();
-    this.context.evidence.emit({
-      type: "nextcloud.control-flow.recorded",
-      executionId: this.context.executionId,
-      profileId: this.context.profile.id,
-      operationId: operation.id,
-      operationKind: operation.kind,
-      ok: true,
-      references: referencesForOperation(this.context.plan, operation),
-      data: {
-        fromExitRef: operation.transition.fromExitRef ?? null,
-        toEntryRef: operation.transition.toEntryRef ?? null
-      }
-    });
+    this.events.controlFlowRecorded(operation);
   }
 
   async close(_input: PlaywrightDriverCloseInput): Promise<void> {
@@ -227,12 +209,7 @@ class NextcloudExecution implements PlaywrightJourneyDriverExecution {
       this.sessions.clear();
     }
 
-    this.context.evidence.emit({
-      type: "nextcloud.execution.teardown.completed",
-      executionId: this.context.executionId,
-      profileId: this.context.profile.id,
-      ok: true
-    });
+    this.events.executionTeardownCompleted();
   }
 
   private async getSession(operation: JourneyPlanOperation): Promise<NextcloudActorSession> {
@@ -249,7 +226,7 @@ class NextcloudExecution implements PlaywrightJourneyDriverExecution {
       throw new Error(`No Nextcloud touchpoint config for ${operation.touchpointId}`);
     }
 
-    const browserContext = await this.context.createBrowserContext({
+    const browserContext = await this.driverContext.createBrowserContext({
       operation,
       label: `${operation.actorId}-${operation.touchpointId}`,
       data: {
@@ -270,17 +247,7 @@ class NextcloudExecution implements PlaywrightJourneyDriverExecution {
     await (this.options.login ?? logInToNextcloud)(session);
     this.sessions.set(sessionKey, session);
 
-    this.context.evidence.emit({
-      type: "nextcloud.actor.session.created",
-      executionId: this.context.executionId,
-      profileId: this.context.profile.id,
-      ok: true,
-      references: referencesForOperation(this.context.plan, operation),
-      data: {
-        username: user.username,
-        baseURL: String(touchpoint.baseURL)
-      }
-    });
+    this.events.actorSessionCreated(operation, session);
 
     return session;
   }

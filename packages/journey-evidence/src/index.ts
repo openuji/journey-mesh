@@ -94,7 +94,56 @@ export type EvidenceEvent = {
 
 export type EvidenceEventInput = Omit<EvidenceEvent, "id" | "sequence" | "timestamp" | "runId">;
 
-export class EvidenceRecorder {
+export interface EvidenceSink {
+  emit(input: EvidenceEventInput): EvidenceEvent;
+}
+
+export interface EvidenceLog {
+  snapshot(): readonly EvidenceEvent[];
+}
+
+export type ExecutionEvidenceIdentity = {
+  readonly executionId: string;
+  readonly profileId: string;
+};
+
+export interface ExecutionEvidenceSink {
+  emit(
+    input: Omit<
+      EvidenceEventInput,
+      "executionId" | "profileId"
+    >
+  ): EvidenceEvent;
+}
+
+export type EvidenceComponent = {
+  readonly name: string;
+  readonly version?: string;
+};
+
+export function componentEvidence(component: EvidenceComponent): JsonObject {
+  return {
+    name: component.name,
+    ...(component.version ? { version: component.version } : {})
+  };
+}
+
+export function scopeEvidenceToExecution(
+  sink: EvidenceSink,
+  identity: ExecutionEvidenceIdentity
+): ExecutionEvidenceSink {
+  return {
+    emit(input) {
+      return sink.emit({
+        ...input,
+        executionId: identity.executionId,
+        profileId: identity.profileId
+      });
+    }
+  };
+}
+
+export class EvidenceRecorder implements EvidenceSink, EvidenceLog {
   readonly runId: string;
   private sequence = 0;
   private readonly collectedEvents: EvidenceEvent[] = [];
@@ -117,7 +166,7 @@ export class EvidenceRecorder {
     return event;
   }
 
-  snapshot(): EvidenceEvent[] {
+  snapshot(): readonly EvidenceEvent[] {
     return [...this.collectedEvents];
   }
 }

@@ -48,7 +48,9 @@ import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
 import {
   EvidenceRecorder,
   runJourney,
+  scopeEvidenceToExecution,
   type ControlFlowPlanOperation,
+  type EvidenceEvent,
   type ExecutionResult,
   type InputModalityDecision,
   type JourneyAdapter,
@@ -343,6 +345,83 @@ const tests: TestCase[] = [
         }
       }
 
+      const recorderReferences = packageSources.filter((sourceFile) =>
+        sourceFile.source.includes("EvidenceRecorder")
+      );
+      for (const sourceFile of recorderReferences) {
+        assert.equal(
+          sourceFile.path.includes("/packages/journey-evidence/src/") ||
+            sourceFile.path.includes("/packages/journey-runner/src/"),
+          true,
+          `Only evidence and runner packages may reference EvidenceRecorder: ${sourceFile.path}`
+        );
+      }
+
+      const snapshotReaders = packageSources.filter((sourceFile) =>
+        sourceFile.source.includes(".snapshot()")
+      );
+      for (const sourceFile of snapshotReaders) {
+        assert.equal(
+          sourceFile.path.includes("/packages/journey-evidence/src/") ||
+            sourceFile.path.endsWith("/packages/journey-runner/src/index.ts"),
+          true,
+          `Only evidence implementation and runner result construction may read evidence logs: ${sourceFile.path}`
+        );
+      }
+
+      for (const sourceFile of packageSources) {
+        assert.equal(
+          sourceFile.source.includes("context.evidence"),
+          false,
+          `Execution contexts must not expose evidence: ${sourceFile.path}`
+        );
+      }
+
+      const rawEmitSources = packageSources.filter((sourceFile) =>
+        sourceFile.source.includes(".emit({")
+      );
+      for (const sourceFile of rawEmitSources) {
+        assert.equal(
+          sourceFile.path.includes("/packages/journey-evidence/src/") ||
+            sourceFile.path.includes("/packages/journey-runner/src/evidence/") ||
+            sourceFile.path.includes("/packages/journey-adapter-playwright/src/evidence/") ||
+            sourceFile.path.includes("/packages/journey-driver-nextcloud/src/evidence/"),
+          true,
+          `Raw evidence emission must live in evidence projectors: ${sourceFile.path}`
+        );
+      }
+
+      const evidenceFreeSources = packageSources.filter((sourceFile) =>
+        sourceFile.path.includes("/packages/journey-observer-axe/src/") ||
+        sourceFile.path.includes("/packages/journey-profiles/src/")
+      );
+      for (const sourceFile of evidenceFreeSources) {
+        for (const forbiddenPattern of [
+          "EvidenceRecorder",
+          "EvidenceSink",
+          "ExecutionEvidenceSink"
+        ]) {
+          assert.equal(
+            sourceFile.source.includes(forbiddenPattern),
+            false,
+            `Observers and profiles must not receive evidence capabilities: ${forbiddenPattern} in ${sourceFile.path}`
+          );
+        }
+      }
+
+      const runnerSource = packageSources.find((sourceFile) =>
+        sourceFile.path.endsWith("/packages/journey-runner/src/index.ts")
+      );
+      assert.ok(runnerSource);
+      assert.doesNotMatch(
+        runnerSource.source.replace(/\s+/g, " "),
+        /JourneyObserverRunStartedInput = \{[^}]*evidence/
+      );
+      assert.doesNotMatch(
+        runnerSource.source.replace(/\s+/g, " "),
+        /JourneyObserverRunCompletedInput = \{[^}]*evidence/
+      );
+
       const ujgRefSetDefinitions = packageSources.filter((sourceFile) =>
         sourceFile.source.includes("UjgRefSet")
       );
@@ -601,7 +680,8 @@ const tests: TestCase[] = [
       const calls: string[] = [];
       const adapter: JourneyAdapter = {
         name: "session-isolation-adapter",
-        createExecution(context) {
+        createExecution(input) {
+          const { context } = input;
           let localCounter = 0;
           calls.push(`${context.executionId}:create`);
 
@@ -926,6 +1006,197 @@ const tests: TestCase[] = [
     }
   },
   {
+    name: "evidence characterization covers scoped runner, playwright, and nextcloud events",
+    async run() {
+      const emptyPlan: JourneyPlan = { id: "characterization-empty-plan", operations: [] };
+      const singleProfile = await runJourney({
+        plan: emptyPlan,
+        adapter: fakeAdapter([]),
+        profiles: [defaultProfile()],
+        runId: "characterization-single"
+      });
+      assertEventTypes(singleProfile, [
+        "runner.run.started",
+        "profile.execution.started",
+        "adapter.setup.started",
+        "adapter.setup.completed",
+        "adapter.teardown.started",
+        "adapter.teardown.completed",
+        "profile.execution.completed",
+        "runner.run.completed"
+      ]);
+
+      const twoProfiles = await runJourney({
+        plan: emptyPlan,
+        adapter: fakeAdapter([]),
+        profiles: [defaultProfile(), keyboardOnlyProfile()],
+        runId: "characterization-two-profile"
+      });
+      assertEventTypes(twoProfiles, [
+        "runner.run.started",
+        "profile.execution.started",
+        "adapter.setup.started",
+        "adapter.setup.completed",
+        "adapter.teardown.started",
+        "adapter.teardown.completed",
+        "profile.execution.completed",
+        "profile.execution.started",
+        "adapter.setup.started",
+        "adapter.setup.completed",
+        "adapter.teardown.started",
+        "adapter.teardown.completed",
+        "profile.execution.completed",
+        "runner.run.completed"
+      ]);
+
+      const sourcePlan = await loadFixturePlan();
+      const state = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+      const failingState = await runJourney({
+        plan: { ...sourcePlan, operations: [state] },
+        adapter: fakeAdapter([], { failStateId: state.state.id }),
+        profiles: [defaultProfile()],
+        runId: "characterization-state-failure"
+      });
+      assertEventTypes(failingState, [
+        "runner.run.started",
+        "profile.execution.started",
+        "adapter.setup.started",
+        "adapter.setup.completed",
+        "operation.started",
+        "adapter.open-entry.started",
+        "adapter.open-entry.completed",
+        "adapter.assert-state.started",
+        "profile.execution.failed",
+        "adapter.teardown.started",
+        "adapter.teardown.completed",
+        "profile.execution.completed",
+        "runner.run.completed"
+      ]);
+      assert.equal(failingState.evidence.events[4].operationId, state.id);
+      assert.equal(failingState.evidence.events[4].references?.stateId, state.state.id);
+
+      const startupFailure = await runJourney({
+        plan: emptyPlan,
+        adapter: fakeAdapter([], { failStart: true }),
+        profiles: [defaultProfile()],
+        runId: "characterization-startup-failure"
+      });
+      assertEventTypes(startupFailure, [
+        "runner.run.started",
+        "profile.execution.started",
+        "adapter.setup.started",
+        "profile.execution.failed",
+        "adapter.teardown.started",
+        "adapter.teardown.completed",
+        "profile.execution.completed",
+        "runner.run.completed"
+      ]);
+
+      const closeFailure = await runJourney({
+        plan: emptyPlan,
+        adapter: fakeAdapter([], { failClose: true }),
+        profiles: [defaultProfile()],
+        runId: "characterization-close-failure"
+      });
+      assertEventTypes(closeFailure, [
+        "runner.run.started",
+        "profile.execution.started",
+        "adapter.setup.started",
+        "adapter.setup.completed",
+        "adapter.teardown.started",
+        "adapter.teardown.failed",
+        "profile.execution.completed",
+        "runner.run.completed"
+      ]);
+
+      const observerFailure = await runJourney({
+        plan: emptyPlan,
+        adapter: fakeAdapter([]),
+        profiles: [defaultProfile()],
+        observers: [
+          {
+            name: "characterization-observer",
+            onExecutionStarted() {
+              throw new Error("Injected characterization observer failure");
+            }
+          }
+        ],
+        runId: "characterization-observer-failure"
+      });
+      assertEventTypes(observerFailure, [
+        "runner.run.started",
+        "profile.execution.started",
+        "observer.execution-started.started",
+        "observer.execution-started.failed",
+        "profile.execution.failed",
+        "profile.execution.completed",
+        "runner.run.completed"
+      ]);
+
+      const reporterFailure = await runJourney({
+        plan: emptyPlan,
+        adapter: fakeAdapter([]),
+        profiles: [defaultProfile()],
+        reporters: [
+          {
+            name: "characterization-reporter",
+            report() {
+              throw new Error("Injected characterization reporter failure");
+            }
+          }
+        ],
+        runId: "characterization-reporter-failure"
+      });
+      assertIncludesEventTypes(reporterFailure, [
+        "reporter.started",
+        "reporter.failed",
+        "runner.run.completed"
+      ]);
+
+      const artifactFailure = await runArtifactJourney({ locatorCount: 0 });
+      assertIncludesEventTypes(artifactFailure.result, [
+        "profile.execution.failed",
+        "playwright.screenshot.attached",
+        "playwright.trace.attached",
+        "playwright.video.attached"
+      ]);
+
+      const nextcloudEvents = await runCharacterizationNextcloudExecution(state);
+      assert.deepEqual(eventTypes(nextcloudEvents), [
+        "nextcloud.execution.setup.started",
+        "nextcloud.execution.setup.completed",
+        "nextcloud.actor.session.created",
+        "nextcloud.entry.opened",
+        "nextcloud.execution.teardown.completed"
+      ]);
+
+      const observations: string[] = [];
+      const playwrightObserverResult = await runJourney({
+        plan: { ...sourcePlan, operations: [state] },
+        adapter: playwrightAdapter({
+          driver: artifactTestDriver([]),
+          browser: new FakeBrowser(1) as never,
+          assertionTimeoutMs: 1
+        }),
+        profiles: [defaultProfile()],
+        observers: [
+          {
+            name: "characterization-playwright-observer",
+            observePlaywrightOperation(observation: PlaywrightOperationObservation) {
+              observations.push(observation.stage);
+            }
+          } as JourneyObserver
+        ],
+        runId: "characterization-playwright-observer"
+      });
+      assert.deepEqual(observations, ["state-asserted"]);
+      assertIncludesEventTypes(playwrightObserverResult, [
+        "playwright.observer.operation.started",
+        "playwright.observer.operation.completed"
+      ]);
+    }
+  },
+  {
     name: "playwright adapter converts role, name, context, expanded, and binding composition",
     async run() {
       const root = new FakeLocator("page");
@@ -998,10 +1269,7 @@ const tests: TestCase[] = [
         context
       });
 
-      assert.equal(
-        context.evidence.snapshot().some((event) => event.type === "playwright.feature.resolved"),
-        false
-      );
+      assert.equal("evidence" in context, false);
 
       const locator = new FakeLocator("target");
       await activatePlaywrightLocator(locator as never, "pointer-click");
@@ -1034,7 +1302,7 @@ const tests: TestCase[] = [
       );
 
       assert.doesNotMatch(locator.toString(), /file-id/);
-      assert.equal(context.evidence.snapshot().length, 0);
+      assert.equal("evidence" in context, false);
     }
   },
   {
@@ -1078,13 +1346,14 @@ const tests: TestCase[] = [
         },
         assertionTimeoutMs: 1
       });
-      const execution = adapter.createExecution({
+      const context = {
         ...fakeDriverContext(),
         plan: {
           ...sourcePlan,
           operations: [operation]
         }
-      });
+      };
+      const execution = adapter.createExecution(fakeAdapterExecutionInput(context).input);
 
       await assert.rejects(async () => {
         await execution.assertState(operation);
@@ -1105,19 +1374,20 @@ const tests: TestCase[] = [
     async run() {
       const browser = new FakeBrowser(1);
       const context = fakeDriverContext();
+      const evidenceInput = fakeAdapterExecutionInput(context);
       const adapter = playwrightAdapter({
         driver: testPlaywrightDriver(),
         browser: browser as never,
         assertionTimeoutMs: 1
       });
-      const execution = adapter.createExecution(context);
+      const execution = adapter.createExecution(evidenceInput.input);
 
       await execution.start();
       await execution.close({ executionFailed: false });
 
       assert.equal(browser.closeCalls, 0);
       assert.ok(
-        context.evidence.snapshot().some((event) => event.type === "playwright.browser.released")
+        evidenceInput.recorder.snapshot().some((event) => event.type === "playwright.browser.released")
       );
     }
   },
@@ -1163,7 +1433,7 @@ const tests: TestCase[] = [
         },
         assertionTimeoutMs: 1
       });
-      const execution = adapter.createExecution(fakeDriverContext());
+      const execution = adapter.createExecution(fakeAdapterExecutionInput(fakeDriverContext()).input);
 
       await assert.rejects(async () => {
         await execution.start();
@@ -1189,6 +1459,7 @@ const tests: TestCase[] = [
           operations: [operation]
         }
       };
+      const evidenceInput = fakeAdapterExecutionInput(context);
       const execution = playwrightAdapter({
         driver: artifactTestDriver(contextInputs),
         browser: browser as never,
@@ -1200,14 +1471,14 @@ const tests: TestCase[] = [
           screenshots: true,
           videos: true
         }
-      }).createExecution(context);
+      }).createExecution(evidenceInput.input);
 
       await execution.start();
       await execution.openEntry(operation);
       await execution.close({ executionFailed: true });
 
       assert.equal(
-        context.evidence.snapshot().some((event) => event.type === "profile.execution.failed"),
+        evidenceInput.recorder.snapshot().some((event) => event.type === "profile.execution.failed"),
         false
       );
       assert.equal(contextInputs.length, 1);
@@ -1298,7 +1569,7 @@ const tests: TestCase[] = [
         awaitApplicationSettled: () => undefined
       });
 
-      const execution = driver.createExecution(context);
+      const execution = driver.createExecution(fakeDriverExecutionInput(context).input);
       await execution.start();
       await execution.openEntry(operation);
       await execution.openEntry(operation);
@@ -1321,7 +1592,7 @@ const tests: TestCase[] = [
           return Promise.resolve(secondBrowserContext as never);
         }
       };
-      const secondExecution = driver.createExecution(secondContext);
+      const secondExecution = driver.createExecution(fakeDriverExecutionInput(secondContext).input);
       await secondExecution.start();
       await secondExecution.openEntry(operation);
       await secondExecution.close({ executionFailed: false });
@@ -1615,6 +1886,35 @@ async function loadFixturePlan(): Promise<JourneyPlan> {
   return compileUjgJourneyPlan(await loadUjgDocument(fixtureUrl));
 }
 
+function eventTypes(input: RunResult | readonly EvidenceEvent[]): string[] {
+  const events = isEvidenceEventArray(input) ? input : input.evidence.events;
+  return events.map((event) => event.type);
+}
+
+function isEvidenceEventArray(
+  input: RunResult | readonly EvidenceEvent[]
+): input is readonly EvidenceEvent[] {
+  return Array.isArray(input);
+}
+
+function assertEventTypes(result: RunResult, expectedTypes: string[]): void {
+  assert.deepEqual(eventTypes(result), expectedTypes);
+}
+
+function assertIncludesEventTypes(
+  input: RunResult | readonly EvidenceEvent[],
+  expectedTypes: string[]
+): void {
+  const remaining = [...expectedTypes];
+  for (const type of eventTypes(input)) {
+    if (type === remaining[0]) {
+      remaining.shift();
+    }
+  }
+
+  assert.deepEqual(remaining, []);
+}
+
 async function readTypeScriptSources(
   directory: URL
 ): Promise<Array<{ path: string; source: string }>> {
@@ -1726,7 +2026,8 @@ function fakeAdapter(
   return {
     name: "fake-adapter",
 
-    createExecution(context) {
+    createExecution(input) {
+      const { context } = input;
       calls.push(`${context.profile.id}:create`);
       if (options.failCreate) {
         throw new Error("Injected adapter creation failure");
@@ -1816,7 +2117,8 @@ function artifactTestDriver(
 ): PlaywrightJourneyDriver {
   return {
     name: "artifact-test-driver",
-    createExecution(context) {
+    createExecution(input) {
+      const { context } = input;
       let page: FakeArtifactPage | undefined;
 
       return {
@@ -2060,18 +2362,85 @@ function testPlaywrightDriver(): PlaywrightJourneyDriver {
   };
 }
 
+async function runCharacterizationNextcloudExecution(
+  operation: JourneyPlanOperation
+): Promise<readonly EvidenceEvent[]> {
+  const browserContext = new FakeBrowserContext(1);
+  const context: PlaywrightDriverExecutionContext = {
+    ...fakeDriverContext(),
+    plan: { id: "characterization-nextcloud-plan", operations: [operation] },
+    createBrowserContext() {
+      return Promise.resolve(browserContext as never);
+    }
+  };
+  const input = fakeDriverExecutionInput(context);
+  const driver = nextcloudDriver({
+    touchpoints: {
+      [operation.touchpointId]: { baseURL: "http://example.test" }
+    },
+    users: {
+      [operation.actorId]: { username: "alice", password: "secret" }
+    },
+    entries: {
+      [operation.entryBinding?.value ?? "nextcloud.files"]: () => undefined
+    },
+    login: () => undefined,
+    awaitApplicationSettled: () => undefined
+  });
+  const execution = driver.createExecution(input.input);
+
+  await execution.start();
+  await execution.openEntry(operation);
+  await execution.close({ executionFailed: false });
+
+  return input.recorder.snapshot();
+}
+
 function fakeDriverContext(): PlaywrightDriverExecutionContext {
   return {
     runId: "test-run",
     executionId: "test-execution",
     profile: defaultProfile(),
     plan: { id: "test-plan", operations: [] },
-    evidence: new EvidenceRecorder("test-run"),
     observers: [],
     browser: undefined as never,
     createBrowserContext() {
       throw new Error("Unexpected test browser context creation");
     }
+  };
+}
+
+function fakeAdapterExecutionInput(context: JourneyExecutionContext): {
+  input: Parameters<JourneyAdapter["createExecution"]>[0];
+  recorder: EvidenceRecorder;
+} {
+  const recorder = new EvidenceRecorder(context.runId);
+  return {
+    input: {
+      context,
+      evidence: scopeEvidenceToExecution(recorder, {
+        executionId: context.executionId,
+        profileId: context.profile.id
+      })
+    },
+    recorder
+  };
+}
+
+function fakeDriverExecutionInput(context: PlaywrightDriverExecutionContext): {
+  input: Parameters<PlaywrightJourneyDriver["createExecution"]>[0];
+  recorder: EvidenceRecorder;
+} {
+  const recorder = new EvidenceRecorder(context.runId);
+  return {
+    input: {
+      context,
+      evidence: scopeEvidenceToExecution(recorder, {
+        executionId: context.executionId,
+        profileId: context.profile.id
+      })
+    },
+    recorder
   };
 }
 

@@ -19,6 +19,7 @@ import type {
   JourneyAdapter,
   JourneyAdapterCloseInput,
   JourneyAdapterExecution,
+  JourneyAdapterExecutionInput,
   JourneyInteractionCommand,
   JourneyExecutionContext,
   JourneyObserver,
@@ -29,8 +30,8 @@ import type {
   StatePlanOperation,
   TransitionPlanOperation
 } from "@openuji/journey-runner";
-import { referencesForOperation } from "@openuji/journey-evidence";
-import { errorToEvidence } from "@openuji/journey-runner";
+import type { ExecutionEvidenceSink } from "@openuji/journey-evidence";
+import { PlaywrightEvidence } from "./evidence/playwright-evidence.js";
 
 export type PlaywrightCreateBrowserContextInput = {
   operation?: JourneyPlanOperation;
@@ -74,8 +75,13 @@ export type PlaywrightJourneyDriver = {
   readonly name: string;
   readonly version?: string;
   createExecution(
-    context: PlaywrightDriverExecutionContext
+    input: PlaywrightDriverExecutionInput
   ): PlaywrightJourneyDriverExecution;
+};
+
+export type PlaywrightDriverExecutionInput = {
+  readonly context: PlaywrightDriverExecutionContext;
+  readonly evidence: ExecutionEvidenceSink;
 };
 
 export type PlaywrightJourneyDriverExecution = {
@@ -176,8 +182,8 @@ export function playwrightAdapter(options: PlaywrightAdapterOptions): JourneyAda
     name: "@openuji/journey-adapter-playwright",
     version: "0.1.0",
 
-    createExecution(context) {
-      return new PlaywrightAdapterExecution(context, options, artifactOptions);
+    createExecution(input) {
+      return new PlaywrightAdapterExecution(input, options, artifactOptions);
     }
   };
 }
@@ -188,13 +194,20 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
   private driverContext?: PlaywrightDriverExecutionContext;
   private driverExecution?: PlaywrightJourneyDriverExecution;
   private readonly browserContexts: BrowserContextRecord[] = [];
+  private readonly context: JourneyExecutionContext;
+  private readonly events: PlaywrightEvidence;
+  private readonly evidence: ExecutionEvidenceSink;
   private lifecycle: "created" | "starting" | "started" | "closing" | "closed" = "created";
 
   constructor(
-    private readonly context: JourneyExecutionContext,
+    input: JourneyAdapterExecutionInput,
     private readonly options: PlaywrightAdapterOptions,
     private readonly artifactOptions: ResolvedArtifactOptions
-  ) {}
+  ) {
+    this.context = input.context;
+    this.evidence = input.evidence;
+    this.events = new PlaywrightEvidence(input.context, input.evidence);
+  }
 
   async start(): Promise<void> {
     if (this.lifecycle !== "created") {
@@ -209,18 +222,14 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
       browser: this.browser,
       createBrowserContext: (input) => this.createBrowserContext(input)
     };
-    this.driverExecution = this.options.driver.createExecution(this.driverContext);
-
-    this.context.evidence.emit({
-      type: this.ownsBrowser ? "playwright.browser.launched" : "playwright.browser.attached",
-      executionId: this.context.executionId,
-      profileId: this.context.profile.id,
-      ok: true,
-      data: {
-        headless: this.ownsBrowser ? this.options.headless ?? true : null,
-        owned: this.ownsBrowser,
-        driver: componentData(this.options.driver)
-      }
+    this.driverExecution = this.options.driver.createExecution({
+      context: this.driverContext,
+      evidence: this.evidence
+    });
+    this.events.browserStarted({
+      owned: this.ownsBrowser,
+      headless: this.ownsBrowser ? this.options.headless ?? true : null,
+      driver: this.options.driver
     });
 
     await this.driverExecution.start();
@@ -245,18 +254,7 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
       timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs
     });
 
-    context.evidence.emit({
-      type: "playwright.assertion.completed",
-      executionId: context.executionId,
-      profileId: context.profile.id,
-      operationId: operation.id,
-      operationKind: operation.kind,
-      ok: true,
-      references: referencesForOperation(context.plan, operation),
-      data: {
-        expectedMatchCount: operation.target.expectedMatchCount
-      }
-    });
+    this.events.assertionCompleted(operation);
 
     await notifyPlaywrightObservers({
       context,
@@ -265,7 +263,7 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
       operation,
       page,
       stage: "state-asserted"
-    });
+    }, this.events);
   }
 
   async performTransition(
@@ -293,7 +291,7 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
       operation,
       page,
       stage: "transition-ready"
-    });
+    }, this.events);
 
     const text = decision.command === "keyboard-text-entry"
       ? await driver.transitionValue(operation)
@@ -302,20 +300,7 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     await activatePlaywrightLocator(locator, decision.command, text);
     await driver.afterTransition(operation, decision);
 
-    context.evidence.emit({
-      type: "playwright.transition.completed",
-      executionId: context.executionId,
-      profileId: context.profile.id,
-      operationId: operation.id,
-      operationKind: operation.kind,
-      ok: true,
-      references: referencesForOperation(context.plan, operation),
-      data: {
-        command: decision.command,
-        inputModalityProfileId: decision.inputModalityProfile.id,
-        modalityId: decision.modality.id
-      }
-    });
+    this.events.transitionCompleted(operation, decision);
   }
 
   async recordControlFlow(operation: ControlFlowPlanOperation): Promise<void> {
@@ -326,7 +311,7 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
       context,
       operation,
       stage: "control-flow-recorded"
-    });
+    }, this.events);
   }
 
   async close(input: JourneyAdapterCloseInput): Promise<void> {
@@ -341,23 +326,19 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
       await captureScreenshotsAndStopTraces(
         this.browserContexts,
         this.context,
+        this.events,
         this.artifactOptions,
         retainArtifacts
       );
       await this.driverExecution?.close({ executionFailed: input.executionFailed });
     } finally {
-      await closeTrackedBrowserContexts(this.browserContexts, this.context);
-      await attachVideos(this.browserContexts, this.context, this.artifactOptions, retainArtifacts);
+      await closeTrackedBrowserContexts(this.browserContexts, this.events);
+      await attachVideos(this.browserContexts, this.context, this.events, this.artifactOptions, retainArtifacts);
       if (this.ownsBrowser && this.browser) {
         await this.browser.close();
       }
       if (this.browser) {
-        this.context.evidence.emit({
-          type: this.ownsBrowser ? "playwright.browser.closed" : "playwright.browser.released",
-          executionId: this.context.executionId,
-          profileId: this.context.profile.id,
-          ok: true
-        });
+        this.events.browserStopped({ owned: this.ownsBrowser });
       }
       this.lifecycle = "closed";
     }
@@ -387,18 +368,7 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     });
 
     this.browserContexts.push(record);
-    this.context.evidence.emit({
-      type: "playwright.context.created",
-      executionId: this.context.executionId,
-      profileId: this.context.profile.id,
-      ok: true,
-      data: {
-        id,
-        label,
-        operationId: input.operation?.id ?? null,
-        ...(input.data ? { input: input.data } : {})
-      }
-    });
+    this.events.browserContextCreated(record, input);
 
     if (this.artifactOptions.mode !== "off" && this.artifactOptions.traces) {
       await browserContext.tracing.start({
@@ -407,13 +377,7 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
         sources: true
       });
       record.traceStarted = true;
-      this.context.evidence.emit({
-        type: "playwright.trace.started",
-        executionId: this.context.executionId,
-        profileId: this.context.profile.id,
-        ok: true,
-        data: { contextId: id, label }
-      });
+      this.events.traceStarted(record);
     }
 
     return browserContext;
@@ -476,16 +440,17 @@ async function browserContextOptionsForArtifacts(
 async function captureScreenshotsAndStopTraces(
   browserContexts: readonly BrowserContextRecord[],
   context: JourneyExecutionContext,
+  evidence: PlaywrightEvidence,
   artifactOptions: ResolvedArtifactOptions,
   retainArtifacts: boolean
 ): Promise<void> {
   for (const browserContext of browserContexts) {
     if (retainArtifacts && artifactOptions.screenshots) {
-      await captureScreenshots(browserContext, context, artifactOptions);
+      await captureScreenshots(browserContext, context, evidence, artifactOptions);
     }
 
     if (browserContext.traceStarted) {
-      await stopTrace(browserContext, context, artifactOptions, retainArtifacts);
+      await stopTrace(browserContext, context, evidence, artifactOptions, retainArtifacts);
     }
   }
 }
@@ -493,6 +458,7 @@ async function captureScreenshotsAndStopTraces(
 async function captureScreenshots(
   browserContext: BrowserContextRecord,
   context: JourneyExecutionContext,
+  evidence: PlaywrightEvidence,
   artifactOptions: ResolvedArtifactOptions
 ): Promise<void> {
   const sink = artifactOptions.sink;
@@ -511,19 +477,9 @@ async function captureScreenshots(
         `${context.executionId}-${browserContext.label}-page-${index + 1}.png`,
         { path, contentType: "image/png" }
       );
-      context.evidence.emit({
-        type: "playwright.screenshot.attached",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        ok: true,
-        data: { contextId: browserContext.id, label: browserContext.label, path }
-      });
+      evidence.screenshotAttached(browserContext, index, path);
     } catch (error) {
-      emitArtifactFailure(context, "playwright.screenshot.failed", error, {
-        contextId: browserContext.id,
-        label: browserContext.label,
-        path
-      });
+      evidence.screenshotFailed(browserContext, index, path, error);
     }
   }
 }
@@ -531,6 +487,7 @@ async function captureScreenshots(
 async function stopTrace(
   browserContext: BrowserContextRecord,
   context: JourneyExecutionContext,
+  evidence: PlaywrightEvidence,
   artifactOptions: ResolvedArtifactOptions,
   retainArtifacts: boolean
 ): Promise<void> {
@@ -550,23 +507,13 @@ async function stopTrace(
         `${context.executionId}-${browserContext.label}-trace.zip`,
         { path, contentType: "application/zip" }
       );
-      context.evidence.emit({
-        type: "playwright.trace.attached",
-        executionId: context.executionId,
-        profileId: context.profile.id,
-        ok: true,
-        data: { contextId: browserContext.id, label: browserContext.label, path }
-      });
+      evidence.traceAttached(browserContext, path);
       return;
     }
 
     await browserContext.browserContext.tracing.stop();
   } catch (error) {
-    emitArtifactFailure(context, "playwright.trace.failed", error, {
-      contextId: browserContext.id,
-      label: browserContext.label,
-      path: path ?? null
-    });
+    evidence.traceFailed(browserContext, path, error);
   } finally {
     browserContext.traceStarted = false;
   }
@@ -574,17 +521,14 @@ async function stopTrace(
 
 async function closeTrackedBrowserContexts(
   browserContexts: readonly BrowserContextRecord[],
-  context: JourneyExecutionContext
+  evidence: PlaywrightEvidence
 ): Promise<void> {
   await Promise.all(
     browserContexts.map(async (record) => {
       try {
         await record.browserContext.close();
       } catch (error) {
-        emitArtifactFailure(context, "playwright.context.close.failed", error, {
-          contextId: record.id,
-          label: record.label
-        });
+        evidence.browserContextCloseFailed(record, error);
       }
     })
   );
@@ -593,6 +537,7 @@ async function closeTrackedBrowserContexts(
 async function attachVideos(
   browserContexts: readonly BrowserContextRecord[],
   context: JourneyExecutionContext,
+  evidence: PlaywrightEvidence,
   artifactOptions: ResolvedArtifactOptions,
   retainArtifacts: boolean
 ): Promise<void> {
@@ -615,70 +560,27 @@ async function attachVideos(
           `${context.executionId}-${browserContext.label}-page-${index + 1}.webm`,
           { path, contentType: "video/webm" }
         );
-        context.evidence.emit({
-          type: "playwright.video.attached",
-          executionId: context.executionId,
-          profileId: context.profile.id,
-          ok: true,
-          data: { contextId: browserContext.id, label: browserContext.label, path }
-        });
+        evidence.videoAttached(browserContext, index, path);
       } catch (error) {
-        emitArtifactFailure(context, "playwright.video.failed", error, {
-          contextId: browserContext.id,
-          label: browserContext.label
-        });
+        evidence.videoFailed(browserContext, index, error);
       }
     }
   }
 }
 
 async function notifyPlaywrightObservers(
-  observation: PlaywrightOperationObservation
+  observation: PlaywrightOperationObservation,
+  evidence: PlaywrightEvidence
 ): Promise<void> {
   const observers = observation.context.observers.filter(isPlaywrightJourneyObserver);
 
   for (const observer of observers) {
     try {
-      observation.context.evidence.emit({
-        type: "playwright.observer.operation.started",
-        executionId: observation.context.executionId,
-        profileId: observation.context.profile.id,
-        operationId: observation.operation.id,
-        operationKind: observation.operation.kind,
-        ok: true,
-        data: {
-          observer: componentData(observer),
-          stage: observation.stage
-        }
-      });
+      evidence.observerOperationStarted(observer, observation);
       await observer.observePlaywrightOperation(observation);
-      observation.context.evidence.emit({
-        type: "playwright.observer.operation.completed",
-        executionId: observation.context.executionId,
-        profileId: observation.context.profile.id,
-        operationId: observation.operation.id,
-        operationKind: observation.operation.kind,
-        ok: true,
-        data: {
-          observer: componentData(observer),
-          stage: observation.stage
-        }
-      });
+      evidence.observerOperationCompleted(observer, observation);
     } catch (error) {
-      const evidenceError = errorToEvidence(error);
-      observation.context.evidence.emit({
-        type: "playwright.observer.operation.failed",
-        executionId: observation.context.executionId,
-        profileId: observation.context.profile.id,
-        operationId: observation.operation.id,
-        operationKind: observation.operation.kind,
-        ok: false,
-        data: {
-          observer: componentData(observer),
-          stage: observation.stage
-        },
-        error: evidenceError
-      });
+      evidence.observerOperationFailed(observer, observation, error);
       throw error;
     }
   }
@@ -845,10 +747,6 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function collectLocatorIds(locators: ResolvedAccessibleLocator[]): string[] {
-  return locators.flatMap((locator) => [locator.id, ...collectLocatorIds(locator.contexts)]);
-}
-
 function resolveArtifactOptions(
   options: PlaywrightArtifactOptions | undefined
 ): ResolvedArtifactOptions {
@@ -885,33 +783,6 @@ async function ensureParentDir(path: string): Promise<void> {
 
 function safePathSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "artifact";
-}
-
-function emitArtifactFailure(
-  context: JourneyExecutionContext,
-  type: string,
-  error: unknown,
-  data: JsonObject
-): void {
-  context.evidence.emit({
-    type,
-    executionId: context.executionId,
-    profileId: context.profile.id,
-    ok: false,
-    error: errorToEvidence(error),
-    data
-  });
-}
-
-function unique(values: string[]): string[] {
-  return [...new Set(values)];
-}
-
-function componentData(component: { name: string; version?: string }): JsonObject {
-  return {
-    name: component.name,
-    ...(component.version ? { version: component.version } : {})
-  };
 }
 
 function assertNever(value: never): never {
