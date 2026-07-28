@@ -2,11 +2,7 @@ import { writeFile } from "node:fs/promises";
 
 import { expect, test, type Browser, type TestInfo } from "@playwright/test";
 
-import {
-  playwrightAdapter,
-  type PlaywrightArtifactMode,
-  type PlaywrightArtifactSink
-} from "@openuji/journey-adapter-playwright";
+import { playwrightAdapter } from "@openuji/journey-adapter-playwright";
 import { nextcloudDriver } from "@openuji/journey-driver-nextcloud";
 import { compileUjgJourneyPlan } from "@openuji/journey-model-ujg";
 import { axeObserver, isAxeStrict, type AxeObserver } from "@openuji/journey-observer-axe";
@@ -42,14 +38,7 @@ test("executes the federated file-sharing UJG journey", async ({ browser }, test
         adapter: playwrightAdapter({
           driver: nextcloudDriver(nextcloudEnvironment),
           browser: browser as Browser,
-          executionObservers: [axe],
-          artifacts: {
-            mode: artifactModeFromEnv(),
-            sink: testInfoArtifactSink(testInfo),
-            traces: false,
-            screenshots: true,
-            videos: true
-          }
+          executionObservers: [axe]
         }),
         profiles: [defaultProfile(), keyboardOnlyProfile()],
         reporters: [axe]
@@ -93,25 +82,6 @@ function printSummary(result: RunResult, evidencePath: string, axe: AxeObserver)
     console.log(`  axe: ${axe.latestPathReportPath}`);
   }
   console.log("  report: pnpm --filter @openuji/example-nextcloud-filesharing e2e:report");
-}
-
-function artifactModeFromEnv(): PlaywrightArtifactMode {
-  const value = process.env.UJG_PLAYWRIGHT_ARTIFACTS;
-  if (value === "always" || value === "retain-on-failure" || value === "off") {
-    return value;
-  }
-  return "retain-on-failure";
-}
-
-function testInfoArtifactSink(testInfo: TestInfo): PlaywrightArtifactSink {
-  return {
-    outputPath(...pathSegments) {
-      return testInfo.outputPath(...pathSegments);
-    },
-    attach(name, attachment) {
-      return testInfo.attach(name, attachment);
-    }
-  };
 }
 
 function failureSummary(result: RunResult): string {

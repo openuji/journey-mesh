@@ -1,6 +1,3 @@
-import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
-
 import {
   chromium,
   type Browser,
@@ -49,27 +46,6 @@ export type PlaywrightCreateBrowserContextInput = {
   data?: JsonObject;
 };
 
-export type PlaywrightArtifactMode = "off" | "retain-on-failure" | "always";
-
-export type PlaywrightArtifactAttachment = {
-  path?: string;
-  body?: string | Buffer;
-  contentType?: string;
-};
-
-export type PlaywrightArtifactSink = {
-  outputPath(...pathSegments: string[]): string;
-  attach(name: string, attachment: PlaywrightArtifactAttachment): Promise<void> | void;
-};
-
-export type PlaywrightArtifactOptions = {
-  mode?: PlaywrightArtifactMode;
-  sink?: PlaywrightArtifactSink;
-  traces?: boolean;
-  screenshots?: boolean;
-  videos?: boolean;
-};
-
 export type PlaywrightDriverExecutionContext = JourneyExecutionContext & {
   browser: Browser;
   createBrowserContext(
@@ -116,7 +92,6 @@ export type PlaywrightAdapterOptions = {
   contextOptions?: BrowserContextOptions;
   browserType?: Pick<BrowserType, "launch">;
   assertionTimeoutMs?: number;
-  artifacts?: PlaywrightArtifactOptions;
 };
 
 export type LocatorRoot = Page | Locator;
@@ -131,34 +106,18 @@ type BrowserContextRecord = {
   id: string;
   label: string;
   browserContext: BrowserContext;
-  pages: Set<Page>;
-  traceStarted: boolean;
-};
-
-type ResolvedArtifactOptions = {
-  mode: PlaywrightArtifactMode;
-  sink?: PlaywrightArtifactSink;
-  traces: boolean;
-  screenshots: boolean;
-  videos: boolean;
 };
 
 const roleOptionFeatureNames = new Set(["expanded"]);
 const defaultAssertionTimeoutMs = 30_000;
 
 export function playwrightAdapter(options: PlaywrightAdapterOptions): JourneyAdapter {
-  const artifactOptions = resolveArtifactOptions(options.artifacts);
-
-  if (artifactOptions.mode !== "off" && !artifactOptions.sink) {
-    throw new Error("Playwright artifacts require an artifact sink");
-  }
-
   return {
     name: "@openuji/journey-adapter-playwright",
     version: "0.1.0",
 
     createExecution(input) {
-      return new PlaywrightAdapterExecution(input, options, artifactOptions);
+      return new PlaywrightAdapterExecution(input, options);
     }
   };
 }
@@ -178,8 +137,7 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
 
   constructor(
     input: JourneyAdapterExecutionInput,
-    private readonly options: PlaywrightAdapterOptions,
-    private readonly artifactOptions: ResolvedArtifactOptions
+    private readonly options: PlaywrightAdapterOptions
   ) {
     this.context = input.context;
     this.execution = executionDescriptor(input.context);
@@ -304,20 +262,11 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     }
 
     this.lifecycle = "closing";
-    const retainArtifacts = shouldRetainArtifacts(input.executionFailed, this.artifactOptions.mode);
 
     try {
-      await captureScreenshotsAndStopTraces(
-        this.browserContexts,
-        this.context,
-        this.events,
-        this.artifactOptions,
-        retainArtifacts
-      );
       await this.driverExecution?.close({ executionFailed: input.executionFailed });
     } finally {
       await closeTrackedBrowserContexts(this.browserContexts, this.events);
-      await attachVideos(this.browserContexts, this.context, this.events, this.artifactOptions, retainArtifacts);
       if (this.ownsBrowser && this.browser) {
         await this.browser.close();
       }
@@ -334,35 +283,15 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     const browser = this.requireBrowser();
     const id = `context-${String(this.browserContexts.length + 1).padStart(2, "0")}`;
     const label = input.label ?? id;
-    const browserContextOptions = await browserContextOptionsForArtifacts(
-      this.options,
-      this.artifactOptions
-    );
-    const browserContext = await browser.newContext(browserContextOptions);
+    const browserContext = await browser.newContext(this.options.contextOptions);
     const record: BrowserContextRecord = {
       id,
       label,
-      browserContext,
-      pages: new Set(browserContext.pages()),
-      traceStarted: false
+      browserContext
     };
-
-    browserContext.on("page", (page) => {
-      record.pages.add(page);
-    });
 
     this.browserContexts.push(record);
     this.events.browserContextCreated(record, input);
-
-    if (this.artifactOptions.mode !== "off" && this.artifactOptions.traces) {
-      await browserContext.tracing.start({
-        screenshots: true,
-        snapshots: true,
-        sources: true
-      });
-      record.traceStarted = true;
-      this.events.traceStarted(record);
-    }
 
     return browserContext;
   }
@@ -400,109 +329,6 @@ async function launchBrowser(options: PlaywrightAdapterOptions): Promise<Browser
   });
 }
 
-async function browserContextOptionsForArtifacts(
-  options: PlaywrightAdapterOptions,
-  artifactOptions: ResolvedArtifactOptions
-): Promise<BrowserContextOptions> {
-  const contextOptions: BrowserContextOptions = {
-    ...options.contextOptions
-  };
-  if (
-    artifactOptions.mode !== "off" &&
-    artifactOptions.videos &&
-    artifactOptions.sink &&
-    !contextOptions.recordVideo
-  ) {
-    const videoDir = artifactOptions.sink.outputPath("videos");
-    await mkdir(videoDir, { recursive: true });
-    contextOptions.recordVideo = { dir: videoDir };
-  }
-
-  return contextOptions;
-}
-
-async function captureScreenshotsAndStopTraces(
-  browserContexts: readonly BrowserContextRecord[],
-  context: JourneyExecutionContext,
-  evidence: PlaywrightEvidence,
-  artifactOptions: ResolvedArtifactOptions,
-  retainArtifacts: boolean
-): Promise<void> {
-  for (const browserContext of browserContexts) {
-    if (retainArtifacts && artifactOptions.screenshots) {
-      await captureScreenshots(browserContext, context, evidence, artifactOptions);
-    }
-
-    if (browserContext.traceStarted) {
-      await stopTrace(browserContext, context, evidence, artifactOptions, retainArtifacts);
-    }
-  }
-}
-
-async function captureScreenshots(
-  browserContext: BrowserContextRecord,
-  context: JourneyExecutionContext,
-  evidence: PlaywrightEvidence,
-  artifactOptions: ResolvedArtifactOptions
-): Promise<void> {
-  const sink = artifactOptions.sink;
-  if (!sink) return;
-
-  const pages = trackedPages(browserContext);
-  for (const [index, page] of pages.entries()) {
-    const path = sink.outputPath(
-      "screenshots",
-      `${safePathSegment(context.executionId)}-${safePathSegment(browserContext.label)}-page-${index + 1}.png`
-    );
-    try {
-      await ensureParentDir(path);
-      await page.screenshot({ path, fullPage: true });
-      await sink.attach(
-        `${context.executionId}-${browserContext.label}-page-${index + 1}.png`,
-        { path, contentType: "image/png" }
-      );
-      evidence.screenshotAttached(browserContext, index, path);
-    } catch (error) {
-      evidence.screenshotFailed(browserContext, index, path, error);
-    }
-  }
-}
-
-async function stopTrace(
-  browserContext: BrowserContextRecord,
-  context: JourneyExecutionContext,
-  evidence: PlaywrightEvidence,
-  artifactOptions: ResolvedArtifactOptions,
-  retainArtifacts: boolean
-): Promise<void> {
-  const sink = artifactOptions.sink;
-  const path = retainArtifacts && sink
-    ? sink.outputPath(
-        "traces",
-        `${safePathSegment(context.executionId)}-${safePathSegment(browserContext.label)}.zip`
-      )
-    : undefined;
-
-  try {
-    if (path) {
-      await ensureParentDir(path);
-      await browserContext.browserContext.tracing.stop({ path });
-      await sink?.attach(
-        `${context.executionId}-${browserContext.label}-trace.zip`,
-        { path, contentType: "application/zip" }
-      );
-      evidence.traceAttached(browserContext, path);
-      return;
-    }
-
-    await browserContext.browserContext.tracing.stop();
-  } catch (error) {
-    evidence.traceFailed(browserContext, path, error);
-  } finally {
-    browserContext.traceStarted = false;
-  }
-}
-
 async function closeTrackedBrowserContexts(
   browserContexts: readonly BrowserContextRecord[],
   evidence: PlaywrightEvidence
@@ -516,40 +342,6 @@ async function closeTrackedBrowserContexts(
       }
     })
   );
-}
-
-async function attachVideos(
-  browserContexts: readonly BrowserContextRecord[],
-  context: JourneyExecutionContext,
-  evidence: PlaywrightEvidence,
-  artifactOptions: ResolvedArtifactOptions,
-  retainArtifacts: boolean
-): Promise<void> {
-  if (!artifactOptions.videos) return;
-
-  for (const browserContext of browserContexts) {
-    const pages = trackedPages(browserContext);
-    for (const [index, page] of pages.entries()) {
-      const video = page.video();
-      if (!video) continue;
-
-      try {
-        if (!retainArtifacts) {
-          await video.delete();
-          continue;
-        }
-
-        const path = await video.path();
-        await artifactOptions.sink?.attach(
-          `${context.executionId}-${browserContext.label}-page-${index + 1}.webm`,
-          { path, contentType: "video/webm" }
-        );
-        evidence.videoAttached(browserContext, index, path);
-      } catch (error) {
-        evidence.videoFailed(browserContext, index, error);
-      }
-    }
-  }
 }
 
 export async function toPlaywrightObservationLocator(
@@ -711,44 +503,6 @@ function accessibleNamePattern(value: string): RegExp {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function resolveArtifactOptions(
-  options: PlaywrightArtifactOptions | undefined
-): ResolvedArtifactOptions {
-  const mode = options?.mode ?? "off";
-  return {
-    mode,
-    sink: options?.sink,
-    traces: options?.traces ?? true,
-    screenshots: options?.screenshots ?? true,
-    videos: options?.videos ?? false
-  };
-}
-
-function shouldRetainArtifacts(
-  executionFailed: boolean,
-  mode: PlaywrightArtifactMode
-): boolean {
-  if (mode === "always") return true;
-  if (mode === "off") return false;
-  return executionFailed;
-}
-
-function trackedPages(record: BrowserContextRecord): Page[] {
-  return uniqueObjects([...record.pages, ...record.browserContext.pages()]);
-}
-
-function uniqueObjects<T>(values: T[]): T[] {
-  return [...new Set(values)];
-}
-
-async function ensureParentDir(path: string): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-}
-
-function safePathSegment(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "artifact";
 }
 
 function assertNever(value: never): never {

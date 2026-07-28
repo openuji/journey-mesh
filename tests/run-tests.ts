@@ -1244,14 +1244,6 @@ const tests: TestCase[] = [
         "runner.run.completed"
       ]);
 
-      const artifactFailure = await runArtifactJourney({ locatorCount: 0 });
-      assertIncludesEventTypes(artifactFailure.result, [
-        "profile.execution.failed",
-        "playwright.screenshot.attached",
-        "playwright.trace.attached",
-        "playwright.video.attached"
-      ]);
-
       const nextcloudEvents = await runCharacterizationNextcloudExecution(state);
       assert.deepEqual(eventTypes(nextcloudEvents), [
         "nextcloud.execution.setup.started",
@@ -1274,7 +1266,7 @@ const tests: TestCase[] = [
       const playwrightObserverResult = await runJourney({
         plan: { ...sourcePlan, operations: [state] },
         adapter: playwrightAdapter({
-          driver: artifactTestDriver([]),
+          driver: contextTestDriver([]),
           browser: new FakeBrowser(1) as never,
           assertionTimeoutMs: 1,
           executionObservers: [playwrightObserver]
@@ -1405,30 +1397,6 @@ const tests: TestCase[] = [
     }
   },
   {
-    name: "playwright adapter retains artifacts only for failed executions by default",
-    async run() {
-      const success = await runArtifactJourney({ locatorCount: 1 });
-      assert.equal(success.result.ok, true);
-      assert.equal(success.sink.attachments.length, 0);
-      assert.deepEqual(success.browser.contexts[0].tracing.stopPaths, [undefined]);
-      assert.equal(success.browser.contexts[0].pagesList[0].videoFile.deleted, true);
-
-      const failure = await runArtifactJourney({ locatorCount: 0 });
-      assert.equal(failure.result.ok, false);
-      assert.ok(
-        failure.sink.attachments.some((attachment) => attachment.name.endsWith("-trace.zip"))
-      );
-      assert.ok(
-        failure.sink.attachments.some((attachment) => attachment.name.endsWith(".png"))
-      );
-      assert.ok(
-        failure.sink.attachments.some((attachment) => attachment.name.endsWith(".webm"))
-      );
-      assert.match(String(failure.browser.contexts[0].tracing.stopPaths[0]), /traces/);
-      assert.equal(failure.browser.closed, false);
-    }
-  },
-  {
     name: "playwright adapter enforces execution lifecycle and idempotent owned-browser close",
     async run() {
       const sourcePlan = await loadFixturePlan();
@@ -1544,49 +1512,6 @@ const tests: TestCase[] = [
     }
   },
   {
-    name: "playwright adapter retains artifacts from explicit close failure input",
-    async run() {
-      const sourcePlan = await loadFixturePlan();
-      const operation = stateOperation(sourcePlan, "urn:state:alice-files-ready");
-      const browser = new FakeBrowser(1);
-      const sink = new FakeArtifactSink();
-      const contextInputs: PlaywrightCreateBrowserContextInput[] = [];
-      const context = {
-        ...fakeDriverContext(),
-        plan: {
-          ...sourcePlan,
-          operations: [operation]
-        }
-      };
-      const evidenceInput = fakeAdapterExecutionInput(context);
-      const execution = playwrightAdapter({
-        driver: artifactTestDriver(contextInputs),
-        browser: browser as never,
-        assertionTimeoutMs: 1,
-        artifacts: {
-          mode: "retain-on-failure",
-          sink,
-          traces: true,
-          screenshots: true,
-          videos: true
-        }
-      }).createExecution(evidenceInput.input);
-
-      await execution.start();
-      await execution.openEntry(operation);
-      await execution.close({ executionFailed: true });
-
-      assert.equal(
-        evidenceInput.recorder.snapshot().some((event) => event.type === "profile.execution.failed"),
-        false
-      );
-      assert.equal(contextInputs.length, 1);
-      assert.ok(sink.attachments.some((attachment) => attachment.name.endsWith("-trace.zip")));
-      assert.ok(sink.attachments.some((attachment) => attachment.name.endsWith(".png")));
-      assert.ok(sink.attachments.some((attachment) => attachment.name.endsWith(".webm")));
-    }
-  },
-  {
     name: "playwright adapter notifies observers for state, transition, and control-flow operations",
     async run() {
       const sourcePlan = await loadFixturePlan();
@@ -1621,7 +1546,7 @@ const tests: TestCase[] = [
       const result = await runJourney({
         plan,
         adapter: playwrightAdapter({
-          driver: artifactTestDriver([]),
+          driver: contextTestDriver([]),
           browser: browser as never,
           assertionTimeoutMs: 1,
           executionObservers: [observer]
@@ -1924,9 +1849,9 @@ const tests: TestCase[] = [
       );
       assert.match(configSource, /testMatch:\s*"run\.ts"/);
       assert.match(configSource, /workers:\s*1/);
-      assert.match(configSource, /trace:\s*"retain-on-failure"/);
-      assert.match(configSource, /screenshot:\s*"only-on-failure"/);
-      assert.match(configSource, /video:\s*"retain-on-failure"/);
+      assert.doesNotMatch(configSource, /trace:\s*"retain-on-failure"/);
+      assert.doesNotMatch(configSource, /screenshot:\s*"only-on-failure"/);
+      assert.doesNotMatch(configSource, /video:\s*"retain-on-failure"/);
       assert.match(configSource, /outputDir:\s*"test-results"/);
       assert.match(configSource, /outputFolder:\s*"playwright-report"/);
 
@@ -1940,7 +1865,10 @@ const tests: TestCase[] = [
       assert.match(runSource, /UJG_EVIDENCE_STDOUT/);
       assert.match(runSource, /browser:\s*browser as Browser/);
       assert.match(runSource, /axeObserver/);
+      assert.match(runSource, /sourceScreenshots:\s*\{/);
+      assert.match(runSource, /states:\s*true/);
       assert.match(runSource, /executionObservers:\s*\[axe\]/);
+      assert.doesNotMatch(runSource, /artifacts:\s*\{/);
       assert.doesNotMatch(runSource, /observers:\s*\[axe\]/);
       assert.match(runSource, /reporters:\s*\[axe\]/);
       assert.match(runSource, /nextcloud-filesharing\.axe-path/);
@@ -2182,53 +2110,14 @@ function fakeAdapter(
   };
 }
 
-async function runArtifactJourney(input: {
-  locatorCount: number;
-}): Promise<{
-  browser: FakeBrowser;
-  result: Awaited<ReturnType<typeof runJourney>>;
-  sink: FakeArtifactSink;
-}> {
-  const sourcePlan = await loadFixturePlan();
-  const operation = stateOperation(sourcePlan, "urn:state:alice-files-ready");
-  const plan: JourneyPlan = {
-    ...sourcePlan,
-    operations: [operation]
-  };
-  const browser = new FakeBrowser(input.locatorCount);
-  const sink = new FakeArtifactSink();
-  const contextInputs: PlaywrightCreateBrowserContextInput[] = [];
-
-  const result = await runJourney({
-    plan,
-    adapter: playwrightAdapter({
-      driver: artifactTestDriver(contextInputs),
-      browser: browser as never,
-      assertionTimeoutMs: 1,
-      artifacts: {
-        mode: "retain-on-failure",
-        sink,
-        traces: true,
-        screenshots: true,
-        videos: true
-      }
-    }),
-    profiles: [defaultProfile()]
-  });
-
-  assert.equal(contextInputs.length, 1);
-  assert.equal(contextInputs[0].operation?.id, operation.id);
-  return { browser, result, sink };
-}
-
-function artifactTestDriver(
+function contextTestDriver(
   contextInputs: PlaywrightCreateBrowserContextInput[]
 ): PlaywrightJourneyDriver {
   return {
-    name: "artifact-test-driver",
+    name: "context-test-driver",
     createExecution(input) {
       const { context } = input;
-      let page: FakeArtifactPage | undefined;
+      let page: FakePage | undefined;
 
       return {
         start() {
@@ -2237,14 +2126,14 @@ function artifactTestDriver(
         async openEntry(operation) {
           const input = {
             operation,
-            label: "artifact-actor"
+            label: "context-actor"
           };
           contextInputs.push(input);
           const browserContext = await context.createBrowserContext(input);
-          page = await browserContext.newPage() as unknown as FakeArtifactPage;
+          page = await browserContext.newPage() as unknown as FakePage;
         },
         pageForOperation() {
-          if (!page) throw new Error("Artifact test page was not created");
+          if (!page) throw new Error("Context test page was not created");
           return page as never;
         },
         transitionValue() {
@@ -2342,30 +2231,29 @@ class FakeBrowser {
 }
 
 class FakeBrowserContext {
-  readonly pagesList: FakeArtifactPage[] = [];
-  readonly tracing = new FakeTracing();
+  readonly pagesList: FakePage[] = [];
   closed = false;
   closeCalls = 0;
-  private readonly pageListeners: Array<(page: FakeArtifactPage) => void> = [];
+  private readonly pageListeners: Array<(page: FakePage) => void> = [];
 
   constructor(
     private readonly locatorCount: number,
     readonly options?: unknown
   ) {}
 
-  on(event: string, listener: (page: FakeArtifactPage) => void): FakeBrowserContext {
+  on(event: string, listener: (page: FakePage) => void): FakeBrowserContext {
     if (event === "page") {
       this.pageListeners.push(listener);
     }
     return this;
   }
 
-  pages(): FakeArtifactPage[] {
+  pages(): FakePage[] {
     return [...this.pagesList];
   }
 
-  async newPage(): Promise<FakeArtifactPage> {
-    const page = new FakeArtifactPage("artifact-page", this.locatorCount);
+  async newPage(): Promise<FakePage> {
+    const page = new FakePage("context-page", this.locatorCount);
     this.pagesList.push(page);
     for (const listener of this.pageListeners) {
       listener(page);
@@ -2379,64 +2267,12 @@ class FakeBrowserContext {
   }
 }
 
-class FakeTracing {
-  startCalls = 0;
-  readonly stopPaths: Array<string | undefined> = [];
-
-  async start(): Promise<void> {
-    this.startCalls += 1;
-  }
-
-  async stop(options?: { path?: string }): Promise<void> {
-    this.stopPaths.push(options?.path);
-  }
-}
-
-class FakeArtifactPage extends FakeLocator {
+class FakePage extends FakeLocator {
   readonly screenshotPaths: string[] = [];
-  readonly videoFile = new FakeVideo("/private/tmp/openuji-artifact-test/video.webm");
 
   async screenshot(options: { path: string }): Promise<Buffer> {
     this.screenshotPaths.push(options.path);
     return Buffer.from("");
-  }
-
-  video(): FakeVideo {
-    return this.videoFile;
-  }
-}
-
-class FakeVideo {
-  deleted = false;
-
-  constructor(private readonly filePath: string) {}
-
-  async path(): Promise<string> {
-    return this.filePath;
-  }
-
-  async delete(): Promise<void> {
-    this.deleted = true;
-  }
-}
-
-class FakeArtifactSink {
-  readonly attachments: Array<{
-    name: string;
-    path?: string;
-    body?: string | Buffer;
-    contentType?: string;
-  }> = [];
-
-  outputPath(...pathSegments: string[]): string {
-    return `/private/tmp/openuji-artifact-test/${pathSegments.join("/")}`;
-  }
-
-  attach(
-    name: string,
-    attachment: { path?: string; body?: string | Buffer; contentType?: string }
-  ): void {
-    this.attachments.push({ name, ...attachment });
   }
 }
 

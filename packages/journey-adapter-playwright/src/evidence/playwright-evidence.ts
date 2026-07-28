@@ -103,81 +103,11 @@ export class PlaywrightEvidence {
     });
   }
 
-  traceStarted(managedContext: PlaywrightBrowserContextEvidenceRecord): void {
-    this.sink.emit({
-      type: "playwright.trace.started",
-      ok: true,
-      data: { contextId: managedContext.id, label: managedContext.label }
-    });
-  }
-
-  screenshotAttached(
-    managedContext: PlaywrightBrowserContextEvidenceRecord,
-    _pageIndex: number,
-    path: string
-  ): void {
-    this.sink.emit({
-      type: "playwright.screenshot.attached",
-      ok: true,
-      data: { contextId: managedContext.id, label: managedContext.label, path }
-    });
-  }
-
-  screenshotFailed(
-    managedContext: PlaywrightBrowserContextEvidenceRecord,
-    _pageIndex: number,
-    path: string,
-    error: unknown
-  ): void {
-    this.artifactFailure("playwright.screenshot.failed", managedContext, error, { path });
-  }
-
-  traceAttached(
-    managedContext: PlaywrightBrowserContextEvidenceRecord,
-    path: string
-  ): void {
-    this.sink.emit({
-      type: "playwright.trace.attached",
-      ok: true,
-      data: { contextId: managedContext.id, label: managedContext.label, path }
-    });
-  }
-
-  traceFailed(
-    managedContext: PlaywrightBrowserContextEvidenceRecord,
-    path: string | undefined,
-    error: unknown
-  ): void {
-    this.artifactFailure("playwright.trace.failed", managedContext, error, {
-      path: path ?? null
-    });
-  }
-
-  videoAttached(
-    managedContext: PlaywrightBrowserContextEvidenceRecord,
-    _pageIndex: number,
-    path: string
-  ): void {
-    this.sink.emit({
-      type: "playwright.video.attached",
-      ok: true,
-      data: { contextId: managedContext.id, label: managedContext.label, path }
-    });
-  }
-
-  videoFailed(
-    managedContext: PlaywrightBrowserContextEvidenceRecord,
-    _pageIndex: number,
-    error: unknown
-  ): void {
-    this.artifactFailure("playwright.video.failed", managedContext, error);
-  }
-
   browserContextCloseFailed(
     managedContext: PlaywrightBrowserContextEvidenceRecord,
     error: unknown
   ): void {
-    this.artifactFailure("playwright.context.close.failed", managedContext, error);
+    this.browserContextFailure("playwright.context.close.failed", managedContext, error);
   }
 
   observerExecutionStarted(observer: PlaywrightExecutionObserver): void {
@@ -272,7 +202,7 @@ export class PlaywrightEvidence {
     });
   }
 
-  private artifactFailure(
+  private browserContextFailure(
     type: string,
     managedContext: PlaywrightBrowserContextEvidenceRecord,
     error: unknown,

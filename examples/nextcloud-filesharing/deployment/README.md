@@ -30,13 +30,7 @@ pnpm --filter @openuji/example-nextcloud-filesharing e2e:headed
 pnpm --filter @openuji/example-nextcloud-filesharing e2e:report
 ```
 
-The Playwright report shows traces, screenshots, videos, and the attached `ujg-evidence.json` when artifacts are retained. By default browser artifacts are retained on failure; set `UJG_PLAYWRIGHT_ARTIFACTS=always` to retain them for successful local debugging runs.
-
-To force Playwright traces on a successful debug run:
-
-```sh
-UJG_PLAYWRIGHT_ARTIFACTS=always pnpm --filter @openuji/example-nextcloud-filesharing e2e --trace on
-```
+The Playwright report shows the attached `ujg-evidence.json` and Axe path reports. Axe source screenshots are attached by the Axe observer for reviewed state pages.
 
 ## Reset
 

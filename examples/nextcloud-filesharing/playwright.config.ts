@@ -13,9 +13,6 @@ export default defineConfig({
   ],
   use: {
     browserName: "chromium",
-    trace: "retain-on-failure",
-    screenshot: "only-on-failure",
-    video: "retain-on-failure",
     actionTimeout: 30_000,
     navigationTimeout: 30_000
   },
