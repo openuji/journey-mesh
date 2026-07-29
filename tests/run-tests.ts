@@ -50,6 +50,7 @@ import {
   wcag22Tags,
   type AxeAuditReport,
   type AxeAuditRunnerInput,
+  type AxeObserver,
   type AxeResults
 } from "@openuji/journey-observer-axe";
 import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
@@ -1769,7 +1770,7 @@ const tests: TestCase[] = [
         operation: controlFlow,
         stage: "control-flow-recorded"
       });
-      await axe.report(fakeRunResult(plan, [executionResult(execution, true)]));
+      await reportAxe(axe, fakeRunResult(plan, [executionResult(execution, true)]));
 
       assert.equal(auditCalls.length, 2);
       assert.deepEqual([...wcag22Tags], [
@@ -1807,6 +1808,51 @@ const tests: TestCase[] = [
     }
   },
   {
+    name: "axe path html escapes metadata while rendering generated report links",
+    async run() {
+      const sourcePlan = await loadFixturePlan();
+      const state = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+      const plan: JourneyPlan = {
+        ...sourcePlan,
+        operations: [state]
+      };
+      const testInfo = new FakeAxeTestInfo("axe-html-escaping");
+      const axe = axeObserver({
+        testInfo: testInfo as never,
+        reportId: "html-escaping",
+        metadata: {
+          injectedHtml: "<a href=https://evil.test>unsafe</a>"
+        },
+        auditRunner(input) {
+          return Promise.resolve(fakeAxeReport(input));
+        }
+      });
+      const execution = fakeAxeExecution(plan);
+
+      axe.onExecutionStarted?.({ execution });
+      await axe.observeOperation?.({
+        execution,
+        expectedMatchCount: 1,
+        locator: new FakeAxeLocator() as never,
+        operation: state,
+        page: new FakeAxePage() as never,
+        stage: "state-asserted"
+      });
+      await reportAxe(axe, fakeRunResult(plan, [executionResult(execution, true)]));
+
+      const pathHtmlAttachment = testInfo.attachments.find(
+        (attachment) => attachment.name === "axe-path-html-escaping.html"
+      );
+      assert.ok(pathHtmlAttachment?.path);
+      const pathHtml = await readFile(pathHtmlAttachment.path, "utf8");
+      assert.match(pathHtml, /&lt;a href=https:\/\/evil\.test&gt;unsafe&lt;\/a&gt;/);
+      assert.doesNotMatch(pathHtml, /<a href=https:\/\/evil\.test>unsafe<\/a>/);
+      const sourceJsonHref = axe.latestPathReport?.items[0].sourceJsonHref;
+      assert.ok(sourceJsonHref);
+      assert.ok(pathHtml.includes(`<a href="${sourceJsonHref}">JSON</a>`));
+    }
+  },
+  {
     name: "axe observer skips non-singleton matched locators without running axe",
     async run() {
       const sourcePlan = await loadFixturePlan();
@@ -1837,7 +1883,7 @@ const tests: TestCase[] = [
         page: new FakeAxePage() as never,
         stage: "state-asserted"
       });
-      await axe.report(fakeRunResult(plan, [executionResult(execution, true)]));
+      await reportAxe(axe, fakeRunResult(plan, [executionResult(execution, true)]));
 
       assert.equal(auditCalls, 0);
       assert.equal(axe.latestPathReport?.summary.skipped, 1);
@@ -1852,6 +1898,49 @@ const tests: TestCase[] = [
     async run() {
       await runStrictAxeObserver(false);
       await assert.rejects(() => runStrictAxeObserver(true), /Axe found 1 WCAG violation/);
+    }
+  },
+  {
+    name: "axe observer keeps source screenshot fallback when audit runner fails",
+    async run() {
+      const sourcePlan = await loadFixturePlan();
+      const state = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+      const plan: JourneyPlan = {
+        ...sourcePlan,
+        operations: [state]
+      };
+      const testInfo = new FakeAxeTestInfo("axe-screenshot-fallback");
+      const axe = axeObserver({
+        testInfo: testInfo as never,
+        reportId: "screenshot-fallback",
+        sourceScreenshots: {
+          states: true
+        },
+        auditRunner() {
+          return Promise.reject(new Error("axe scan failed"));
+        }
+      });
+      const execution = fakeAxeExecution(plan);
+
+      axe.onExecutionStarted?.({ execution });
+      await assert.rejects(async () => {
+        await axe.observeOperation?.({
+          execution,
+          expectedMatchCount: 1,
+          locator: new FakeAxeLocator() as never,
+          operation: state,
+          page: new FakeAxePage() as never,
+          stage: "state-asserted"
+        });
+      }, /axe scan failed/);
+      await reportAxe(axe, fakeRunResult(plan, [executionResult(execution, false)]));
+
+      const item = axe.latestPathReport?.items[0];
+      assert.equal(item?.status, "skipped");
+      assert.match(item?.reason ?? "", /axe audit did not complete/);
+      assert.match(item?.sourceScreenshotHref ?? "", /\.source\.playwright-screenshot\.png$/);
+      assert.equal(item?.sourceScreenshotError, undefined);
+      assert.ok(testInfo.attachments.some((attachment) => attachment.name.endsWith("-source.png")));
     }
   },
   {
@@ -2745,7 +2834,14 @@ async function runStrictAxeObserver(strict: boolean): Promise<void> {
     page: new FakeAxePage() as never,
     stage: "state-asserted"
   });
-  await axe.report(fakeRunResult(plan, [executionResult(execution, true)]));
+  await reportAxe(axe, fakeRunResult(plan, [executionResult(execution, true)]));
+}
+
+async function reportAxe(axe: AxeObserver, result: RunResult): Promise<void> {
+  await axe.report({
+    result,
+    json: JSON.stringify(result, null, 2)
+  });
 }
 
 function fakeAxeReport(
