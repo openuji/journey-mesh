@@ -19,7 +19,7 @@ services:
       - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
 
   alice:
-    image: nextcloud:stable-apache
+    image: nextcloud:34.0.2-apache@sha256:e93ccfc952c95f18175f3d297fb2f60c35070c05ca976050c250a9ddab793e75
     env_file:
       - ${NEXTCLOUD_STACK_ENV_FILE:-.env.example}
     depends_on:
@@ -44,7 +44,7 @@ services:
       - alice_nextcloud:/var/www/html
 
   bob:
-    image: nextcloud:stable-apache
+    image: nextcloud:34.0.2-apache@sha256:e93ccfc952c95f18175f3d297fb2f60c35070c05ca976050c250a9ddab793e75
     env_file:
       - ${NEXTCLOUD_STACK_ENV_FILE:-.env.example}
     depends_on:
