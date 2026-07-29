@@ -1,0 +1,65 @@
+name: Example CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  nextcloud-filesharing:
+    name: Nextcloud Filesharing Example
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Configure pnpm cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @openuji/example-nextcloud-filesharing exec playwright install --with-deps chromium
+
+      - name: Start Nextcloud stack
+        run: pnpm --filter @openuji/example-nextcloud-filesharing stack:up
+
+      - name: Provision Nextcloud stack
+        run: pnpm --filter @openuji/example-nextcloud-filesharing stack:provision
+
+      - name: Seed Nextcloud stack
+        run: pnpm --filter @openuji/example-nextcloud-filesharing stack:seed
+
+      - name: Run Nextcloud filesharing example
+        run: pnpm --filter @openuji/example-nextcloud-filesharing e2e
+
+      - name: Reset Nextcloud stack
+        if: always()
+        run: pnpm --filter @openuji/example-nextcloud-filesharing stack:reset
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextcloud-filesharing-playwright
+          if-no-files-found: ignore
+          path: |
+            examples/nextcloud-filesharing/playwright-report
+            examples/nextcloud-filesharing/test-results
