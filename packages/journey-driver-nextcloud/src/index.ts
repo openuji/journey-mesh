@@ -269,7 +269,11 @@ export async function logInToNextcloud(session: NextcloudActorSession): Promise<
   await passwordInput.waitFor({ state: "visible", timeout: 30_000 });
   await passwordInput.fill(session.user.password);
   await page.locator('button[type="submit"], input[type="submit"]').first().click();
-  await page.getByRole("link", { name: "Files" }).first().waitFor({
+  await page.waitForURL(
+    (url) => !url.pathname.startsWith("/login"),
+    { timeout: 30_000 }
+  );
+  await page.locator("#header").first().waitFor({
     state: "visible",
     timeout: 30_000
   });

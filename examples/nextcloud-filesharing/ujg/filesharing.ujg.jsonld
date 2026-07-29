@@ -602,10 +602,7 @@
       "@id": "urn:locator:shares-overview-link",
       "label": "Shares overview link",
       "role": "link",
-      "accessibleNameRef": "urn:message:shares-overview",
-      "accessibleFeatureRefs": [
-        "urn:feature:expanded-true"
-      ]
+      "accessibleNameRef": "urn:message:shares-overview"
     },
     {
       "@type": "AccessibleLocator",

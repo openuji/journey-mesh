@@ -148,7 +148,6 @@ export type RunJourneyOptions = {
   adapter: JourneyAdapter;
   profiles: JourneyProfile[];
   observers?: JourneyObserver[];
-  reporters?: JourneyReporter[];
   runId?: string;
 };
 
@@ -191,6 +190,18 @@ export type ReportJourneyResultInput = {
   readonly result: RunResult;
 };
 
+export type ReportJourneyResultOutcome = {
+  /**
+   * Exact result supplied by the caller.
+   */
+  readonly result: RunResult;
+
+  /**
+   * Failures produced while writing, attaching, rendering, or uploading output.
+   */
+  readonly errors: readonly JourneyRunError[];
+};
+
 type ProfileExecutionOutcome = {
   readonly execution: ExecutionResult;
   readonly evidence: JourneyExecutionEvidence;
@@ -216,101 +227,71 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
   });
   if (runStartError) {
     errors.push(runStartError);
-    return buildResult({
-      errors,
-      evidenceExecutions,
-      executions,
-      ok: false,
-      plan: options.plan,
-      runId
-    });
+  } else {
+    for (const [profileIndex, profile] of options.profiles.entries()) {
+      const executionId = `${safeSegment(profile.id)}-${String(profileIndex + 1).padStart(2, "0")}`;
+      const context: JourneyExecutionContext = {
+        runId,
+        executionId,
+        profile,
+        plan: options.plan
+      };
+      const descriptor = executionDescriptor(context);
+
+      const outcome = await runProfileExecution({
+        adapter: options.adapter,
+        context,
+        descriptor,
+        observerDispatcher,
+        plan: options.plan,
+        profile
+      });
+
+      executions.push(outcome.execution);
+      evidenceExecutions.push(outcome.evidence);
+      if (outcome.execution.error) errors.push(outcome.execution.error);
+    }
   }
 
-  for (const [profileIndex, profile] of options.profiles.entries()) {
-    const executionId = `${safeSegment(profile.id)}-${String(profileIndex + 1).padStart(2, "0")}`;
-    const context: JourneyExecutionContext = {
-      runId,
-      executionId,
-      profile,
-      plan: options.plan
-    };
-    const descriptor = executionDescriptor(context);
-
-    const outcome = await runProfileExecution({
-      adapter: options.adapter,
-      context,
-      descriptor,
-      observerDispatcher,
-      plan: options.plan,
-      profile
-    });
-
-    executions.push(outcome.execution);
-    evidenceExecutions.push(outcome.evidence);
-    if (outcome.execution.error) errors.push(outcome.execution.error);
-  }
-
-  let ok = executions.every((execution) => execution.ok);
-  let result = buildResult({
+  const resultBeforeRunCompletion = buildResult({
     errors,
     evidenceExecutions,
     executions,
-    ok,
+    ok: resultOk(executions, errors),
     plan: options.plan,
     runId
   });
 
-  const reporterPipeline = new ReporterPipeline();
-  const reporterOutcome = await reporterPipeline.run({
-    reporters: options.reporters ?? [],
-    result
+  const completionError =
+    await observerDispatcher.runCompleted(resultBeforeRunCompletion);
+  if (completionError) {
+    errors.push(completionError);
+  }
+
+  const finalResult = buildResult({
+    errors,
+    evidenceExecutions,
+    executions,
+    ok: resultOk(executions, errors),
+    plan: options.plan,
+    runId
   });
-  if (reporterOutcome.errors.length > 0) {
-    ok = false;
-    errors.push(...reporterOutcome.errors);
-    result = buildResult({
-      errors,
-      evidenceExecutions,
-      executions,
-      ok,
-      plan: options.plan,
-      runId
-    });
-  }
 
-  const runCompletionError = await observerDispatcher.runCompleted(result);
-  if (runCompletionError) {
-    ok = false;
-    errors.push(runCompletionError);
-    result = buildResult({
-      errors,
-      evidenceExecutions,
-      executions,
-      ok,
-      plan: options.plan,
-      runId
-    });
-  }
-
-  return result;
+  return finalResult;
 }
 
 export async function reportJourneyResult(
   input: ReportJourneyResultInput
-): Promise<RunResult> {
-  const reporterPipeline = new ReporterPipeline();
-  const reporterOutcome = await reporterPipeline.run({
+): Promise<ReportJourneyResultOutcome> {
+  const pipeline = new ReporterPipeline();
+  const reporting = await pipeline.run({
     reporters: input.reporters,
     result: input.result
   });
-  if (reporterOutcome.errors.length === 0) {
-    return input.result;
-  }
 
   return {
-    ...input.result,
-    ok: false,
-    errors: [...input.result.errors, ...reporterOutcome.errors]
+    result: input.result,
+    errors: reporting.errors
   };
 }
 
@@ -476,6 +457,13 @@ function operationEvidence(
     ok,
     ...(error ? { error } : {})
   };
+}
+
+function resultOk(
+  executions: readonly ExecutionResult[],
+  errors: readonly JourneyRunError[]
+): boolean {
+  return errors.length === 0 && executions.every((execution) => execution.ok);
 }
 
 function buildResult({

@@ -5,8 +5,6 @@ export type JourneyRunError = {
 };
 
 export function errorToJourneyRunError(error: unknown): JourneyRunError {
-  if (isJourneyRunError(error)) return error;
-
   if (error instanceof Error) {
     return {
       name: error.name,
@@ -14,6 +12,8 @@ export function errorToJourneyRunError(error: unknown): JourneyRunError {
       ...(error.stack ? { stack: error.stack } : {})
     };
   }
+
+  if (isJourneyRunError(error)) return error;
 
   return {
     name: "Error",

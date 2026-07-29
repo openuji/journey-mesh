@@ -327,8 +327,6 @@ accessible:
       label: "Shares overview link"
       role: "link"
       accessibleNameRef: "urn:message:shares-overview"
-      accessibleFeatureRefs:
-        - "urn:feature:expanded-true"
     "urn:locator:file-share-action":
       label: "File share action"
       role: "button"

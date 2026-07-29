@@ -56,13 +56,13 @@ test("executes the federated file-sharing UJG journey", async ({ browser }, test
       }
     ]
   });
+  const reporters = preflightErrors.length > 0
+    ? [evidence, summary]
+    : [evidence, axe, summary];
   const result = preflightErrors.length > 0
-    ? await reportJourneyResult({
-        reporters: [evidence, summary],
-        result: preflightFailureResult({
-          errors: preflightErrors,
-          plan
-        })
+    ? preflightFailureResult({
+        errors: preflightErrors,
+        plan
       })
     : await runJourney({
         plan,
@@ -71,15 +71,19 @@ test("executes the federated file-sharing UJG journey", async ({ browser }, test
           browser: browser as Browser,
           executionObservers: [axe]
         }),
-        profiles: [defaultProfile(), keyboardOnlyProfile()],
-        reporters: [evidence, axe, summary]
+        profiles: [defaultProfile(), keyboardOnlyProfile()]
       });
+  const reporting = await reportJourneyResult({
+    reporters,
+    result
+  });
 
   if (process.env.UJG_EVIDENCE_STDOUT === "1") {
     console.log(JSON.stringify(result, null, 2));
   }
 
   expect(result.ok, failureSummary(result)).toBe(true);
+  expect(reporting.errors, reportingFailureSummary(reporting.errors)).toEqual([]);
 });
 
 function failureSummary(result: RunResult): string {
@@ -89,6 +93,10 @@ function failureSummary(result: RunResult): string {
 
 function formatError(error: JourneyRunError): string {
   return `${error.name}: ${error.message}`;
+}
+
+function reportingFailureSummary(errors: readonly JourneyRunError[]): string {
+  return errors.map(formatError).join("\n\n") || "UJG reporting should pass";
 }
 
 function preflightFailureResult(input: {
