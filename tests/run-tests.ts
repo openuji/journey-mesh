@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   activatePlaywrightLocator,
@@ -2791,7 +2793,7 @@ class FakeAxeTestInfo {
   constructor(private readonly id: string) {}
 
   outputPath(...pathSegments: string[]): string {
-    return `/private/tmp/openuji-${this.id}-${pathSegments.join("-")}`;
+    return join(tmpdir(), `openuji-${this.id}-${pathSegments.join("-")}`);
   }
 
   attach(
