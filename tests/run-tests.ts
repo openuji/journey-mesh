@@ -649,8 +649,10 @@ const tests: TestCase[] = [
       assert.equal(controlFlow.toEntry?.id, "urn:entry:bob-pending-share-offer-cleared");
 
       const bobShares = transitionOperation(plan, "urn:transition:bob-opens-shares-overview");
-      assert.equal(bobShares.activation.bindings[0].locators[0].features[0].name, "expanded");
-      assert.equal(bobShares.activation.bindings[0].locators[0].features[0].value, "true");
+      assert.equal(bobShares.activation.bindings[0].locators[0].id, "urn:locator:shares-overview-link");
+      assert.equal(bobShares.activation.bindings[0].locators[0].role, "link");
+      assert.equal(bobShares.activation.bindings[0].locators[0].accessibleName, "Shares");
+      assert.deepEqual(bobShares.activation.bindings[0].locators[0].features, []);
     }
   },
   {
@@ -1292,7 +1294,7 @@ const tests: TestCase[] = [
     }
   },
   {
-    name: "playwright adapter converts role, name, context, expanded, and binding composition",
+    name: "playwright adapter converts role, name, context, and binding composition",
     async run() {
       const root = new FakeLocator("page");
       const driver = testPlaywrightDriver();
@@ -1310,7 +1312,40 @@ const tests: TestCase[] = [
 
       assert.match(locator.toString(), /role=link/);
       assert.match(locator.toString(), /Shares/);
-      assert.match(locator.toString(), /expanded=true/);
+      assert.doesNotMatch(locator.toString(), /expanded=/);
+
+      const expandedLocator = await toPlaywrightObservationLocator(
+        root as never,
+        [
+          {
+            id: "urn:test:expanded-binding",
+            surfaceId: "urn:test:surface",
+            eventId: "urn:test:event",
+            requiredInputModalityProfiles: [],
+            locators: [
+              {
+                id: "urn:test:expanded-locator",
+                role: "button",
+                accessibleName: "Disclosure",
+                features: [
+                  {
+                    id: "urn:test:expanded-feature",
+                    name: "expanded",
+                    value: "true"
+                  }
+                ],
+                contexts: []
+              }
+            ]
+          }
+        ],
+        {
+          driver,
+          operation,
+          context: fakeDriverContext()
+        }
+      );
+      assert.match(expandedLocator.toString(), /expanded=true/);
 
       const aliceOperation = transitionOperation(plan, "urn:transition:alice-opens-file-menu");
       const aliceLocator = await toPlaywrightObservationLocator(
@@ -2096,6 +2131,20 @@ const tests: TestCase[] = [
       assert.doesNotMatch(reusableSource, /federated-cloud-id/);
       assert.doesNotMatch(reusableSource, /urn:effect:bob-accept-share/);
       assert.doesNotMatch(reusableSource, /locatorFilters/);
+    }
+  },
+  {
+    name: "nextcloud example pins Docker image to a versioned digest",
+    async run() {
+      const composeSource = await readFile(
+        new URL("../examples/nextcloud-filesharing/deployment/compose.yaml", import.meta.url),
+        "utf8"
+      );
+      const pinnedNextcloudImage =
+        "nextcloud:34.0.2-apache@sha256:e93ccfc952c95f18175f3d297fb2f60c35070c05ca976050c250a9ddab793e75";
+
+      assert.equal(composeSource.split(pinnedNextcloudImage).length - 1, 2);
+      assert.doesNotMatch(composeSource, /nextcloud:stable-apache/);
     }
   },
   {
