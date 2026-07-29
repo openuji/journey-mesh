@@ -51,6 +51,8 @@ jobs:
         run: pnpm --filter @openuji/example-nextcloud-filesharing stack:seed
 
       - name: Run Nextcloud filesharing example
+        env:
+          UJG_EXAMPLE_TIMEOUT_MS: 600000
         run: pnpm --filter @openuji/example-nextcloud-filesharing e2e
 
       - name: Reset Nextcloud stack

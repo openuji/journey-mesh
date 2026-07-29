@@ -2131,6 +2131,7 @@ const tests: TestCase[] = [
       assert.doesNotMatch(configSource, /trace:\s*"retain-on-failure"/);
       assert.doesNotMatch(configSource, /screenshot:\s*"only-on-failure"/);
       assert.doesNotMatch(configSource, /video:\s*"retain-on-failure"/);
+      assert.match(configSource, /UJG_EXAMPLE_TIMEOUT_MS/);
       assert.match(configSource, /outputDir:\s*"test-results"/);
       assert.match(configSource, /outputFolder:\s*"playwright-report"/);
 
