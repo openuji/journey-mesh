@@ -2154,6 +2154,9 @@ const tests: TestCase[] = [
       assert.match(runSource, /nextcloud-filesharing\.axe-path/);
       assert.match(runSource, /latestAccessibilitySummaryReportPath/);
       assert.match(runSource, /axe json:/);
+      assert.match(runSource, /failed operation:/);
+      assert.match(runSource, /failedOperationSummaries/);
+      assert.match(runSource, /graphNodeId/);
     }
   },
   {
