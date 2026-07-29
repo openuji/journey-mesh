@@ -6,6 +6,7 @@
   "dependencies": {
     "@openuji/journey-adapter-playwright": "workspace:*",
     "@openuji/journey-driver-nextcloud": "workspace:*",
+    "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-model-ujg": "workspace:*",
     "@openuji/journey-observer-axe": "workspace:*",
     "@openuji/journey-profiles": "workspace:*",

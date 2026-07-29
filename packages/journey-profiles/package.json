@@ -8,6 +8,7 @@
   },
   "types": "./src/index.ts",
   "dependencies": {
+    "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-runner": "workspace:*"
   },
   "scripts": {

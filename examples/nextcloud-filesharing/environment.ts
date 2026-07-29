@@ -3,6 +3,11 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import {
+  keyboardTextEntryInputModalityId,
+  type JourneyPlan,
+  type TransitionPlanOperation
+} from "@openuji/journey-execution-model";
+import {
   deleteFileIfExists,
   deleteOcsResource,
   ensureFileExists,
@@ -20,10 +25,6 @@ import {
   type NextcloudUserConfig,
   type OcsShare
 } from "@openuji/journey-driver-nextcloud";
-import type {
-  JourneyPlan,
-  TransitionPlanOperation
-} from "@openuji/journey-runner";
 
 loadExampleEnv();
 
@@ -51,8 +52,6 @@ const bobUser: NextcloudUserConfig = {
 const federatedRecipient =
   process.env.NEXTCLOUD_FEDERATED_RECIPIENT ??
   `${bobUser.username}@${String(bobTouchpoint.baseURL)}`;
-
-const keyboardTextEntryInputModalityId = "urn:input-modality:keyboard-text-entry";
 
 export const nextcloudEnvironment: NextcloudDriverOptions = {
   touchpoints: {

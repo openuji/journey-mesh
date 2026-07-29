@@ -1,32 +1,49 @@
-import type {
-  InputModalityDecision,
-  JourneyInteractionCommand,
-  JourneyProfile,
-  ResolvedInputModality,
-  ResolvedInputModalityProfile,
-  TransitionPlanOperation
-} from "@openuji/journey-runner";
+import {
+  keyboardEnterInputModalityId,
+  keyboardSpaceInputModalityId,
+  keyboardTextEntryInputModalityId,
+  pointerInputModalityId,
+  type InputModalityDecision,
+  type JourneyInputModalityId,
+  type JourneyInteractionCommand,
+  type ResolvedInputModality,
+  type ResolvedInputModalityProfile,
+  type ResolvedJourneyInputModality,
+  type TransitionPlanOperation
+} from "@openuji/journey-execution-model";
+import type { JourneyProfile } from "@openuji/journey-runner";
 
-const keyboardTextEntryInputModalityId = "urn:input-modality:keyboard-text-entry";
-const keyboardSpaceInputModalityId = "urn:input-modality:keyboard-space";
-const keyboardEnterInputModalityId = "urn:input-modality:keyboard-enter";
-const pointerInputModalityId = "urn:input-modality:pointer";
+const defaultModalityPreference = [
+  pointerInputModalityId,
+  keyboardEnterInputModalityId,
+  keyboardSpaceInputModalityId,
+  keyboardTextEntryInputModalityId
+] satisfies readonly JourneyInputModalityId[];
+
+const keyboardOnlyModalityPreference = [
+  keyboardTextEntryInputModalityId,
+  keyboardEnterInputModalityId,
+  keyboardSpaceInputModalityId
+] satisfies readonly JourneyInputModalityId[];
+
+const commandByModalityId: Record<JourneyInputModalityId, JourneyInteractionCommand> = {
+  [pointerInputModalityId]: "pointer-click",
+  [keyboardEnterInputModalityId]: "keyboard-enter",
+  [keyboardSpaceInputModalityId]: "keyboard-space",
+  [keyboardTextEntryInputModalityId]: "keyboard-text-entry"
+};
+
+type SingleModalityProfileMatch = {
+  profile: ResolvedInputModalityProfile;
+  modality: ResolvedJourneyInputModality;
+};
 
 export function defaultProfile(): JourneyProfile {
   return {
     id: "default",
     label: "Default",
     selectInputModality(operation) {
-      const preferredModalities = operation.activation.eventId.endsWith(":text-entry-activation")
-        ? [keyboardTextEntryInputModalityId, pointerInputModalityId, keyboardEnterInputModalityId]
-        : [
-            pointerInputModalityId,
-            keyboardEnterInputModalityId,
-            keyboardSpaceInputModalityId,
-            keyboardTextEntryInputModalityId
-          ];
-
-      return selectDecision("default", operation, preferredModalities);
+      return selectDecision("default", operation, defaultModalityPreference);
     }
   };
 }
@@ -36,11 +53,7 @@ export function keyboardOnlyProfile(): JourneyProfile {
     id: "keyboard-only",
     label: "Keyboard only",
     selectInputModality(operation) {
-      return selectDecision("keyboard-only", operation, [
-        keyboardTextEntryInputModalityId,
-        keyboardEnterInputModalityId,
-        keyboardSpaceInputModalityId
-      ]);
+      return selectDecision("keyboard-only", operation, keyboardOnlyModalityPreference);
     }
   };
 }
@@ -48,7 +61,7 @@ export function keyboardOnlyProfile(): JourneyProfile {
 function selectDecision(
   profileId: string,
   operation: TransitionPlanOperation,
-  modalityPreference: string[]
+  modalityPreference: readonly JourneyInputModalityId[]
 ): InputModalityDecision {
   for (const modalityId of modalityPreference) {
     const match = findProfileWithSingleModality(
@@ -73,10 +86,13 @@ function selectDecision(
 
 function findProfileWithSingleModality(
   profiles: ResolvedInputModalityProfile[],
-  modalityId: string
-): { profile: ResolvedInputModalityProfile; modality: ResolvedInputModality } | undefined {
+  modalityId: JourneyInputModalityId
+): SingleModalityProfileMatch | undefined {
   for (const profile of profiles) {
-    const modality = profile.modalities.find((candidate) => candidate.id === modalityId);
+    const modality = profile.modalities.find(
+      (candidate): candidate is ResolvedJourneyInputModality =>
+        hasJourneyInputModalityId(candidate, modalityId)
+    );
     if (!modality) continue;
 
     if (profile.modalities.length !== 1) {
@@ -91,17 +107,13 @@ function findProfileWithSingleModality(
   return undefined;
 }
 
-function commandForModality(modalityId: string): JourneyInteractionCommand {
-  switch (modalityId) {
-    case pointerInputModalityId:
-      return "pointer-click";
-    case keyboardEnterInputModalityId:
-      return "keyboard-enter";
-    case keyboardSpaceInputModalityId:
-      return "keyboard-space";
-    case keyboardTextEntryInputModalityId:
-      return "keyboard-text-entry";
-    default:
-      throw new Error(`Unsupported input modality ${modalityId}`);
-  }
+function hasJourneyInputModalityId(
+  modality: ResolvedInputModality,
+  modalityId: JourneyInputModalityId
+): modality is ResolvedJourneyInputModality {
+  return modality.id === modalityId;
+}
+
+function commandForModality(modalityId: JourneyInputModalityId): JourneyInteractionCommand {
+  return commandByModalityId[modalityId];
 }

@@ -655,22 +655,22 @@
     },
     {
       "@type": "InputModality",
-      "@id": "urn:input-modality:keyboard-text-entry",
+      "@id": "observability:keyboard-text-entry",
       "label": "Keyboard text entry"
     },
     {
       "@type": "InputModality",
-      "@id": "urn:input-modality:keyboard-space",
+      "@id": "observability:keyboard-space",
       "label": "Keyboard Space activation"
     },
     {
       "@type": "InputModality",
-      "@id": "urn:input-modality:keyboard-enter",
+      "@id": "observability:keyboard-enter",
       "label": "Keyboard Enter activation"
     },
     {
       "@type": "InputModality",
-      "@id": "urn:input-modality:pointer",
+      "@id": "observability:pointer",
       "label": "Pointer"
     },
     {
@@ -678,7 +678,7 @@
       "@id": "urn:input-modality-profile:keyboard-text-entry",
       "label": "Keyboard text entry",
       "inputModalityRefs": [
-        "urn:input-modality:keyboard-text-entry"
+        "observability:keyboard-text-entry"
       ]
     },
     {
@@ -686,7 +686,7 @@
       "@id": "urn:input-modality-profile:keyboard-space",
       "label": "Keyboard Space activation",
       "inputModalityRefs": [
-        "urn:input-modality:keyboard-space"
+        "observability:keyboard-space"
       ]
     },
     {
@@ -694,7 +694,7 @@
       "@id": "urn:input-modality-profile:keyboard-enter",
       "label": "Keyboard Enter activation",
       "inputModalityRefs": [
-        "urn:input-modality:keyboard-enter"
+        "observability:keyboard-enter"
       ]
     },
     {
@@ -702,7 +702,7 @@
       "@id": "urn:input-modality-profile:pointer",
       "label": "Pointer interaction",
       "inputModalityRefs": [
-        "urn:input-modality:pointer"
+        "observability:pointer"
       ]
     },
     {

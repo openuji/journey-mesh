@@ -358,32 +358,32 @@ resolvers:
     label: "Resolve repeated artifact surface instances"
     instanceKeyFeatureRef: "urn:feature:artifact-instance-key"
 inputModalities:
-  "urn:input-modality:keyboard-text-entry":
+  "observability:keyboard-text-entry":
     label: "Keyboard text entry"
-  "urn:input-modality:keyboard-space":
+  "observability:keyboard-space":
     label: "Keyboard Space activation"
-  "urn:input-modality:keyboard-enter":
+  "observability:keyboard-enter":
     label: "Keyboard Enter activation"
-  "urn:input-modality:pointer":
+  "observability:pointer":
     label: "Pointer"
 
 inputModalityProfiles:
   "urn:input-modality-profile:keyboard-text-entry":
     label: "Keyboard text entry"
     inputModalityRefs:
-      - "urn:input-modality:keyboard-text-entry"
+      - "observability:keyboard-text-entry"
   "urn:input-modality-profile:keyboard-space":
     label: "Keyboard Space activation"
     inputModalityRefs:
-      - "urn:input-modality:keyboard-space"
+      - "observability:keyboard-space"
   "urn:input-modality-profile:keyboard-enter":
     label: "Keyboard Enter activation"
     inputModalityRefs:
-      - "urn:input-modality:keyboard-enter"
+      - "observability:keyboard-enter"
   "urn:input-modality-profile:pointer":
     label: "Pointer interaction"
     inputModalityRefs:
-      - "urn:input-modality:pointer"
+      - "observability:pointer"
 
 observationEvents:
   "urn:observation-event:presence":

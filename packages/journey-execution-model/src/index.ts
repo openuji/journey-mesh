@@ -31,6 +31,24 @@ export type ResolvedAccessibleLocator = LabeledRef & {
 
 export type ResolvedInputModality = LabeledRef;
 
+export const keyboardTextEntryInputModalityId = "observability:keyboard-text-entry" as const;
+export const keyboardSpaceInputModalityId = "observability:keyboard-space" as const;
+export const keyboardEnterInputModalityId = "observability:keyboard-enter" as const;
+export const pointerInputModalityId = "observability:pointer" as const;
+
+export const journeyInputModalityIds = [
+  keyboardTextEntryInputModalityId,
+  keyboardSpaceInputModalityId,
+  keyboardEnterInputModalityId,
+  pointerInputModalityId
+] as const;
+
+export type JourneyInputModalityId = (typeof journeyInputModalityIds)[number];
+
+export type ResolvedJourneyInputModality = ResolvedInputModality & {
+  id: JourneyInputModalityId;
+};
+
 export type ResolvedInputModalityProfile = LabeledRef & {
   modalities: ResolvedInputModality[];
 };
@@ -168,6 +186,6 @@ export type JourneyInteractionCommand =
 export type InputModalityDecision = {
   profileId: string;
   inputModalityProfile: ResolvedInputModalityProfile;
-  modality: ResolvedInputModality;
+  modality: ResolvedJourneyInputModality;
   command: JourneyInteractionCommand;
 };

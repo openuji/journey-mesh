@@ -50,6 +50,9 @@ importers:
       '@openuji/journey-driver-nextcloud':
         specifier: workspace:*
         version: link:../../packages/journey-driver-nextcloud
+      '@openuji/journey-execution-model':
+        specifier: workspace:*
+        version: link:../../packages/journey-execution-model
       '@openuji/journey-model-ujg':
         specifier: workspace:*
         version: link:../../packages/journey-model-ujg
@@ -122,6 +125,9 @@ importers:
 
   packages/journey-profiles:
     dependencies:
+      '@openuji/journey-execution-model':
+        specifier: workspace:*
+        version: link:../journey-execution-model
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner

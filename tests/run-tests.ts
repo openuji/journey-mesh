@@ -26,9 +26,15 @@ import type {
   JourneyPlan as EvidenceJourneyPlan,
   JourneyPlanOperation as EvidenceJourneyPlanOperation
 } from "@openuji/journey-evidence";
-import type {
-  JourneyPlan as ExecutionJourneyPlan,
-  JourneyPlanOperation as ExecutionJourneyPlanOperation
+import {
+  journeyInputModalityIds,
+  keyboardEnterInputModalityId,
+  keyboardSpaceInputModalityId,
+  keyboardTextEntryInputModalityId,
+  pointerInputModalityId,
+  type JourneyInputModalityId,
+  type JourneyPlan as ExecutionJourneyPlan,
+  type JourneyPlanOperation as ExecutionJourneyPlanOperation
 } from "@openuji/journey-execution-model";
 import {
   compileUjgJourneyPlan,
@@ -104,7 +110,9 @@ const movedExecutionModelTypeNames = [
   "TransitionPlanOperation",
   "ControlFlowPlanOperation",
   "ResolvedAccessibleLocator",
+  "JourneyInputModalityId",
   "InputModalityDecision",
+  "ResolvedJourneyInputModality",
   "ResolvedEffect"
 ];
 
@@ -201,6 +209,14 @@ const tests: TestCase[] = [
           `${typeName} must be defined only in journey-execution-model`
         );
       }
+      const modalityContractDefinitions = packageSources.filter((sourceFile) =>
+        sourceFile.source.includes("export const journeyInputModalityIds")
+      );
+      assert.deepEqual(
+        modalityContractDefinitions.map((definition) => definition.path),
+        [executionModelSourcePath],
+        "Executable input modality IDs must be defined only in journey-execution-model"
+      );
 
       const compilerPackageSource = await readFile(
         new URL("../packages/journey-model-ujg/package.json", import.meta.url),
@@ -231,6 +247,19 @@ const tests: TestCase[] = [
         );
       }
 
+      const profilesPackageSource = await readFile(
+        new URL("../packages/journey-profiles/package.json", import.meta.url),
+        "utf8"
+      );
+      const profilesPackageJson = JSON.parse(profilesPackageSource) as {
+        dependencies?: Record<string, string>;
+      };
+      assert.equal(
+        profilesPackageJson.dependencies?.["@openuji/journey-execution-model"],
+        "workspace:*",
+        "journey-profiles must depend directly on journey-execution-model for modality contracts"
+      );
+
       const executionModelSource = await readFile(
         new URL("../packages/journey-execution-model/src/index.ts", import.meta.url),
         "utf8"
@@ -240,6 +269,28 @@ const tests: TestCase[] = [
           executionModelSource.includes(forbiddenPattern),
           false,
           `journey-execution-model must not expose UJG provenance field ${forbiddenPattern}`
+        );
+      }
+      assert.deepEqual([...journeyInputModalityIds], [
+        keyboardTextEntryInputModalityId,
+        keyboardSpaceInputModalityId,
+        keyboardEnterInputModalityId,
+        pointerInputModalityId
+      ]);
+
+      const profilesSource = packageSources.find((sourceFile) =>
+        sourceFile.path.endsWith("/packages/journey-profiles/src/index.ts")
+      );
+      assert.ok(profilesSource);
+      for (const forbiddenPattern of [
+        "activation.eventId",
+        ".endsWith(",
+        ":text-entry-activation"
+      ]) {
+        assert.equal(
+          profilesSource.source.includes(forbiddenPattern),
+          false,
+          `journey-profiles must not infer modality behavior from event IDs: ${forbiddenPattern}`
         );
       }
 
@@ -704,15 +755,46 @@ const tests: TestCase[] = [
       const textEntry = transitionOperation(plan, "urn:transition:alice-enters-remote-bob");
       const option = transitionOperation(plan, "urn:transition:alice-selects-remote-recipient");
 
-      assert.equal(select(defaultProfile(), button).command, "pointer-click");
-      assert.equal(select(defaultProfile(), textEntry).command, "keyboard-text-entry");
-      assert.equal(select(keyboardOnlyProfile(), button).command, "keyboard-space");
-      assert.equal(select(keyboardOnlyProfile(), option).command, "keyboard-enter");
+      const defaultButton = select(defaultProfile(), button);
+      const defaultTextEntry = select(defaultProfile(), textEntry);
+      const keyboardButton = select(keyboardOnlyProfile(), button);
+      const keyboardOption = select(keyboardOnlyProfile(), option);
+
+      assert.equal(defaultButton.command, "pointer-click");
+      assert.equal(defaultButton.modality.id, pointerInputModalityId);
+      assert.equal(defaultTextEntry.command, "keyboard-text-entry");
+      assert.equal(defaultTextEntry.modality.id, keyboardTextEntryInputModalityId);
+      assert.equal(keyboardButton.command, "keyboard-space");
+      assert.equal(keyboardButton.modality.id, keyboardSpaceInputModalityId);
+      assert.equal(keyboardOption.command, "keyboard-enter");
+      assert.equal(keyboardOption.modality.id, keyboardEnterInputModalityId);
+      for (const decision of [
+        defaultButton,
+        defaultTextEntry,
+        keyboardButton,
+        keyboardOption
+      ]) {
+        assertJourneyInputModalityId(decision.modality.id);
+      }
+
+      const multiProfileTextEntry = cloneOperation(textEntry);
+      multiProfileTextEntry.activation.requiredInputModalityProfiles = [
+        ...multiProfileTextEntry.activation.requiredInputModalityProfiles,
+        ...button.activation.requiredInputModalityProfiles.filter((profile) =>
+          profile.modalities.some((modality) => modality.id === pointerInputModalityId)
+        )
+      ];
+      const suffixedEventDecision = select(defaultProfile(), multiProfileTextEntry);
+      const opaqueEvent = cloneOperation(multiProfileTextEntry);
+      opaqueEvent.activation.eventId = "urn:observation-event:opaque-activation";
+      const opaqueEventDecision = select(defaultProfile(), opaqueEvent);
+      assert.equal(suffixedEventDecision.command, "pointer-click");
+      assert.equal(opaqueEventDecision.command, suffixedEventDecision.command);
 
       const pointerOnly = cloneOperation(button);
       pointerOnly.activation.requiredInputModalityProfiles =
         pointerOnly.activation.requiredInputModalityProfiles.filter((profile) =>
-          profile.modalities.some((modality) => modality.id === "urn:input-modality:pointer")
+          profile.modalities.some((modality) => modality.id === pointerInputModalityId)
         );
 
       assert.throws(
@@ -2238,6 +2320,13 @@ function select(
   operation: TransitionPlanOperation
 ): InputModalityDecision {
   return profile.selectInputModality(operation, {} as JourneyExecutionContext) as InputModalityDecision;
+}
+
+function assertJourneyInputModalityId(value: string): asserts value is JourneyInputModalityId {
+  assert.ok(
+    (journeyInputModalityIds as readonly string[]).includes(value),
+    `Expected ${value} to be an executable journey input modality id`
+  );
 }
 
 function cloneOperation(operation: TransitionPlanOperation): TransitionPlanOperation {
