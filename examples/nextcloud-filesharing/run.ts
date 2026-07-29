@@ -1,13 +1,21 @@
-import { writeFile } from "node:fs/promises";
+import { expect, test, type Browser } from "@playwright/test";
 
-import { expect, test, type Browser, type TestInfo } from "@playwright/test";
-
-import { playwrightAdapter } from "@openuji/journey-adapter-playwright";
+import {
+  playwrightAdapter,
+  playwrightJsonEvidenceReporter,
+  playwrightJourneyRunSummaryReporter
+} from "@openuji/journey-adapter-playwright";
 import { nextcloudDriver } from "@openuji/journey-driver-nextcloud";
 import { compileUjgJourneyPlan } from "@openuji/journey-model-ujg";
-import { axeObserver, isAxeStrict, type AxeObserver } from "@openuji/journey-observer-axe";
+import { axeObserver, isAxeStrict } from "@openuji/journey-observer-axe";
 import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
-import { runJourney, type JourneyPlan, type JourneyRunError, type RunResult } from "@openuji/journey-runner";
+import {
+  reportJourneyResult,
+  runJourney,
+  type JourneyPlan,
+  type JourneyRunError,
+  type RunResult
+} from "@openuji/journey-runner";
 
 import {
   nextcloudEnvironment,
@@ -19,6 +27,7 @@ const journey = new URL("./ujg/filesharing.ujg.jsonld", import.meta.url);
 test("executes the federated file-sharing UJG journey", async ({ browser }, testInfo) => {
   const plan = await compileUjgJourneyPlan(journey);
   const preflightErrors = validateNextcloudEnvironmentForPlan(plan);
+  const evidence = playwrightJsonEvidenceReporter({ testInfo });
   const axe = axeObserver({
     testInfo,
     reportId: "nextcloud-filesharing.axe-path",
@@ -28,10 +37,32 @@ test("executes the federated file-sharing UJG journey", async ({ browser }, test
     },
     strict: isAxeStrict()
   });
+  const summary = playwrightJourneyRunSummaryReporter({
+    testInfo,
+    artifacts: () => [
+      evidence.latestPath ? { label: "evidence", path: evidence.latestPath } : undefined,
+      axe.latestPathReportPath ? { label: "axe html", path: axe.latestPathReportPath } : undefined,
+      axe.latestAccessibilitySummaryReportPath
+        ? {
+            label: "accessibility",
+            path: axe.latestAccessibilitySummaryReportPath
+          }
+        : undefined
+    ],
+    commands: [
+      {
+        label: "report",
+        command: "pnpm --filter @openuji/example-nextcloud-filesharing e2e:report"
+      }
+    ]
+  });
   const result = preflightErrors.length > 0
-    ? preflightFailureResult({
-        errors: preflightErrors,
-        plan
+    ? await reportJourneyResult({
+        reporters: [evidence, summary],
+        result: preflightFailureResult({
+          errors: preflightErrors,
+          plan
+        })
       })
     : await runJourney({
         plan,
@@ -41,11 +72,8 @@ test("executes the federated file-sharing UJG journey", async ({ browser }, test
           executionObservers: [axe]
         }),
         profiles: [defaultProfile(), keyboardOnlyProfile()],
-        reporters: [axe]
+        reporters: [evidence, axe, summary]
       });
-
-  const evidencePath = await attachEvidence(testInfo, result);
-  printSummary(result, evidencePath, axe);
 
   if (process.env.UJG_EVIDENCE_STDOUT === "1") {
     console.log(JSON.stringify(result, null, 2));
@@ -53,39 +81,6 @@ test("executes the federated file-sharing UJG journey", async ({ browser }, test
 
   expect(result.ok, failureSummary(result)).toBe(true);
 });
-
-async function attachEvidence(testInfo: TestInfo, result: RunResult): Promise<string> {
-  const path = testInfo.outputPath("ujg-evidence.json");
-  await writeFile(path, JSON.stringify(result, null, 2));
-  await testInfo.attach("ujg-evidence.json", {
-    path,
-    contentType: "application/json"
-  });
-  return path;
-}
-
-function printSummary(result: RunResult, evidencePath: string, axe: AxeObserver): void {
-  console.log(`UJG journey ${result.ok ? "passed" : "failed"}: ${result.runId}`);
-  for (const execution of result.executions) {
-    const suffix = execution.ok
-      ? "ok"
-      : `failed: ${execution.error?.message ?? "unknown error"}`;
-    console.log(`  ${execution.profileId}: ${suffix}`);
-  }
-  if (result.executions.length === 0 && result.errors.length > 0) {
-    for (const error of result.errors) {
-      console.log(`  preflight: ${error.message}`);
-    }
-  }
-  console.log(`  evidence: ${evidencePath}`);
-  if (axe.latestPathReportPath) {
-    console.log(`  axe html: ${axe.latestPathReportPath}`);
-  }
-  if (axe.latestAccessibilitySummaryReportPath) {
-    console.log(`  axe json: ${axe.latestAccessibilitySummaryReportPath}`);
-  }
-  console.log("  report: pnpm --filter @openuji/example-nextcloud-filesharing e2e:report");
-}
 
 function failureSummary(result: RunResult): string {
   if (result.ok) return "UJG journey should pass";

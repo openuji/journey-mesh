@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./summary-reporter": "./src/summary-reporter.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {

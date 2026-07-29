@@ -26,6 +26,9 @@ export {
   executionDescriptor,
   profileDescriptor
 } from "./observers/contracts.js";
+export {
+  renderJourneyRunSummary
+} from "./reporters/console-summary.js";
 export { errorToJourneyRunError } from "./errors.js";
 
 export type {
@@ -59,6 +62,13 @@ export type {
   TransitionPlanOperation
 } from "@openuji/journey-execution-model";
 export type { JourneyRunError } from "./errors.js";
+export type {
+  JourneyRunSummaryArtifact,
+  JourneyRunSummaryColorMode,
+  JourneyRunSummaryCommand,
+  JourneyRunSummaryInput,
+  JourneyRunSummaryOptions
+} from "./reporters/console-summary.js";
 
 export type {
   JourneyComponentDescriptor,
@@ -176,6 +186,11 @@ export type RunResult = {
   errors: JourneyRunError[];
 };
 
+export type ReportJourneyResultInput = {
+  readonly reporters: readonly JourneyReporter[];
+  readonly result: RunResult;
+};
+
 type ProfileExecutionOutcome = {
   readonly execution: ExecutionResult;
   readonly evidence: JourneyExecutionEvidence;
@@ -278,6 +293,25 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
   }
 
   return result;
+}
+
+export async function reportJourneyResult(
+  input: ReportJourneyResultInput
+): Promise<RunResult> {
+  const reporterPipeline = new ReporterPipeline();
+  const reporterOutcome = await reporterPipeline.run({
+    reporters: input.reporters,
+    result: input.result
+  });
+  if (reporterOutcome.errors.length === 0) {
+    return input.result;
+  }
+
+  return {
+    ...input.result,
+    ok: false,
+    errors: [...input.result.errors, ...reporterOutcome.errors]
+  };
 }
 
 async function runProfileExecution({

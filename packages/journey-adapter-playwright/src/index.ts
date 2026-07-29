@@ -31,12 +31,27 @@ import {
 import type { PlaywrightExecutionObserver } from "./observers/contracts.js";
 import { PlaywrightObserverDispatcher } from "./observers/playwright-observer-dispatcher.js";
 
+export {
+  playwrightJsonEvidenceReporter,
+  playwrightJourneyRunSummaryReporter
+} from "./reporters.js";
+
 export type {
   PlaywrightExecutionObserver,
   PlaywrightJourneyObserver,
   PlaywrightObserverExecutionStartedInput,
   PlaywrightOperationObservation
 } from "./observers/contracts.js";
+export type {
+  PlaywrightJourneyRunSummaryReporter,
+  PlaywrightJourneyRunSummaryReporterOptions,
+  PlaywrightJsonEvidenceReporter,
+  PlaywrightJsonEvidenceReporterOptions,
+  PlaywrightSummaryArtifact,
+  PlaywrightSummaryArtifactSource,
+  PlaywrightTestAttachment,
+  PlaywrightTestInfoLike
+} from "./reporters.js";
 
 export type PlaywrightCreateBrowserContextInput = {
   operation?: JourneyPlanOperation;

@@ -4,6 +4,8 @@ import { readFile, readdir } from "node:fs/promises";
 import {
   activatePlaywrightLocator,
   playwrightAdapter,
+  playwrightJsonEvidenceReporter,
+  playwrightJourneyRunSummaryReporter,
   type PlaywrightExecutionObserver,
   type PlaywrightOperationObservation,
   toPlaywrightObservationLocator,
@@ -56,6 +58,7 @@ import {
 import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
 import {
   EvidenceRecorder,
+  renderJourneyRunSummary,
   runJourney,
   scopeEvidenceToExecution,
   type ControlFlowPlanOperation,
@@ -837,6 +840,121 @@ const tests: TestCase[] = [
           (event) => event.profileId === "keyboard-only" && event.type === "adapter.perform-transition.completed"
         )
       );
+    }
+  },
+  {
+    name: "runner console summary renders colored pass/fail blocks and relative artifacts",
+    async run() {
+      const plan: JourneyPlan = { id: "summary-plan", operations: [] };
+      const passing = fakeRunResult(plan, [
+        {
+          executionId: "default-01",
+          profileId: "default",
+          ok: true
+        },
+        {
+          executionId: "keyboard-only-02",
+          profileId: "keyboard-only",
+          ok: true
+        }
+      ]);
+
+      const colored = renderJourneyRunSummary(
+        {
+          result: passing,
+          artifacts: [
+            {
+              label: "evidence",
+              path: "/tmp/ujg-output/ujg-evidence.json"
+            }
+          ],
+          commands: [
+            {
+              label: "report",
+              command: "pnpm --filter @openuji/example-nextcloud-filesharing e2e:report"
+            }
+          ]
+        },
+        {
+          color: "always",
+          cwd: "/tmp/ujg-output"
+        }
+      );
+
+      assert.match(colored, /\u001b\[/);
+      assert.match(colored, /UJG Journey/);
+      assert.match(colored, /PASS/);
+      assert.match(colored, /2\/2 passed/);
+      assert.match(colored, /ujg-evidence\.json/);
+      assert.doesNotMatch(colored, /\/tmp\/ujg-output\/ujg-evidence\.json/);
+      assert.match(colored, /e2e:report/);
+      assert.ok(
+        colored.indexOf("Commands") < colored.indexOf("UJG Journey"),
+        "commands must render before the journey summary block"
+      );
+
+      const failing = fakeRunResult(plan, [
+        {
+          executionId: "default-01",
+          profileId: "default",
+          ok: false,
+          error: {
+            name: "LocatorError",
+            message: "Expected one locator"
+          }
+        }
+      ]);
+      const plain = renderJourneyRunSummary({ result: failing }, { color: "never" });
+
+      assert.doesNotMatch(plain, /\u001b\[/);
+      assert.match(plain, /FAIL/);
+      assert.match(plain, /Failures/);
+      assert.match(plain, /LocatorError Expected one locator/);
+    }
+  },
+  {
+    name: "playwright reporters attach evidence and summary through JourneyReporter",
+    async run() {
+      const testInfo = new FakeAxeTestInfo("playwright-summary-reporters");
+      const plan: JourneyPlan = { id: "summary-plan", operations: [] };
+      const result = fakeRunResult(plan, [
+        {
+          executionId: "default-01",
+          profileId: "default",
+          ok: true
+        }
+      ]);
+      const evidence = playwrightJsonEvidenceReporter({ testInfo });
+      const summary = playwrightJourneyRunSummaryReporter({
+        testInfo,
+        artifacts: () => [
+          evidence.latestPath && { label: "evidence", path: evidence.latestPath }
+        ],
+        commands: [
+          {
+            label: "report",
+            command: "pnpm --filter @openuji/example-nextcloud-filesharing e2e:report"
+          }
+        ]
+      });
+      const json = JSON.stringify(result, null, 2);
+
+      await evidence.report({ result, json });
+      await summary.report({ result, json });
+
+      assert.ok(evidence.latestPath?.endsWith("ujg-evidence.json"));
+      assert.ok(summary.latestPath?.endsWith("ujg-summary.json"));
+      assert.ok(testInfo.attachments.some((attachment) => attachment.name === "ujg-evidence.json"));
+      assert.ok(testInfo.attachments.some((attachment) => attachment.name === "ujg-summary.json"));
+
+      const summaryJson = JSON.parse(
+        await readFile(summary.latestPath ?? "", "utf8")
+      ) as {
+        artifacts?: Array<{ label: string; path: string }>;
+        commands?: Array<{ label: string; command: string }>;
+      };
+      assert.equal(summaryJson.artifacts?.[0].label, "evidence");
+      assert.match(summaryJson.commands?.[0].command ?? "", /e2e:report/);
     }
   },
   {
@@ -2221,6 +2339,8 @@ const tests: TestCase[] = [
       assert.doesNotMatch(configSource, /video:\s*"retain-on-failure"/);
       assert.match(configSource, /outputDir:\s*"test-results"/);
       assert.match(configSource, /outputFolder:\s*"playwright-report"/);
+      assert.match(configSource, /@openuji\/journey-adapter-playwright\/summary-reporter/);
+      assert.doesNotMatch(configSource, /\.\/ujg-summary-reporter\.ts/);
 
       const runSource = await readFile(
         new URL("../examples/nextcloud-filesharing/run.ts", import.meta.url),
@@ -2228,19 +2348,42 @@ const tests: TestCase[] = [
       );
       assert.match(runSource, /from "@playwright\/test"/);
       assert.match(runSource, /test\("executes the federated file-sharing UJG journey"/);
-      assert.match(runSource, /testInfo\.attach\("ujg-evidence\.json"/);
       assert.match(runSource, /UJG_EVIDENCE_STDOUT/);
       assert.match(runSource, /browser:\s*browser as Browser/);
+      assert.doesNotMatch(runSource, /printJourneyRunSummary/);
+      assert.doesNotMatch(runSource, /testInfo\.attach\("ujg-evidence\.json"/);
+      assert.doesNotMatch(runSource, /testInfo\.attach\("ujg-summary\.json"/);
+      assert.doesNotMatch(runSource, /function attachRunSummary/);
+      assert.doesNotMatch(runSource, /function runSummary/);
+      assert.match(runSource, /playwrightJsonEvidenceReporter/);
+      assert.match(runSource, /playwrightJourneyRunSummaryReporter/);
       assert.match(runSource, /axeObserver/);
       assert.match(runSource, /sourceScreenshots:\s*\{/);
       assert.match(runSource, /states:\s*true/);
       assert.match(runSource, /executionObservers:\s*\[axe\]/);
-      assert.doesNotMatch(runSource, /artifacts:\s*\{/);
       assert.doesNotMatch(runSource, /observers:\s*\[axe\]/);
-      assert.match(runSource, /reporters:\s*\[axe\]/);
+      assert.match(runSource, /reporters/);
+      assert.match(runSource, /reporters:\s*\[evidence,\s*summary\]/);
       assert.match(runSource, /nextcloud-filesharing\.axe-path/);
       assert.match(runSource, /latestAccessibilitySummaryReportPath/);
-      assert.match(runSource, /accessibility:/);
+      assert.match(runSource, /accessibility/);
+      assert.doesNotMatch(runSource, /UJG journey \$\{result\.ok/);
+      assert.doesNotMatch(runSource, /console\.log\(`  evidence:/);
+
+      const reporterSource = await readFile(
+        new URL("../packages/journey-adapter-playwright/src/summary-reporter.ts", import.meta.url),
+        "utf8"
+      );
+      assert.match(reporterSource, /renderJourneyRunSummary/);
+      assert.match(reporterSource, /ujg-summary\.json/);
+      assert.match(reporterSource, /onEnd/);
+
+      const adapterSource = await readFile(
+        new URL("../packages/journey-adapter-playwright/src/reporters.ts", import.meta.url),
+        "utf8"
+      );
+      assert.match(adapterSource, /playwrightJsonEvidenceReporter/);
+      assert.match(adapterSource, /playwrightJourneyRunSummaryReporter/);
     }
   },
   {
