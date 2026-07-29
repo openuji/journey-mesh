@@ -10,6 +10,7 @@ import { compileUjgJourneyPlan } from "@openuji/journey-model-ujg";
 import { axeObserver, isAxeStrict } from "@openuji/journey-observer-axe";
 import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
 import {
+  consoleJourneyProgress,
   reportJourneyResult,
   runJourney,
   type JourneyPlan,
@@ -71,7 +72,8 @@ test("executes the federated file-sharing UJG journey", async ({ browser }, test
           browser: browser as Browser,
           executionObservers: [axe]
         }),
-        profiles: [defaultProfile(), keyboardOnlyProfile()]
+        profiles: [defaultProfile(), keyboardOnlyProfile()],
+        progress: [consoleJourneyProgress()]
       });
   const reporting = await reportJourneyResult({
     reporters,

@@ -53,6 +53,7 @@ import {
 } from "@openuji/journey-observer-axe";
 import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
 import {
+  consoleJourneyProgress,
   reportJourneyResult,
   renderJourneyRunSummary,
   runJourney,
@@ -65,6 +66,8 @@ import {
   type JourneyObserver,
   type JourneyPlan,
   type JourneyPlanOperation,
+  type JourneyProgressEvent,
+  type JourneyProgressSink,
   type JourneyReporter,
   type JourneyRunError,
   type RunResult,
@@ -1110,6 +1113,179 @@ const tests: TestCase[] = [
       assert.equal(result.ok, originalOk);
       assert.deepEqual(result.errors, originalErrors);
       assert.deepEqual(result.evidence, originalEvidence);
+    }
+  },
+  {
+    name: "runJourney emits progress in lifecycle order with operation terminals",
+    async run() {
+      const sourcePlan = await loadFixturePlan();
+      const state = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+      const plan: JourneyPlan = { ...sourcePlan, operations: [state] };
+      const events: JourneyProgressEvent[] = [];
+      const result = await runJourney({
+        plan,
+        adapter: fakeAdapter([]),
+        profiles: [defaultProfile()],
+        progress: [{ publish: (event) => { events.push(event); } }]
+      });
+
+      assert.equal(result.ok, true);
+      assert.deepEqual(events.map((event) => event.type), [
+        "run-started",
+        "execution-started",
+        "operation-started",
+        "operation-completed",
+        "execution-completed",
+        "run-completed"
+      ]);
+      assert.equal(events.filter(isOperationStarted).length, 1);
+      assert.equal(events.filter(isOperationTerminal).length, 1);
+
+      const runStarted = events.find((event) => event.type === "run-started");
+      assert.equal(runStarted?.planId, plan.id);
+      assert.equal(runStarted?.profileCount, 1);
+      assert.equal(runStarted?.operationsPerProfile, 1);
+
+      const operationStarted = events.find(isOperationStarted);
+      assert.equal(operationStarted?.position, 1);
+      assert.equal(operationStarted?.total, 1);
+      assert.strictEqual(operationStarted?.operation, state);
+
+      const operationCompleted = events.find((event) => event.type === "operation-completed");
+      assert.ok((operationCompleted?.durationMs ?? -1) >= 0);
+
+      const executionCompleted = events.find((event) => event.type === "execution-completed");
+      assert.equal(executionCompleted?.ok, true);
+      assert.ok((executionCompleted?.durationMs ?? -1) >= 0);
+
+      const runCompleted = events.find((event) => event.type === "run-completed");
+      assert.equal(runCompleted?.ok, true);
+      assert.ok((runCompleted?.durationMs ?? -1) >= 0);
+    }
+  },
+  {
+    name: "progress sink failures are ignored and operation failures are serialized",
+    async run() {
+      const sourcePlan = await loadFixturePlan();
+      const state = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+      const plan: JourneyPlan = { ...sourcePlan, operations: [state] };
+      const events: JourneyProgressEvent[] = [];
+      const failingSink: JourneyProgressSink = {
+        publish() {
+          throw new Error("Injected progress failure");
+        }
+      };
+      const result = await runJourney({
+        plan,
+        adapter: fakeAdapter([], { failStateId: state.state.id }),
+        profiles: [defaultProfile()],
+        progress: [failingSink, { publish: (event) => { events.push(event); } }]
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.errors.some((error) => error.message.includes("progress")), false);
+      assert.deepEqual(events.map((event) => event.type), [
+        "run-started",
+        "execution-started",
+        "operation-started",
+        "operation-failed",
+        "execution-completed",
+        "run-completed"
+      ]);
+      assert.equal(events.filter(isOperationStarted).length, 1);
+      assert.equal(events.filter(isOperationTerminal).length, 1);
+
+      const failed = events.find((event) => event.type === "operation-failed");
+      assert.equal(failed?.position, 1);
+      assert.equal(failed?.total, 1);
+      assert.ok((failed?.durationMs ?? -1) >= 0);
+      assert.match(failed?.error.message ?? "", /Injected state failure/);
+
+      const executionCompleted = events.find((event) => event.type === "execution-completed");
+      assert.equal(executionCompleted?.ok, false);
+      const runCompleted = events.find((event) => event.type === "run-completed");
+      assert.equal(runCompleted?.ok, false);
+    }
+  },
+  {
+    name: "progress run-completed is emitted before reporting begins",
+    async run() {
+      const calls: string[] = [];
+      const result = await runJourney({
+        plan: { id: "progress-before-reporting-plan", operations: [] },
+        adapter: fakeAdapter([]),
+        profiles: [defaultProfile()],
+        progress: [
+          {
+            publish(event) {
+              if (event.type === "run-completed") calls.push("progress:run-completed");
+            }
+          }
+        ]
+      });
+      const reporting = await reportJourneyResult({
+        result,
+        reporters: [
+          {
+            name: "ordering-reporter",
+            report() {
+              calls.push("report");
+            }
+          }
+        ]
+      });
+
+      assert.deepEqual(reporting.errors, []);
+      assert.deepEqual(calls, ["progress:run-completed", "report"]);
+    }
+  },
+  {
+    name: "consoleJourneyProgress renders success and failure events",
+    async run() {
+      const sourcePlan = await loadFixturePlan();
+      const state = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+      const chunks: string[] = [];
+      const sink = consoleJourneyProgress({
+        stream: {
+          write(chunk: string | Uint8Array) {
+            chunks.push(String(chunk));
+            return true;
+          }
+        } as Pick<NodeJS.WriteStream, "write">
+      });
+
+      await sink.publish({
+        type: "operation-started",
+        executionId: "default-01",
+        profileId: "default",
+        operation: state,
+        position: 1,
+        total: 1
+      });
+      await sink.publish({
+        type: "operation-completed",
+        executionId: "default-01",
+        profileId: "default",
+        operation: state,
+        position: 1,
+        total: 1,
+        durationMs: 12.4
+      });
+      await sink.publish({
+        type: "operation-failed",
+        executionId: "default-01",
+        profileId: "default",
+        operation: state,
+        position: 1,
+        total: 1,
+        durationMs: 34.1,
+        error: { name: "Error", message: "Injected failure" }
+      });
+
+      const output = chunks.join("");
+      assert.match(output, /operation-started 1\/1 Alice files app is ready/);
+      assert.match(output, /operation-completed 1\/1 Alice files app is ready 12ms/);
+      assert.match(output, /operation-failed 1\/1 Alice files app is ready 34ms/);
     }
   },
   {
@@ -2648,6 +2824,21 @@ function sourceBetween(source: string, start: string, end: string): string {
   assert.notEqual(startIndex, -1, `Expected source to include ${start}`);
   assert.notEqual(endIndex, -1, `Expected source to include ${end}`);
   return source.slice(startIndex, endIndex);
+}
+
+function isOperationStarted(
+  event: JourneyProgressEvent
+): event is Extract<JourneyProgressEvent, { type: "operation-started" }> {
+  return event.type === "operation-started";
+}
+
+function isOperationTerminal(
+  event: JourneyProgressEvent
+): event is Extract<
+  JourneyProgressEvent,
+  { type: "operation-completed" | "operation-failed" }
+> {
+  return event.type === "operation-completed" || event.type === "operation-failed";
 }
 
 function fakeAdapter(
