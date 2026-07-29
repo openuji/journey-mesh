@@ -5,13 +5,19 @@ export type JourneyRunError = {
 };
 
 export function errorToJourneyRunError(error: unknown): JourneyRunError {
-  if (isJourneyRunError(error)) return error;
-
   if (error instanceof Error) {
     return {
       name: error.name,
       message: error.message,
       ...(error.stack ? { stack: error.stack } : {})
+    };
+  }
+
+  if (isJourneyRunError(error)) {
+    return {
+      name: error.name,
+      message: error.message,
+      ...(typeof error.stack === "string" ? { stack: error.stack } : {})
     };
   }
 

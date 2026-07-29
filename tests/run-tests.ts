@@ -22,10 +22,6 @@ import type {
   JourneyOperation as CoreJourneyOperation,
   JourneyPlan as CoreJourneyPlan
 } from "@openuji/journey-core";
-import type {
-  JourneyPlan as EvidenceJourneyPlan,
-  JourneyPlanOperation as EvidenceJourneyPlanOperation
-} from "@openuji/journey-evidence";
 import {
   journeyInputModalityIds,
   keyboardEnterInputModalityId,
@@ -55,11 +51,8 @@ import {
 } from "@openuji/journey-observer-axe";
 import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
 import {
-  EvidenceRecorder,
   runJourney,
-  scopeEvidenceToExecution,
   type ControlFlowPlanOperation,
-  type EvidenceEvent,
   type ExecutionResult,
   type InputModalityDecision,
   type JourneyAdapter,
@@ -403,26 +396,20 @@ const tests: TestCase[] = [
       const recorderReferences = packageSources.filter((sourceFile) =>
         sourceFile.source.includes("EvidenceRecorder")
       );
-      for (const sourceFile of recorderReferences) {
-        assert.equal(
-          sourceFile.path.includes("/packages/journey-evidence/src/") ||
-            sourceFile.path.includes("/packages/journey-runner/src/"),
-          true,
-          `Only evidence and runner packages may reference EvidenceRecorder: ${sourceFile.path}`
-        );
-      }
+      assert.deepEqual(
+        recorderReferences.map((sourceFile) => sourceFile.path),
+        [],
+        "EvidenceRecorder must not be referenced after removing the evidence package"
+      );
 
       const snapshotReaders = packageSources.filter((sourceFile) =>
         sourceFile.source.includes(".snapshot()")
       );
-      for (const sourceFile of snapshotReaders) {
-        assert.equal(
-          sourceFile.path.includes("/packages/journey-evidence/src/") ||
-            sourceFile.path.endsWith("/packages/journey-runner/src/index.ts"),
-          true,
-          `Only evidence implementation and runner result construction may read evidence logs: ${sourceFile.path}`
-        );
-      }
+      assert.deepEqual(
+        snapshotReaders.map((sourceFile) => sourceFile.path),
+        [],
+        "Packages must not read removed evidence logs"
+      );
 
       for (const sourceFile of packageSources) {
         assert.equal(
@@ -435,16 +422,11 @@ const tests: TestCase[] = [
       const rawEmitSources = packageSources.filter((sourceFile) =>
         sourceFile.source.includes(".emit({")
       );
-      for (const sourceFile of rawEmitSources) {
-        assert.equal(
-          sourceFile.path.includes("/packages/journey-evidence/src/") ||
-            sourceFile.path.includes("/packages/journey-runner/src/evidence/") ||
-            sourceFile.path.includes("/packages/journey-adapter-playwright/src/evidence/") ||
-            sourceFile.path.includes("/packages/journey-driver-nextcloud/src/evidence/"),
-          true,
-          `Raw evidence emission must live in evidence projectors: ${sourceFile.path}`
-        );
-      }
+      assert.deepEqual(
+        rawEmitSources.map((sourceFile) => sourceFile.path),
+        [],
+        "Packages must not emit removed evidence events"
+      );
 
       const evidenceFreeSources = packageSources.filter((sourceFile) =>
         sourceFile.path.includes("/packages/journey-observer-axe/src/") ||
@@ -562,25 +544,22 @@ const tests: TestCase[] = [
       );
       assert.deepEqual(
         ujgRefSetDefinitions.map((definition) => definition.path),
-        [new URL("../packages/journey-evidence/src/index.ts", import.meta.url).pathname],
-        "UjgRefSet may exist only as the evidence compatibility alias"
+        [],
+        "UjgRefSet compatibility alias must be removed with the evidence package"
       );
 
       const directPlan: ExecutionJourneyPlan = await compileUjgJourneyPlan(
         await loadUjgDocument(fixtureUrl)
       );
-      const evidencePlanFromDirect: EvidenceJourneyPlan = directPlan;
-      const runnerPlanFromEvidence: JourneyPlan = evidencePlanFromDirect;
+      const runnerPlanFromExecution: JourneyPlan = directPlan;
       assertCoreCompatiblePlan(directPlan);
       assertCoreCompatibleOperation(directPlan.operations[0]);
-      assertCoreCompatiblePlan(evidencePlanFromDirect);
-      assertCoreCompatibleOperation(evidencePlanFromDirect.operations[0]);
-      assertCoreCompatiblePlan(runnerPlanFromEvidence);
-      assertCoreCompatibleOperation(runnerPlanFromEvidence.operations[0]);
+      assertCoreCompatiblePlan(runnerPlanFromExecution);
+      assertCoreCompatibleOperation(runnerPlanFromExecution.operations[0]);
 
-      const evidencePlan: EvidenceJourneyPlan = await loadFixturePlan();
-      assertCoreCompatiblePlan(evidencePlan);
-      assertCoreCompatibleOperation(evidencePlan.operations[0]);
+      const runnerPlan: JourneyPlan = await loadFixturePlan();
+      assertCoreCompatiblePlan(runnerPlan);
+      assertCoreCompatibleOperation(runnerPlan.operations[0]);
     }
   },
   {
@@ -808,6 +787,7 @@ const tests: TestCase[] = [
     name: "runner executes each profile with isolated fake adapter sessions",
     async run() {
       const plan = await loadFixturePlan();
+      const fileMenuTransition = transitionOperation(plan, "urn:transition:alice-opens-file-menu");
       const calls: string[] = [];
       const adapter = fakeAdapter(calls);
       const result = await runJourney({
@@ -826,15 +806,25 @@ const tests: TestCase[] = [
       assert.equal(calls.filter((call) => call.includes(":create")).length, 2);
       assert.equal(calls.filter((call) => call.includes(":open:nextcloud.files")).length, 2);
       assert.equal(calls.filter((call) => call.includes(":open:nextcloud.pendingShares")).length, 2);
-      assert.ok(result.evidence.events.some((event) => event.type === "profile.modality.selected"));
+      assert.deepEqual(
+        result.evidence.executions.map((execution) => execution.profileId),
+        ["default", "keyboard-only"]
+      );
       assert.ok(
-        result.evidence.events.some(
-          (event) => event.references?.transitionId === "urn:transition:alice-opens-file-menu"
+        result.evidence.executions.every(
+          (execution) => execution.operations.length === plan.operations.length
         )
       );
       assert.ok(
-        result.evidence.events.some(
-          (event) => event.profileId === "keyboard-only" && event.type === "adapter.perform-transition.completed"
+        result.evidence.executions.some(
+          (execution) =>
+            execution.profileId === "keyboard-only" &&
+            execution.operations.some(
+              (operation) =>
+                operation.operationKind === "transition" &&
+                operation.operationId === fileMenuTransition.id &&
+                operation.ok
+            )
         )
       );
     }
@@ -907,10 +897,9 @@ const tests: TestCase[] = [
 
       assert.equal(minimalResult.ok, true);
       assert.deepEqual(minimalResult.plan, { id: "minimal-custom-plan" });
-      assert.equal(
-        minimalResult.evidence.events.some((event) => "ujg" in event),
-        false
-      );
+      assert.deepEqual(minimalResult.evidence.executions, [
+        { executionId: "default-01", profileId: "default", operations: [] }
+      ]);
 
       const plan: JourneyPlan = {
         id: "custom-plan",
@@ -962,28 +951,15 @@ const tests: TestCase[] = [
         adapter: fakeAdapter([]),
         profiles: [defaultProfile()]
       });
-      const operationStarted = result.evidence.events.find(
-        (event) => event.type === "operation.started"
-      );
+      const [executionEvidence] = result.evidence.executions;
+      const [operationEvidence] = executionEvidence?.operations ?? [];
 
       assert.equal(result.ok, true);
       assert.equal(result.plan.source?.model, "custom-workflow");
       assert.equal(result.plan.source?.documentId, "workflow-42");
-      assert.equal(operationStarted?.references?.actorId, "actor-a");
-      assert.equal(operationStarted?.references?.source?.model, "custom-workflow");
-      assert.equal(operationStarted?.references?.source?.documentId, "workflow-42");
-      assert.equal(
-        operationStarted?.references?.source?.planReferences?.workflowVersion,
-        "3"
-      );
-      assert.equal(
-        operationStarted?.references?.source?.operationReferences?.taskId,
-        "task-7"
-      );
-      assert.equal(
-        result.evidence.events.some((event) => "ujg" in event),
-        false
-      );
+      assert.equal(operationEvidence?.operationId, "operation-1");
+      assert.equal(operationEvidence?.operationKind, "state");
+      assert.equal(operationEvidence?.ok, true);
     }
   },
   {
@@ -1006,17 +982,11 @@ const tests: TestCase[] = [
       assert.equal(result.ok, false);
       assert.equal(result.executions[0].ok, false);
       assert.deepEqual(closeInputs, [true]);
-      assert.match(result.errors[0].message, /Injected state failure/);
-      assert.ok(
-        result.evidence.events.some(
-          (event) => event.type === "profile.execution.failed" && event.ok === false
-        )
-      );
-      assert.ok(
-        result.evidence.events.some(
-          (event) => event.references?.stateId === "urn:state:alice-files-ready"
-        )
-      );
+      assert.match(result.executions[0]?.error?.message ?? "", /Injected state failure/);
+      const failedOperation = result.evidence.executions[0]?.operations[0];
+      assert.equal(failedOperation?.operationKind, "state");
+      assert.equal(failedOperation?.ok, false);
+      assert.match(failedOperation?.error?.message ?? "", /Injected state failure/);
     }
   },
   {
@@ -1085,7 +1055,10 @@ const tests: TestCase[] = [
       assert.equal(result.ok, false);
       assert.deepEqual(closeInputs, [false]);
       assert.equal(calls.filter((call) => call === "default:teardown").length, 1);
-      assert.match(result.errors[0].message, /Injected execution completion observer failure/);
+      assert.match(
+        result.executions[0]?.error?.message ?? "",
+        /Injected execution completion observer failure/
+      );
     }
   },
   {
@@ -1144,14 +1117,11 @@ const tests: TestCase[] = [
       ]);
       assert.ok(calls.includes("execution-started:default-01:default"));
       assert.ok(calls.includes("execution-completed:default-01:true"));
-      assert.ok(result.evidence.events.some((event) => event.type === "observer.run-started.completed"));
-      assert.ok(
-        result.evidence.events.some((event) => event.type === "observer.execution-completed.completed")
-      );
+      assert.equal(result.evidence.executions.length, 1);
     }
   },
   {
-    name: "runner records observer failures as evidence and non-ok results",
+    name: "runner records observer failures as non-ok results",
     async run() {
       const sourcePlan = await loadFixturePlan();
       const plan: JourneyPlan = {
@@ -1172,16 +1142,12 @@ const tests: TestCase[] = [
       });
 
       assert.equal(result.ok, false);
-      assert.match(result.errors[0].message, /Injected observer failure/);
-      assert.ok(
-        result.evidence.events.some(
-          (event) => event.type === "observer.execution-started.failed" && event.ok === false
-        )
-      );
+      assert.match(result.executions[0]?.error?.message ?? "", /Injected observer failure/);
+      assert.deepEqual(result.evidence.executions[0]?.operations, []);
     }
   },
   {
-    name: "evidence characterization covers scoped runner, playwright, and nextcloud events",
+    name: "runner evidence characterization covers execution operation outcomes",
     async run() {
       const emptyPlan: JourneyPlan = { id: "characterization-empty-plan", operations: [] };
       const singleProfile = await runJourney({
@@ -1190,15 +1156,8 @@ const tests: TestCase[] = [
         profiles: [defaultProfile()],
         runId: "characterization-single"
       });
-      assertEventTypes(singleProfile, [
-        "runner.run.started",
-        "profile.execution.started",
-        "adapter.setup.started",
-        "adapter.setup.completed",
-        "adapter.teardown.started",
-        "adapter.teardown.completed",
-        "profile.execution.completed",
-        "runner.run.completed"
+      assert.deepEqual(singleProfile.evidence.executions, [
+        { executionId: "default-01", profileId: "default", operations: [] }
       ]);
 
       const twoProfiles = await runJourney({
@@ -1207,22 +1166,17 @@ const tests: TestCase[] = [
         profiles: [defaultProfile(), keyboardOnlyProfile()],
         runId: "characterization-two-profile"
       });
-      assertEventTypes(twoProfiles, [
-        "runner.run.started",
-        "profile.execution.started",
-        "adapter.setup.started",
-        "adapter.setup.completed",
-        "adapter.teardown.started",
-        "adapter.teardown.completed",
-        "profile.execution.completed",
-        "profile.execution.started",
-        "adapter.setup.started",
-        "adapter.setup.completed",
-        "adapter.teardown.started",
-        "adapter.teardown.completed",
-        "profile.execution.completed",
-        "runner.run.completed"
-      ]);
+      assert.deepEqual(
+        twoProfiles.evidence.executions.map((execution) => ({
+          executionId: execution.executionId,
+          profileId: execution.profileId,
+          operationCount: execution.operations.length
+        })),
+        [
+          { executionId: "default-01", profileId: "default", operationCount: 0 },
+          { executionId: "keyboard-only-02", profileId: "keyboard-only", operationCount: 0 }
+        ]
+      );
 
       const sourcePlan = await loadFixturePlan();
       const state = stateOperation(sourcePlan, "urn:state:alice-files-ready");
@@ -1232,23 +1186,12 @@ const tests: TestCase[] = [
         profiles: [defaultProfile()],
         runId: "characterization-state-failure"
       });
-      assertEventTypes(failingState, [
-        "runner.run.started",
-        "profile.execution.started",
-        "adapter.setup.started",
-        "adapter.setup.completed",
-        "operation.started",
-        "adapter.open-entry.started",
-        "adapter.open-entry.completed",
-        "adapter.assert-state.started",
-        "profile.execution.failed",
-        "adapter.teardown.started",
-        "adapter.teardown.completed",
-        "profile.execution.completed",
-        "runner.run.completed"
-      ]);
-      assert.equal(failingState.evidence.events[4].operationId, state.id);
-      assert.equal(failingState.evidence.events[4].references?.stateId, state.state.id);
+      const failedOperation = failingState.evidence.executions[0]?.operations[0];
+      assert.equal(failingState.ok, false);
+      assert.equal(failedOperation?.operationId, state.id);
+      assert.equal(failedOperation?.operationKind, "state");
+      assert.equal(failedOperation?.ok, false);
+      assert.match(failedOperation?.error?.message ?? "", /Injected state failure/);
 
       const startupFailure = await runJourney({
         plan: emptyPlan,
@@ -1256,16 +1199,12 @@ const tests: TestCase[] = [
         profiles: [defaultProfile()],
         runId: "characterization-startup-failure"
       });
-      assertEventTypes(startupFailure, [
-        "runner.run.started",
-        "profile.execution.started",
-        "adapter.setup.started",
-        "profile.execution.failed",
-        "adapter.teardown.started",
-        "adapter.teardown.completed",
-        "profile.execution.completed",
-        "runner.run.completed"
-      ]);
+      assert.equal(startupFailure.ok, false);
+      assert.match(
+        startupFailure.executions[0]?.error?.message ?? "",
+        /Injected adapter startup failure/
+      );
+      assert.deepEqual(startupFailure.evidence.executions[0]?.operations, []);
 
       const closeFailure = await runJourney({
         plan: emptyPlan,
@@ -1273,16 +1212,12 @@ const tests: TestCase[] = [
         profiles: [defaultProfile()],
         runId: "characterization-close-failure"
       });
-      assertEventTypes(closeFailure, [
-        "runner.run.started",
-        "profile.execution.started",
-        "adapter.setup.started",
-        "adapter.setup.completed",
-        "adapter.teardown.started",
-        "adapter.teardown.failed",
-        "profile.execution.completed",
-        "runner.run.completed"
-      ]);
+      assert.equal(closeFailure.ok, false);
+      assert.match(
+        closeFailure.executions[0]?.error?.message ?? "",
+        /Injected adapter close failure/
+      );
+      assert.deepEqual(closeFailure.evidence.executions[0]?.operations, []);
 
       const observerFailure = await runJourney({
         plan: emptyPlan,
@@ -1298,15 +1233,12 @@ const tests: TestCase[] = [
         ],
         runId: "characterization-observer-failure"
       });
-      assertEventTypes(observerFailure, [
-        "runner.run.started",
-        "profile.execution.started",
-        "observer.execution-started.started",
-        "observer.execution-started.failed",
-        "profile.execution.failed",
-        "profile.execution.completed",
-        "runner.run.completed"
-      ]);
+      assert.equal(observerFailure.ok, false);
+      assert.match(
+        observerFailure.executions[0]?.error?.message ?? "",
+        /Injected characterization observer failure/
+      );
+      assert.deepEqual(observerFailure.evidence.executions[0]?.operations, []);
 
       const reporterFailure = await runJourney({
         plan: emptyPlan,
@@ -1322,20 +1254,9 @@ const tests: TestCase[] = [
         ],
         runId: "characterization-reporter-failure"
       });
-      assertIncludesEventTypes(reporterFailure, [
-        "reporter.started",
-        "reporter.failed",
-        "runner.run.completed"
-      ]);
-
-      const nextcloudEvents = await runCharacterizationNextcloudExecution(state);
-      assert.deepEqual(eventTypes(nextcloudEvents), [
-        "nextcloud.execution.setup.started",
-        "nextcloud.execution.setup.completed",
-        "nextcloud.actor.session.created",
-        "nextcloud.entry.opened",
-        "nextcloud.execution.teardown.completed"
-      ]);
+      assert.equal(reporterFailure.ok, false);
+      assert.match(reporterFailure.errors[0].message, /Injected characterization reporter failure/);
+      assert.deepEqual(reporterFailure.evidence.executions[0]?.operations, []);
 
       const observations: string[] = [];
       const playwrightObserver: PlaywrightExecutionObserver = {
@@ -1359,16 +1280,13 @@ const tests: TestCase[] = [
         runId: "characterization-playwright-observer"
       });
       assert.deepEqual(observations, ["started:default-01", "state-asserted"]);
-      assertIncludesEventTypes(playwrightObserverResult, [
-        "playwright.observer.execution-started.started",
-        "playwright.observer.execution-started.completed",
-        "playwright.observer.operation.started",
-        "playwright.observer.operation.completed"
+      assert.deepEqual(playwrightObserverResult.evidence.executions[0]?.operations, [
+        {
+          operationId: state.id,
+          operationKind: "state",
+          ok: true
+        }
       ]);
-      assert.equal(
-        playwrightObserverResult.evidence.events.some((event) => event.type.startsWith("observer.")),
-        false
-      );
     }
   },
   {
@@ -1504,7 +1422,7 @@ const tests: TestCase[] = [
           operations: [operation]
         }
       };
-      const execution = adapter.createExecution(fakeAdapterExecutionInput(context).input);
+      const execution = adapter.createExecution(fakeAdapterExecutionInput(context));
 
       await assert.rejects(async () => {
         await execution.assertState(operation);
@@ -1525,21 +1443,17 @@ const tests: TestCase[] = [
     async run() {
       const browser = new FakeBrowser(1);
       const context = fakeDriverContext();
-      const evidenceInput = fakeAdapterExecutionInput(context);
       const adapter = playwrightAdapter({
         driver: testPlaywrightDriver(),
         browser: browser as never,
         assertionTimeoutMs: 1
       });
-      const execution = adapter.createExecution(evidenceInput.input);
+      const execution = adapter.createExecution(fakeAdapterExecutionInput(context));
 
       await execution.start();
       await execution.close({ executionFailed: false });
 
       assert.equal(browser.closeCalls, 0);
-      assert.ok(
-        evidenceInput.recorder.snapshot().some((event) => event.type === "playwright.browser.released")
-      );
     }
   },
   {
@@ -1584,7 +1498,7 @@ const tests: TestCase[] = [
         },
         assertionTimeoutMs: 1
       });
-      const execution = adapter.createExecution(fakeAdapterExecutionInput(fakeDriverContext()).input);
+      const execution = adapter.createExecution(fakeAdapterExecutionInput(fakeDriverContext()));
 
       await assert.rejects(async () => {
         await execution.start();
@@ -1645,13 +1559,9 @@ const tests: TestCase[] = [
         "transition-ready:transition",
         "control-flow-recorded:control-flow"
       ]);
-      assert.ok(
-        result.evidence.events.some(
-          (event) => event.type === "playwright.observer.execution-started.completed"
-        )
-      );
-      assert.ok(
-        result.evidence.events.some((event) => event.type === "playwright.observer.operation.completed")
+      assert.deepEqual(
+        result.evidence.executions[0]?.operations.map((operation) => operation.operationKind),
+        ["state", "transition", "control-flow"]
       );
     }
   },
@@ -1686,7 +1596,7 @@ const tests: TestCase[] = [
         awaitApplicationSettled: () => undefined
       });
 
-      const execution = driver.createExecution(fakeDriverExecutionInput(context).input);
+      const execution = driver.createExecution(fakeDriverExecutionInput(context));
       await execution.start();
       await execution.openEntry(operation);
       await execution.openEntry(operation);
@@ -1709,7 +1619,7 @@ const tests: TestCase[] = [
           return Promise.resolve(secondBrowserContext as never);
         }
       };
-      const secondExecution = driver.createExecution(fakeDriverExecutionInput(secondContext).input);
+      const secondExecution = driver.createExecution(fakeDriverExecutionInput(secondContext));
       await secondExecution.start();
       await secondExecution.openEntry(operation);
       await secondExecution.close({ executionFailed: false });
@@ -2240,7 +2150,7 @@ const tests: TestCase[] = [
       assert.match(runSource, /reporters:\s*\[axe\]/);
       assert.match(runSource, /nextcloud-filesharing\.axe-path/);
       assert.match(runSource, /latestAccessibilitySummaryReportPath/);
-      assert.match(runSource, /accessibility:/);
+      assert.match(runSource, /axe json:/);
     }
   },
   {
@@ -2290,35 +2200,6 @@ const tests: TestCase[] = [
 
 async function loadFixturePlan(): Promise<JourneyPlan> {
   return compileUjgJourneyPlan(await loadUjgDocument(fixtureUrl));
-}
-
-function eventTypes(input: RunResult | readonly EvidenceEvent[]): string[] {
-  const events = isEvidenceEventArray(input) ? input : input.evidence.events;
-  return events.map((event) => event.type);
-}
-
-function isEvidenceEventArray(
-  input: RunResult | readonly EvidenceEvent[]
-): input is readonly EvidenceEvent[] {
-  return Array.isArray(input);
-}
-
-function assertEventTypes(result: RunResult, expectedTypes: string[]): void {
-  assert.deepEqual(eventTypes(result), expectedTypes);
-}
-
-function assertIncludesEventTypes(
-  input: RunResult | readonly EvidenceEvent[],
-  expectedTypes: string[]
-): void {
-  const remaining = [...expectedTypes];
-  for (const type of eventTypes(input)) {
-    if (type === remaining[0]) {
-      remaining.shift();
-    }
-  }
-
-  assert.deepEqual(remaining, []);
 }
 
 async function readTypeScriptSources(
@@ -2683,40 +2564,6 @@ function testPlaywrightDriver(): PlaywrightJourneyDriver {
   };
 }
 
-async function runCharacterizationNextcloudExecution(
-  operation: JourneyPlanOperation
-): Promise<readonly EvidenceEvent[]> {
-  const browserContext = new FakeBrowserContext(1);
-  const context: PlaywrightDriverExecutionContext = {
-    ...fakeDriverContext(),
-    plan: { id: "characterization-nextcloud-plan", operations: [operation] },
-    createBrowserContext() {
-      return Promise.resolve(browserContext as never);
-    }
-  };
-  const input = fakeDriverExecutionInput(context);
-  const driver = nextcloudDriver({
-    touchpoints: {
-      [operation.touchpointId]: { baseURL: "http://example.test" }
-    },
-    users: {
-      [operation.actorId]: { username: "alice", password: "secret" }
-    },
-    entries: {
-      [operation.entryBinding?.value ?? "nextcloud.files"]: () => undefined
-    },
-    login: () => undefined,
-    awaitApplicationSettled: () => undefined
-  });
-  const execution = driver.createExecution(input.input);
-
-  await execution.start();
-  await execution.openEntry(operation);
-  await execution.close({ executionFailed: false });
-
-  return input.recorder.snapshot();
-}
-
 function fakeDriverContext(): PlaywrightDriverExecutionContext {
   return {
     runId: "test-run",
@@ -2730,38 +2577,16 @@ function fakeDriverContext(): PlaywrightDriverExecutionContext {
   };
 }
 
-function fakeAdapterExecutionInput(context: JourneyExecutionContext): {
-  input: Parameters<JourneyAdapter["createExecution"]>[0];
-  recorder: EvidenceRecorder;
-} {
-  const recorder = new EvidenceRecorder(context.runId);
-  return {
-    input: {
-      context,
-      evidence: scopeEvidenceToExecution(recorder, {
-        executionId: context.executionId,
-        profileId: context.profile.id
-      })
-    },
-    recorder
-  };
+function fakeAdapterExecutionInput(
+  context: JourneyExecutionContext
+): Parameters<JourneyAdapter["createExecution"]>[0] {
+  return { context };
 }
 
-function fakeDriverExecutionInput(context: PlaywrightDriverExecutionContext): {
-  input: Parameters<PlaywrightJourneyDriver["createExecution"]>[0];
-  recorder: EvidenceRecorder;
-} {
-  const recorder = new EvidenceRecorder(context.runId);
-  return {
-    input: {
-      context,
-      evidence: scopeEvidenceToExecution(recorder, {
-        executionId: context.executionId,
-        profileId: context.profile.id
-      })
-    },
-    recorder
-  };
+function fakeDriverExecutionInput(
+  context: PlaywrightDriverExecutionContext
+): Parameters<PlaywrightJourneyDriver["createExecution"]>[0] {
+  return { context };
 }
 
 function fakeAxeExecution(plan: JourneyPlan): JourneyExecutionDescriptor {
@@ -2790,7 +2615,11 @@ function fakeRunResult(
     },
     executions,
     evidence: {
-      events: []
+      executions: executions.map((execution) => ({
+        executionId: execution.executionId,
+        profileId: execution.profileId,
+        operations: []
+      }))
     },
     errors: executions.flatMap((execution) => execution.error ? [execution.error] : [])
   };
