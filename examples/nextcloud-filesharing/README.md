@@ -1,3 +1,5 @@
+[![Nextcloud Filesharing CI](https://github.com/openuji/journey-mesh/actions/workflows/example-ci.yml/badge.svg?event=pull_request)](https://github.com/openuji/journey-mesh/actions/workflows/example-ci.yml)
+
 # Nextcloud File-Sharing Example
 
 This example runs a federated file-sharing journey between Alice and Bob from a UJG model, through Journey Mesh, into Playwright browser automation.
