@@ -19,6 +19,8 @@ import {
 } from "./observers/contracts.js";
 import { JourneyObserverDispatcher } from "./observers/journey-observer-dispatcher.js";
 import type { JourneyObserver } from "./observers/contracts.js";
+import { JourneyProgressDispatcher } from "./progress/progress-dispatcher.js";
+import type { JourneyProgressSink } from "./progress/contracts.js";
 
 export {
   componentDescriptor,
@@ -77,6 +79,10 @@ export type {
   ReportJourneyResultInput,
   ReportJourneyResultOutcome
 } from "./reporting/contracts.js";
+export type {
+  JourneyProgressEvent,
+  JourneyProgressSink
+} from "./progress/contracts.js";
 
 export type {
   JourneyComponentDescriptor,
@@ -140,17 +146,6 @@ export type JourneyProfile = {
   ): Promise<InputModalityDecision> | InputModalityDecision;
 };
 
-export type JourneyProgressEvent =
-  | { readonly type: "run-started"; readonly runId: string; readonly planId: string; readonly profileCount: number; readonly operationsPerProfile: number }
-  | { readonly type: "execution-started"; readonly runId: string; readonly executionId: string; readonly profileId: string }
-  | { readonly type: "operation-started"; readonly executionId: string; readonly profileId: string; readonly operation: JourneyPlanOperation; readonly position: number; readonly total: number }
-  | { readonly type: "operation-completed"; readonly executionId: string; readonly profileId: string; readonly operation: JourneyPlanOperation; readonly position: number; readonly total: number; readonly durationMs: number }
-  | { readonly type: "operation-failed"; readonly executionId: string; readonly profileId: string; readonly operation: JourneyPlanOperation; readonly position: number; readonly total: number; readonly durationMs: number; readonly error: JourneyRunError }
-  | { readonly type: "execution-completed"; readonly executionId: string; readonly profileId: string; readonly ok: boolean; readonly durationMs: number }
-  | { readonly type: "run-completed"; readonly runId: string; readonly ok: boolean; readonly durationMs: number };
-
-export type JourneyProgressSink = { publish(event: JourneyProgressEvent): Promise<void> | void };
-
 export type RunJourneyOptions = {
   plan: JourneyPlan;
   adapter: JourneyAdapter;
@@ -210,10 +205,10 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
   const errors: JourneyRunError[] = [];
   const observers = options.observers ?? [];
   const observerDispatcher = new JourneyObserverDispatcher(observers);
-  const progress = options.progress ?? [];
+  const progress = new JourneyProgressDispatcher(options.progress ?? []);
   const runStartedAt = performance.now();
 
-  await publishProgress(progress, { type: "run-started", runId, planId: options.plan.id, profileCount: options.profiles.length, operationsPerProfile: options.plan.operations.length });
+  await progress.publish({ type: "run-started", runId, planId: options.plan.id, profileCount: options.profiles.length, operationsPerProfile: options.plan.operations.length });
 
   const runStartError = await observerDispatcher.runStarted({
     adapter: componentDescriptor(options.adapter),
@@ -274,7 +269,7 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
     runId
   });
 
-  await publishProgress(progress, { type: "run-completed", runId, ok: finalResult.ok, durationMs: performance.now() - runStartedAt });
+  await progress.publish({ type: "run-completed", runId, ok: finalResult.ok, durationMs: performance.now() - runStartedAt });
 
   return finalResult;
 }
@@ -293,7 +288,7 @@ async function runProfileExecution({
   descriptor: ReturnType<typeof executionDescriptor>;
   observerDispatcher: JourneyObserverDispatcher;
   plan: JourneyPlan;
-  progress: readonly JourneyProgressSink[];
+  progress: JourneyProgressDispatcher;
   profile: JourneyProfile;
 }): Promise<ProfileExecutionOutcome> {
   let ok = true;
@@ -303,7 +298,7 @@ async function runProfileExecution({
   const operations: JourneyOperationEvidence[] = [];
   const executionStartedAt = performance.now();
 
-  await publishProgress(progress, { type: "execution-started", runId: context.runId, executionId: context.executionId, profileId: profile.id });
+  await progress.publish({ type: "execution-started", runId: context.runId, executionId: context.executionId, profileId: profile.id });
 
   try {
     await observerDispatcher.executionStarted(descriptor);
@@ -315,7 +310,7 @@ async function runProfileExecution({
       const operationStartedAt = performance.now();
       const position = operationIndex + 1;
       const operationProgress = { executionId: context.executionId, profileId: profile.id, operation, position, total: plan.operations.length };
-      await publishProgress(progress, { type: "operation-started", ...operationProgress });
+      await progress.publish({ type: "operation-started", ...operationProgress });
 
       try {
         await executeOperation({
@@ -325,11 +320,11 @@ async function runProfileExecution({
           operation,
           profile
         });
-        await publishProgress(progress, { type: "operation-completed", ...operationProgress, durationMs: performance.now() - operationStartedAt });
+        await progress.publish({ type: "operation-completed", ...operationProgress, durationMs: performance.now() - operationStartedAt });
         operations.push(operationEvidence(operation, true));
       } catch (error) {
         const operationError = errorToJourneyRunError(error);
-        await publishProgress(progress, { type: "operation-failed", ...operationProgress, durationMs: performance.now() - operationStartedAt, error: operationError });
+        await progress.publish({ type: "operation-failed", ...operationProgress, durationMs: performance.now() - operationStartedAt, error: operationError });
         operations.push(operationEvidence(operation, false, operationError));
         throw operationError;
       }
@@ -364,7 +359,7 @@ async function runProfileExecution({
     executionError = observerCompletionError;
   }
 
-  await publishProgress(progress, { type: "execution-completed", executionId: context.executionId, profileId: profile.id, ok, durationMs: performance.now() - executionStartedAt });
+  await progress.publish({ type: "execution-completed", executionId: context.executionId, profileId: profile.id, ok, durationMs: performance.now() - executionStartedAt });
 
   return {
     execution: {
@@ -462,16 +457,6 @@ function resultOk(
   errors: readonly JourneyRunError[]
 ): boolean {
   return errors.length === 0 && executions.every((execution) => execution.ok);
-}
-
-async function publishProgress(sinks: readonly JourneyProgressSink[], event: JourneyProgressEvent): Promise<void> {
-  for (const sink of sinks) {
-    try {
-      await sink.publish(event);
-    } catch {
-      // Progress is best-effort.
-    }
-  }
 }
 
 export function consoleJourneyProgress(options: { readonly stream?: Pick<NodeJS.WriteStream, "write"> } = {}): JourneyProgressSink {
