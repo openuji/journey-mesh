@@ -464,11 +464,12 @@ const tests: TestCase[] = [
       const runJourneySource = sourceBetween(
         runnerSource.source,
         "export async function runJourney",
-        "export async function reportJourneyResult"
+        "async function runProfileExecution"
       );
       assert.doesNotMatch(runJourneySource, /ReporterPipeline/);
       assert.doesNotMatch(runJourneySource, /reporter/i);
       assert.doesNotMatch(runJourneySource, /JSON\.stringify/);
+      assert.doesNotMatch(runnerSource.source, /ReporterPipeline/);
       assert.doesNotMatch(runnerSource.source, /reporters\?:\s*JourneyReporter/);
       assert.doesNotMatch(
         runnerSource.source.replace(/\s+/g, " "),

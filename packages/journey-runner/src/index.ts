@@ -19,13 +19,15 @@ import {
 } from "./observers/contracts.js";
 import { JourneyObserverDispatcher } from "./observers/journey-observer-dispatcher.js";
 import type { JourneyObserver } from "./observers/contracts.js";
-import { ReporterPipeline } from "./reporters/reporter-pipeline.js";
 
 export {
   componentDescriptor,
   executionDescriptor,
   profileDescriptor
 } from "./observers/contracts.js";
+export {
+  reportJourneyResult
+} from "./reporting/report-journey-result.js";
 export {
   renderJourneyRunSummary
 } from "./reporters/console-summary.js";
@@ -69,6 +71,12 @@ export type {
   JourneyRunSummaryInput,
   JourneyRunSummaryOptions
 } from "./reporters/console-summary.js";
+export type {
+  JourneyReporter,
+  JourneyReporterInput,
+  ReportJourneyResultInput,
+  ReportJourneyResultOutcome
+} from "./reporting/contracts.js";
 
 export type {
   JourneyComponentDescriptor,
@@ -132,17 +140,6 @@ export type JourneyProfile = {
   ): Promise<InputModalityDecision> | InputModalityDecision;
 };
 
-export type JourneyReporterInput = {
-  readonly result: RunResult;
-  readonly json: string;
-};
-
-export type JourneyReporter = {
-  name: string;
-  version?: string;
-  report(input: JourneyReporterInput): Promise<void> | void;
-};
-
 export type JourneyProgressEvent =
   | { readonly type: "run-started"; readonly runId: string; readonly planId: string; readonly profileCount: number; readonly operationsPerProfile: number }
   | { readonly type: "execution-started"; readonly runId: string; readonly executionId: string; readonly profileId: string }
@@ -195,23 +192,6 @@ export type RunResult = {
     executions: JourneyExecutionEvidence[];
   };
   errors: JourneyRunError[];
-};
-
-export type ReportJourneyResultInput = {
-  readonly reporters: readonly JourneyReporter[];
-  readonly result: RunResult;
-};
-
-export type ReportJourneyResultOutcome = {
-  /**
-   * Exact result supplied by the caller.
-   */
-  readonly result: RunResult;
-
-  /**
-   * Failures produced while writing, attaching, rendering, or uploading output.
-   */
-  readonly errors: readonly JourneyRunError[];
 };
 
 type ProfileExecutionOutcome = {
@@ -297,21 +277,6 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
   await publishProgress(progress, { type: "run-completed", runId, ok: finalResult.ok, durationMs: performance.now() - runStartedAt });
 
   return finalResult;
-}
-
-export async function reportJourneyResult(
-  input: ReportJourneyResultInput
-): Promise<ReportJourneyResultOutcome> {
-  const pipeline = new ReporterPipeline();
-  const reporting = await pipeline.run({
-    reporters: input.reporters,
-    result: input.result
-  });
-
-  return {
-    result: input.result,
-    errors: reporting.errors
-  };
 }
 
 async function runProfileExecution({
