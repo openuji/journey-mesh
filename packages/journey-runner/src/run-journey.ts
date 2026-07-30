@@ -375,8 +375,10 @@ function operationEvidence(
   ok: boolean,
   error?: JourneyRunError
 ): JourneyOperationEvidence {
+  const graphNodeId = operation.source?.references?.graphNodeId;
   return {
     operationId: operation.id,
+    ...(typeof graphNodeId === "string" ? { graphNodeId } : {}),
     operationKind: operation.kind,
     ok,
     ...(error ? { error } : {})

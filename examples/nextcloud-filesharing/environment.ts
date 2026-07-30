@@ -3,11 +3,6 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import {
-  keyboardTextEntryInputModalityId,
-  type JourneyPlan,
-  type TransitionPlanOperation
-} from "@openuji/journey-execution-model";
-import {
   deleteFileIfExists,
   deleteOcsResource,
   ensureFileExists,
@@ -82,40 +77,7 @@ export const nextcloudEnvironment: NextcloudDriverOptions = {
   }
 };
 
-export function validateNextcloudEnvironmentForPlan(
-  plan: JourneyPlan,
-  environment: NextcloudDriverOptions = nextcloudEnvironment
-): string[] {
-  const errors: string[] = [];
 
-  for (const operation of plan.operations) {
-    if (!environment.users[operation.actorId]) {
-      errors.push(`${operation.id}: missing user config for ${operation.actorId}`);
-    }
-    if (!environment.touchpoints[operation.touchpointId]) {
-      errors.push(`${operation.id}: missing touchpoint config for ${operation.touchpointId}`);
-    }
-    if (operation.entryBinding && !environment.entries[operation.entryBinding.value]) {
-      errors.push(
-        `${operation.id}: missing entry handler for ${operation.entryBinding.value}`
-      );
-    }
-
-    if (operation.kind === "transition") {
-      if (requiresTextEntry(operation) && !environment.transitionValues?.[operation.transition.id]) {
-        errors.push(`${operation.id}: missing transition value for ${operation.transition.id}`);
-      }
-
-      for (const effect of operation.effects) {
-        if (!environment.effectHandlers?.[effect.id]) {
-          errors.push(`${operation.id}: missing effect handler for ${effect.id}`);
-        }
-      }
-    }
-  }
-
-  return [...new Set(errors)];
-}
 
 async function ensureFederatedShareFixtureIsClean(): Promise<void> {
   await deleteIncomingRemoteShares(bobTouchpoint, bobUser);
@@ -230,11 +192,6 @@ async function deleteIncomingRemoteShares(
   }
 }
 
-function requiresTextEntry(operation: TransitionPlanOperation): boolean {
-  return operation.activation.requiredInputModalityProfiles.some((profile) =>
-    profile.modalities.some((modality) => modality.id === keyboardTextEntryInputModalityId)
-  );
-}
 
 async function expectFederatedShareFixtureIsClean(): Promise<void> {
   await pollUntil(

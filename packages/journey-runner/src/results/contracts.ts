@@ -11,6 +11,7 @@ export type ExecutionResult = {
 
 export type JourneyOperationEvidence = {
   operationId: string;
+  graphNodeId?: string;
   operationKind: JourneyPlanOperationKind;
   ok: boolean;
   error?: JourneyRunError;

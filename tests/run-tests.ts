@@ -76,10 +76,7 @@ import {
   type StatePlanOperation,
   type TransitionPlanOperation
 } from "@openuji/journey-runner";
-import {
-  nextcloudEnvironment,
-  validateNextcloudEnvironmentForPlan
-} from "../examples/nextcloud-filesharing/environment.js";
+import { nextcloudEnvironment } from "../examples/nextcloud-filesharing/environment.js";
 
 const fixtureUrl = new URL("../examples/nextcloud-filesharing/ujg/filesharing.ujg.jsonld", import.meta.url);
 
@@ -1539,6 +1536,7 @@ const tests: TestCase[] = [
       assert.equal(result.plan.source?.model, "custom-workflow");
       assert.equal(result.plan.source?.documentId, "workflow-42");
       assert.equal(operationEvidence?.operationId, "operation-1");
+      assert.equal(operationEvidence?.graphNodeId, undefined);
       assert.equal(operationEvidence?.operationKind, "state");
       assert.equal(operationEvidence?.ok, true);
     }
@@ -1701,6 +1699,7 @@ const tests: TestCase[] = [
       assert.deepEqual(result.evidence.executions[0]?.operations, [
         {
           operationId: plan.operations[0].id,
+          graphNodeId: (plan.operations[0] as StatePlanOperation).state.id,
           operationKind: "state",
           ok: true
         }
@@ -1864,6 +1863,7 @@ const tests: TestCase[] = [
       assert.deepEqual(playwrightObserverResult.evidence.executions[0]?.operations, [
         {
           operationId: state.id,
+          graphNodeId: state.state.id,
           operationKind: "state",
           ok: true
         }
@@ -2162,16 +2162,19 @@ const tests: TestCase[] = [
       assert.deepEqual(result.evidence.executions[0]?.operations, [
         {
           operationId: state.id,
+          graphNodeId: state.state.id,
           operationKind: "state",
           ok: true
         },
         {
           operationId: transition.id,
+          graphNodeId: transition.transition.id,
           operationKind: "transition",
           ok: true
         },
         {
           operationId: controlFlow.id,
+          graphNodeId: controlFlow.transition.id,
           operationKind: "control-flow",
           ok: true
         }
@@ -2676,8 +2679,6 @@ const tests: TestCase[] = [
   {
     name: "nextcloud example config supplies fixture semantics outside reusable packages",
     async run() {
-      const plan = await loadFixturePlan();
-      assert.deepEqual(validateNextcloudEnvironmentForPlan(plan), []);
       assert.equal(typeof nextcloudEnvironment.entries["nextcloud.files"], "function");
       assert.equal(typeof nextcloudEnvironment.entries["nextcloud.pendingShares"], "function");
       assert.equal(
@@ -2768,6 +2769,8 @@ const tests: TestCase[] = [
       );
       assert.match(runSource, /from "@playwright\/test"/);
       assert.match(runSource, /test\("executes the federated file-sharing UJG journey"/);
+      assert.match(runSource, /const runner = createNextcloudFilesharingRunner\(\);[\s\S]*test\("executes the federated file-sharing UJG journey"[\s\S]*await runner\.run\(\{\s*browser:\s*browser as Browser,\s*testInfo\s*\}\)/);
+      assert.match(runSource, /Architecture sketch:/);
       assert.match(runSource, /UJG_EVIDENCE_STDOUT/);
       assert.match(runSource, /browser:\s*browser as Browser/);
       assert.doesNotMatch(runSource, /printJourneyRunSummary/);
@@ -2782,9 +2785,8 @@ const tests: TestCase[] = [
       assert.match(runSource, /states:\s*true/);
       assert.match(runSource, /executionObservers:\s*\[axe\]/);
       assert.doesNotMatch(runSource, /observers:\s*\[axe\]/);
-      assert.match(runSource, /const reporters = preflightErrors\.length > 0/);
-      assert.match(runSource, /\? \[evidence,\s*summary\]/);
-      assert.match(runSource, /: \[evidence,\s*axe,\s*summary\]/);
+      assert.match(runSource, /const reporters = \[evidence,\s*axe,\s*summary\]/);
+      assert.doesNotMatch(runSource, /preflightErrors/);
       assert.match(runSource, /await reportJourneyResult\(\{/);
       assert.match(runSource, /reporters,\s*result/s);
       assert.doesNotMatch(
