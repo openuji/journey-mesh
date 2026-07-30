@@ -14,7 +14,8 @@ export default defineConfig({
   outputDir: "test-results",
   reporter: [
     ["list"],
-    ["html", { outputFolder: "playwright-report", open: "never" }]
+    ["html", { outputFolder: "playwright-report", open: "never" }],
+    ["@openuji/journey-adapter-playwright/summary-reporter"]
   ],
   use: {
     browserName: "chromium",

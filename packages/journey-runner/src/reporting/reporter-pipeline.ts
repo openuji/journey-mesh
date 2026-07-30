@@ -2,7 +2,8 @@ import {
   errorToJourneyRunError,
   type JourneyRunError
 } from "../errors.js";
-import type { JourneyReporter, RunResult } from "../index.js";
+import type { RunResult } from "../results/contracts.js";
+import type { JourneyReporter } from "./contracts.js";
 
 export type ReporterPipelineInput = {
   readonly reporters: readonly JourneyReporter[];

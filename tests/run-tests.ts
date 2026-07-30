@@ -6,6 +6,8 @@ import { join } from "node:path";
 import {
   activatePlaywrightLocator,
   playwrightAdapter,
+  playwrightJsonEvidenceReporter,
+  playwrightJourneyRunSummaryReporter,
   type PlaywrightExecutionObserver,
   type PlaywrightOperationObservation,
   toPlaywrightObservationLocator,
@@ -53,6 +55,9 @@ import {
 } from "@openuji/journey-observer-axe";
 import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
 import {
+  consoleJourneyProgress,
+  reportJourneyResult,
+  renderJourneyRunSummary,
   runJourney,
   type ControlFlowPlanOperation,
   type ExecutionResult,
@@ -63,6 +68,10 @@ import {
   type JourneyObserver,
   type JourneyPlan,
   type JourneyPlanOperation,
+  type JourneyProgressEvent,
+  type JourneyProgressSink,
+  type JourneyReporter,
+  type JourneyRunError,
   type RunResult,
   type StatePlanOperation,
   type TransitionPlanOperation
@@ -448,16 +457,47 @@ const tests: TestCase[] = [
         }
       }
 
-      const runnerSource = packageSources.find((sourceFile) =>
+      const runnerIndexSource = packageSources.find((sourceFile) =>
         sourceFile.path.endsWith("/packages/journey-runner/src/index.ts")
       );
+      assert.ok(runnerIndexSource);
+      const runnerSource = packageSources.find((sourceFile) =>
+        sourceFile.path.endsWith("/packages/journey-runner/src/run-journey.ts")
+      );
       assert.ok(runnerSource);
+      const observerContractsSource = packageSources.find((sourceFile) =>
+        sourceFile.path.endsWith("/packages/journey-runner/src/observers/contracts.ts")
+      );
+      assert.ok(observerContractsSource);
+      const runJourneySource = sourceBetween(
+        runnerSource.source,
+        "export async function runJourney",
+        "async function runProfileExecution"
+      );
+      assert.match(runnerIndexSource.source, /from "\.\/run-journey\.js"/);
+      assert.match(runnerIndexSource.source, /from "\.\/progress\/console-progress\.js"/);
+      assert.doesNotMatch(runnerIndexSource.source, /export async function runJourney/);
+      assert.doesNotMatch(runnerIndexSource.source, /function consoleJourneyProgress/);
+      assert.doesNotMatch(runnerIndexSource.source, /sink\.publish/);
       assert.doesNotMatch(
-        runnerSource.source.replace(/\s+/g, " "),
+        runnerSource.source,
+        /from "\.\/reporting\/|from "\.\.\/reporting\//
+      );
+      assert.doesNotMatch(runJourneySource, /ReporterPipeline/);
+      assert.doesNotMatch(runJourneySource, /reporter/i);
+      assert.doesNotMatch(runJourneySource, /JSON\.stringify/);
+      assert.doesNotMatch(runnerSource.source, /ReporterPipeline/);
+      assert.doesNotMatch(runnerSource.source, /async function publishProgress/);
+      assert.doesNotMatch(runnerSource.source, /sink\.publish/);
+      assert.doesNotMatch(runnerSource.source, /function buildResult/);
+      assert.doesNotMatch(runnerSource.source, /function resultOk/);
+      assert.doesNotMatch(runnerSource.source, /reporters\?:\s*JourneyReporter/);
+      assert.doesNotMatch(
+        observerContractsSource.source.replace(/\s+/g, " "),
         /JourneyObserverRunStartedInput = \{[^}]*evidence/
       );
       assert.doesNotMatch(
-        runnerSource.source.replace(/\s+/g, " "),
+        observerContractsSource.source.replace(/\s+/g, " "),
         /JourneyObserverRunCompletedInput = \{[^}]*evidence/
       );
 
@@ -814,10 +854,9 @@ const tests: TestCase[] = [
         result.evidence.executions.map((execution) => execution.profileId),
         ["default", "keyboard-only"]
       );
-      assert.ok(
-        result.evidence.executions.every(
-          (execution) => execution.operations.length === plan.operations.length
-        )
+      assert.deepEqual(
+        result.evidence.executions.map((execution) => execution.operations.length),
+        [plan.operations.length, plan.operations.length]
       );
       assert.ok(
         result.evidence.executions.some(
@@ -831,6 +870,544 @@ const tests: TestCase[] = [
             )
         )
       );
+    }
+  },
+  {
+    name: "runner console summary renders colored pass/fail blocks and relative artifacts",
+    async run() {
+      const plan: JourneyPlan = { id: "summary-plan", operations: [] };
+      const passing = fakeRunResult(plan, [
+        {
+          executionId: "default-01",
+          profileId: "default",
+          ok: true
+        },
+        {
+          executionId: "keyboard-only-02",
+          profileId: "keyboard-only",
+          ok: true
+        }
+      ]);
+
+      const colored = renderJourneyRunSummary(
+        {
+          result: passing,
+          artifacts: [
+            {
+              label: "evidence",
+              path: "/tmp/ujg-output/ujg-evidence.json"
+            }
+          ],
+          commands: [
+            {
+              label: "report",
+              command: "pnpm --filter @openuji/example-nextcloud-filesharing e2e:report"
+            }
+          ]
+        },
+        {
+          color: "always",
+          cwd: "/tmp/ujg-output"
+        }
+      );
+
+      assert.match(colored, /\u001b\[/);
+      assert.match(colored, /UJG Journey/);
+      assert.match(colored, /PASS/);
+      assert.match(colored, /2\/2 passed/);
+      assert.match(colored, /ujg-evidence\.json/);
+      assert.doesNotMatch(colored, /\/tmp\/ujg-output\/ujg-evidence\.json/);
+      assert.match(colored, /e2e:report/);
+      assert.ok(
+        colored.indexOf("Commands") < colored.indexOf("UJG Journey"),
+        "commands must render before the journey summary block"
+      );
+
+      const failing = fakeRunResult(plan, [
+        {
+          executionId: "default-01",
+          profileId: "default",
+          ok: false,
+          error: {
+            name: "LocatorError",
+            message: "Expected one locator"
+          }
+        }
+      ]);
+      const plain = renderJourneyRunSummary({ result: failing }, { color: "never" });
+
+      assert.doesNotMatch(plain, /\u001b\[/);
+      assert.match(plain, /FAIL/);
+      assert.match(plain, /Failures/);
+      assert.match(plain, /LocatorError Expected one locator/);
+    }
+  },
+  {
+    name: "playwright reporters attach evidence and summary through JourneyReporter",
+    async run() {
+      const testInfo = new FakeAxeTestInfo("playwright-summary-reporters");
+      const plan: JourneyPlan = { id: "summary-plan", operations: [] };
+      const result = fakeRunResult(plan, [
+        {
+          executionId: "default-01",
+          profileId: "default",
+          ok: true
+        }
+      ]);
+      const evidence = playwrightJsonEvidenceReporter({ testInfo });
+      const summary = playwrightJourneyRunSummaryReporter({
+        testInfo,
+        artifacts: () => [
+          evidence.latestPath ? { label: "evidence", path: evidence.latestPath } : undefined
+        ],
+        commands: [
+          {
+            label: "report",
+            command: "pnpm --filter @openuji/example-nextcloud-filesharing e2e:report"
+          }
+        ]
+      });
+      const json = JSON.stringify(result, null, 2);
+
+      await evidence.report({ result, json });
+      await summary.report({ result, json });
+
+      assert.ok(evidence.latestPath?.endsWith("ujg-evidence.json"));
+      assert.ok(summary.latestPath?.endsWith("ujg-summary.json"));
+      assert.ok(testInfo.attachments.some((attachment) => attachment.name === "ujg-evidence.json"));
+      assert.ok(testInfo.attachments.some((attachment) => attachment.name === "ujg-summary.json"));
+
+      const summaryJson = JSON.parse(
+        await readFile(summary.latestPath ?? "", "utf8")
+      ) as {
+        artifacts?: Array<{ label: string; path: string }>;
+        commands?: Array<{ label: string; command: string }>;
+      };
+      assert.equal(summaryJson.artifacts?.[0].label, "evidence");
+      assert.match(summaryJson.commands?.[0].command ?? "", /e2e:report/);
+    }
+  },
+  {
+    name: "runJourney never invokes obsolete runtime reporters",
+    async run() {
+      const plan: JourneyPlan = { id: "no-inline-reporters-plan", operations: [] };
+      const calls: string[] = [];
+      const reporter: JourneyReporter = {
+        name: "obsolete-inline-reporter",
+        report() {
+          calls.push("reporter");
+        }
+      };
+      const result = await runJourney({
+        plan,
+        adapter: fakeAdapter(calls),
+        profiles: [defaultProfile()],
+        reporters: [reporter]
+      } as Parameters<typeof runJourney>[0] & { reporters: readonly JourneyReporter[] });
+
+      assert.equal(result.ok, true);
+      assert.deepEqual(calls, ["default:create", "default:setup", "default:teardown"]);
+    }
+  },
+  {
+    name: "runJourney waits for run-completed observers and returns their failures",
+    async run() {
+      const plan: JourneyPlan = { id: "run-completed-lifecycle-plan", operations: [] };
+      const calls: string[] = [];
+      const result = await runJourney({
+        plan,
+        adapter: fakeAdapter(calls),
+        profiles: [defaultProfile()],
+        observers: [
+          {
+            name: "run-completed-recorder",
+            async onRunCompleted({ result }) {
+              calls.push(`run-completed:${String(result.ok)}:${result.errors.length}`);
+              await Promise.resolve();
+              calls.push("run-completed-awaited");
+            }
+          },
+          {
+            name: "run-completed-failure",
+            onRunCompleted({ result }) {
+              calls.push(`run-completed-before-failure:${String(result.ok)}`);
+              throw new Error("Injected run completion observer failure");
+            }
+          }
+        ]
+      });
+
+      assert.equal(result.ok, false);
+      assert.match(result.errors[0].message, /Injected run completion observer failure/);
+      assert.deepEqual(calls.slice(-3), [
+        "run-completed:true:0",
+        "run-completed-awaited",
+        "run-completed-before-failure:true"
+      ]);
+    }
+  },
+  {
+    name: "runJourney completes failed run-start observer results before returning",
+    async run() {
+      const plan: JourneyPlan = { id: "run-start-failure-completion-plan", operations: [] };
+      const calls: string[] = [];
+      const result = await runJourney({
+        plan,
+        adapter: fakeAdapter(calls),
+        profiles: [defaultProfile()],
+        observers: [
+          {
+            name: "run-start-failure",
+            onRunStarted() {
+              calls.push("run-started");
+              throw new Error("Injected run start observer failure");
+            },
+            onRunCompleted({ result }) {
+              calls.push(`run-completed:${String(result.ok)}:${result.errors[0]?.message ?? "none"}`);
+            }
+          }
+        ]
+      });
+
+      assert.equal(result.ok, false);
+      assert.match(result.errors[0]?.message ?? "", /Injected run start observer failure/);
+      assert.deepEqual(result.evidence.executions, []);
+      assert.deepEqual(calls, [
+        "run-started",
+        "run-completed:false:Injected run start observer failure"
+      ]);
+    }
+  },
+  {
+    name: "reportJourneyResult isolates reporter failures from the supplied result",
+    async run() {
+      const plan: JourneyPlan = { id: "reporting-boundary-plan", operations: [] };
+      const result = await runJourney({
+        plan,
+        adapter: fakeAdapter([]),
+        profiles: [defaultProfile()],
+        observers: [
+          {
+            name: "final-result-marker",
+            onRunCompleted({ result }) {
+              assert.equal(result.ok, true);
+            }
+          }
+        ]
+      });
+      const originalOk = result.ok;
+      const originalErrors = structuredClone(result.errors);
+      const originalEvidence = structuredClone(result.evidence);
+      const reporterInputs: RunResult[] = [];
+      const reporterJson: string[] = [];
+      const reporterCalls: string[] = [];
+      const reporters: JourneyReporter[] = [
+        {
+          name: "first-reporter",
+          report(input) {
+            reporterCalls.push("first");
+            reporterInputs.push(input.result);
+            reporterJson.push(input.json);
+          }
+        },
+        {
+          name: "failing-reporter",
+          report(input) {
+            reporterCalls.push("failing");
+            reporterInputs.push(input.result);
+            reporterJson.push(input.json);
+            throw new Error("Injected reporter failure");
+          }
+        },
+        {
+          name: "later-reporter",
+          report(input) {
+            reporterCalls.push("later");
+            reporterInputs.push(input.result);
+            reporterJson.push(input.json);
+          }
+        }
+      ];
+
+      const reporting = await reportJourneyResult({
+        result,
+        reporters
+      });
+
+      assert.strictEqual(reporting.result, result);
+      assert.deepEqual(reporterCalls, ["first", "failing", "later"]);
+      assert.deepEqual(reporterInputs, [result, result, result]);
+      assert.deepEqual(
+        reporterJson,
+        [
+          JSON.stringify(result, null, 2),
+          JSON.stringify(result, null, 2),
+          JSON.stringify(result, null, 2)
+        ]
+      );
+      assert.equal(reporting.errors.length, 1);
+      assert.match(reporting.errors[0]?.message ?? "", /Injected reporter failure/);
+      assert.equal(result.ok, originalOk);
+      assert.deepEqual(result.errors, originalErrors);
+      assert.deepEqual(result.evidence, originalEvidence);
+    }
+  },
+  {
+    name: "runJourney emits progress in lifecycle order with operation terminals",
+    async run() {
+      const sourcePlan = await loadFixturePlan();
+      const state = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+      const plan: JourneyPlan = { ...sourcePlan, operations: [state] };
+      const events: JourneyProgressEvent[] = [];
+      const result = await runJourney({
+        plan,
+        adapter: fakeAdapter([]),
+        profiles: [defaultProfile()],
+        progress: [{ publish: (event) => { events.push(event); } }]
+      });
+
+      assert.equal(result.ok, true);
+      assert.deepEqual(events.map((event) => event.type), [
+        "run-started",
+        "execution-started",
+        "operation-started",
+        "operation-completed",
+        "execution-completed",
+        "run-completed"
+      ]);
+      assert.equal(events.filter(isOperationStarted).length, 1);
+      assert.equal(events.filter(isOperationTerminal).length, 1);
+
+      const runStarted = events.find((event) => event.type === "run-started");
+      assert.equal(runStarted?.planId, plan.id);
+      assert.equal(runStarted?.profileCount, 1);
+      assert.equal(runStarted?.operationsPerProfile, 1);
+
+      const operationStarted = events.find(isOperationStarted);
+      assert.equal(operationStarted?.position, 1);
+      assert.equal(operationStarted?.total, 1);
+      assert.strictEqual(operationStarted?.operation, state);
+
+      const operationCompleted = events.find((event) => event.type === "operation-completed");
+      assert.ok((operationCompleted?.durationMs ?? -1) >= 0);
+
+      const executionCompleted = events.find((event) => event.type === "execution-completed");
+      assert.equal(executionCompleted?.ok, true);
+      assert.ok((executionCompleted?.durationMs ?? -1) >= 0);
+
+      const runCompleted = events.find((event) => event.type === "run-completed");
+      assert.equal(runCompleted?.ok, true);
+      assert.ok((runCompleted?.durationMs ?? -1) >= 0);
+    }
+  },
+  {
+    name: "progress sink failures are ignored and operation failures are serialized",
+    async run() {
+      const sourcePlan = await loadFixturePlan();
+      const state = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+      const plan: JourneyPlan = { ...sourcePlan, operations: [state] };
+      const events: JourneyProgressEvent[] = [];
+      const failingSink: JourneyProgressSink = {
+        publish() {
+          throw new Error("Injected progress failure");
+        }
+      };
+      const result = await runJourney({
+        plan,
+        adapter: fakeAdapter([], { failStateId: state.state.id }),
+        profiles: [defaultProfile()],
+        progress: [failingSink, { publish: (event) => { events.push(event); } }]
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.errors.some((error) => error.message.includes("progress")), false);
+      assert.deepEqual(events.map((event) => event.type), [
+        "run-started",
+        "execution-started",
+        "operation-started",
+        "operation-failed",
+        "execution-completed",
+        "run-completed"
+      ]);
+      assert.equal(events.filter(isOperationStarted).length, 1);
+      assert.equal(events.filter(isOperationTerminal).length, 1);
+
+      const failed = events.find((event) => event.type === "operation-failed");
+      assert.equal(failed?.position, 1);
+      assert.equal(failed?.total, 1);
+      assert.ok((failed?.durationMs ?? -1) >= 0);
+      assert.match(failed?.error.message ?? "", /Injected state failure/);
+
+      const executionCompleted = events.find((event) => event.type === "execution-completed");
+      assert.equal(executionCompleted?.ok, false);
+      const runCompleted = events.find((event) => event.type === "run-completed");
+      assert.equal(runCompleted?.ok, false);
+    }
+  },
+  {
+    name: "operation durations exclude progress rendering time",
+    async run() {
+      const originalPerformance = globalThis.performance;
+      let now = 0;
+      Object.defineProperty(globalThis, "performance", {
+        configurable: true,
+        value: { now: () => now }
+      });
+
+      try {
+        const sourcePlan = await loadFixturePlan();
+        const state = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+        const plan: JourneyPlan = { ...sourcePlan, operations: [state] };
+        const events: JourneyProgressEvent[] = [];
+        const adapter: JourneyAdapter = {
+          name: "timed-adapter",
+          createExecution() {
+            return {
+              start() {
+                return undefined;
+              },
+              openEntry() {
+                return undefined;
+              },
+              assertState() {
+                now += 7;
+              },
+              performTransition() {
+                return undefined;
+              },
+              recordControlFlow() {
+                return undefined;
+              },
+              close() {
+                return undefined;
+              }
+            };
+          }
+        };
+
+        const result = await runJourney({
+          plan,
+          adapter,
+          profiles: [defaultProfile()],
+          progress: [
+            {
+              publish(event) {
+                if (event.type === "operation-started") now += 1000;
+                events.push(event);
+              }
+            }
+          ]
+        });
+
+        assert.equal(result.ok, true);
+        const completed = events.find((event) => event.type === "operation-completed");
+        assert.equal(completed?.durationMs, 7);
+      } finally {
+        Object.defineProperty(globalThis, "performance", {
+          configurable: true,
+          value: originalPerformance
+        });
+      }
+    }
+  },
+  {
+    name: "progress run-completed is emitted before reporting begins",
+    async run() {
+      const calls: string[] = [];
+      const result = await runJourney({
+        plan: { id: "progress-before-reporting-plan", operations: [] },
+        adapter: fakeAdapter([]),
+        profiles: [defaultProfile()],
+        progress: [
+          {
+            publish(event) {
+              if (event.type === "run-completed") calls.push("progress:run-completed");
+            }
+          }
+        ]
+      });
+      const reporting = await reportJourneyResult({
+        result,
+        reporters: [
+          {
+            name: "ordering-reporter",
+            report() {
+              calls.push("report");
+            }
+          }
+        ]
+      });
+
+      assert.deepEqual(reporting.errors, []);
+      assert.deepEqual(calls, ["progress:run-completed", "report"]);
+    }
+  },
+  {
+    name: "consoleJourneyProgress renders success and failure events",
+    async run() {
+      const sourcePlan = await loadFixturePlan();
+      const state = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+      const transition = transitionOperation(sourcePlan, "urn:transition:alice-opens-file-menu");
+      const chunks: string[] = [];
+      const sink = consoleJourneyProgress({
+        stream: {
+          write(chunk: string | Uint8Array) {
+            chunks.push(String(chunk));
+            return true;
+          }
+        } as Pick<NodeJS.WriteStream, "write">
+      });
+
+      await sink.publish({
+        type: "execution-started",
+        runId: "run-1",
+        executionId: "default-01",
+        profileId: "default"
+      });
+      await sink.publish({
+        type: "operation-started",
+        executionId: "default-01",
+        profileId: "default",
+        operation: state,
+        position: 1,
+        total: 2
+      });
+      await sink.publish({
+        type: "operation-completed",
+        executionId: "default-01",
+        profileId: "default",
+        operation: state,
+        position: 1,
+        total: 2,
+        durationMs: 420.4
+      });
+      await sink.publish({
+        type: "operation-started",
+        executionId: "default-01",
+        profileId: "default",
+        operation: transition,
+        position: 2,
+        total: 2
+      });
+      await sink.publish({
+        type: "operation-failed",
+        executionId: "default-01",
+        profileId: "default",
+        operation: transition,
+        position: 2,
+        total: 2,
+        durationMs: 30_000,
+        error: { name: "Error", message: "Expected one matching element" }
+      });
+
+      const output = chunks.join("");
+      assert.match(output, /Profile: default/);
+      assert.match(output, /1\/2 Checking "Alice files app is ready"\.\.\./);
+      assert.match(output, /✓ completed in 420ms/);
+      assert.match(output, /2\/2 Performing "Alice opens the sharing panel"\.\.\./);
+      assert.match(output, /✗ failed after 30\.0s/);
+      assert.match(output, /Expected one matching element/);
+      assert.doesNotMatch(output, /transition-ready/);
     }
   },
   {
@@ -1121,7 +1698,13 @@ const tests: TestCase[] = [
       ]);
       assert.ok(calls.includes("execution-started:default-01:default"));
       assert.ok(calls.includes("execution-completed:default-01:true"));
-      assert.equal(result.evidence.executions.length, 1);
+      assert.deepEqual(result.evidence.executions[0]?.operations, [
+        {
+          operationId: plan.operations[0].id,
+          operationKind: "state",
+          ok: true
+        }
+      ]);
     }
   },
   {
@@ -1151,7 +1734,7 @@ const tests: TestCase[] = [
     }
   },
   {
-    name: "runner evidence characterization covers execution operation outcomes",
+    name: "operation evidence characterization covers runner and Playwright execution",
     async run() {
       const emptyPlan: JourneyPlan = { id: "characterization-empty-plan", operations: [] };
       const singleProfile = await runJourney({
@@ -1161,7 +1744,11 @@ const tests: TestCase[] = [
         runId: "characterization-single"
       });
       assert.deepEqual(singleProfile.evidence.executions, [
-        { executionId: "default-01", profileId: "default", operations: [] }
+        {
+          executionId: "default-01",
+          profileId: "default",
+          operations: []
+        }
       ]);
 
       const twoProfiles = await runJourney({
@@ -1174,11 +1761,19 @@ const tests: TestCase[] = [
         twoProfiles.evidence.executions.map((execution) => ({
           executionId: execution.executionId,
           profileId: execution.profileId,
-          operationCount: execution.operations.length
+          operations: execution.operations
         })),
         [
-          { executionId: "default-01", profileId: "default", operationCount: 0 },
-          { executionId: "keyboard-only-02", profileId: "keyboard-only", operationCount: 0 }
+          {
+            executionId: "default-01",
+            profileId: "default",
+            operations: []
+          },
+          {
+            executionId: "keyboard-only-02",
+            profileId: "keyboard-only",
+            operations: []
+          }
         ]
       );
 
@@ -1244,24 +1839,6 @@ const tests: TestCase[] = [
       );
       assert.deepEqual(observerFailure.evidence.executions[0]?.operations, []);
 
-      const reporterFailure = await runJourney({
-        plan: emptyPlan,
-        adapter: fakeAdapter([]),
-        profiles: [defaultProfile()],
-        reporters: [
-          {
-            name: "characterization-reporter",
-            report() {
-              throw new Error("Injected characterization reporter failure");
-            }
-          }
-        ],
-        runId: "characterization-reporter-failure"
-      });
-      assert.equal(reporterFailure.ok, false);
-      assert.match(reporterFailure.errors[0].message, /Injected characterization reporter failure/);
-      assert.deepEqual(reporterFailure.evidence.executions[0]?.operations, []);
-
       const observations: string[] = [];
       const playwrightObserver: PlaywrightExecutionObserver = {
         name: "characterization-playwright-observer",
@@ -1314,31 +1891,17 @@ const tests: TestCase[] = [
       assert.match(locator.toString(), /Shares/);
       assert.doesNotMatch(locator.toString(), /expanded=/);
 
+      const expandedBindings = structuredClone(operation.activation.bindings);
+      expandedBindings[0].locators[0].features = [
+        {
+          id: "test-expanded",
+          name: "expanded",
+          value: "true"
+        }
+      ];
       const expandedLocator = await toPlaywrightObservationLocator(
         root as never,
-        [
-          {
-            id: "urn:test:expanded-binding",
-            surfaceId: "urn:test:surface",
-            eventId: "urn:test:event",
-            requiredInputModalityProfiles: [],
-            locators: [
-              {
-                id: "urn:test:expanded-locator",
-                role: "button",
-                accessibleName: "Disclosure",
-                features: [
-                  {
-                    id: "urn:test:expanded-feature",
-                    name: "expanded",
-                    value: "true"
-                  }
-                ],
-                contexts: []
-              }
-            ]
-          }
-        ],
+        expandedBindings,
         {
           driver,
           operation,
@@ -1596,10 +2159,23 @@ const tests: TestCase[] = [
         "transition-ready:transition",
         "control-flow-recorded:control-flow"
       ]);
-      assert.deepEqual(
-        result.evidence.executions[0]?.operations.map((operation) => operation.operationKind),
-        ["state", "transition", "control-flow"]
-      );
+      assert.deepEqual(result.evidence.executions[0]?.operations, [
+        {
+          operationId: state.id,
+          operationKind: "state",
+          ok: true
+        },
+        {
+          operationId: transition.id,
+          operationKind: "transition",
+          ok: true
+        },
+        {
+          operationId: controlFlow.id,
+          operationKind: "control-flow",
+          ok: true
+        }
+      ]);
     }
   },
   {
@@ -2183,6 +2759,8 @@ const tests: TestCase[] = [
       assert.match(configSource, /UJG_EXAMPLE_TIMEOUT_MS/);
       assert.match(configSource, /outputDir:\s*"test-results"/);
       assert.match(configSource, /outputFolder:\s*"playwright-report"/);
+      assert.match(configSource, /@openuji\/journey-adapter-playwright\/summary-reporter/);
+      assert.doesNotMatch(configSource, /\.\/ujg-summary-reporter\.ts/);
 
       const runSource = await readFile(
         new URL("../examples/nextcloud-filesharing/run.ts", import.meta.url),
@@ -2190,22 +2768,50 @@ const tests: TestCase[] = [
       );
       assert.match(runSource, /from "@playwright\/test"/);
       assert.match(runSource, /test\("executes the federated file-sharing UJG journey"/);
-      assert.match(runSource, /testInfo\.attach\("ujg-evidence\.json"/);
       assert.match(runSource, /UJG_EVIDENCE_STDOUT/);
       assert.match(runSource, /browser:\s*browser as Browser/);
+      assert.doesNotMatch(runSource, /printJourneyRunSummary/);
+      assert.doesNotMatch(runSource, /testInfo\.attach\("ujg-evidence\.json"/);
+      assert.doesNotMatch(runSource, /testInfo\.attach\("ujg-summary\.json"/);
+      assert.doesNotMatch(runSource, /function attachRunSummary/);
+      assert.doesNotMatch(runSource, /function runSummary/);
+      assert.match(runSource, /playwrightJsonEvidenceReporter/);
+      assert.match(runSource, /playwrightJourneyRunSummaryReporter/);
       assert.match(runSource, /axeObserver/);
       assert.match(runSource, /sourceScreenshots:\s*\{/);
       assert.match(runSource, /states:\s*true/);
       assert.match(runSource, /executionObservers:\s*\[axe\]/);
-      assert.doesNotMatch(runSource, /artifacts:\s*\{/);
       assert.doesNotMatch(runSource, /observers:\s*\[axe\]/);
-      assert.match(runSource, /reporters:\s*\[axe\]/);
+      assert.match(runSource, /const reporters = preflightErrors\.length > 0/);
+      assert.match(runSource, /\? \[evidence,\s*summary\]/);
+      assert.match(runSource, /: \[evidence,\s*axe,\s*summary\]/);
+      assert.match(runSource, /await reportJourneyResult\(\{/);
+      assert.match(runSource, /reporters,\s*result/s);
+      assert.doesNotMatch(
+        runSource,
+        /profiles:\s*\[defaultProfile\(\),\s*keyboardOnlyProfile\(\)\],\s*reporters:/
+      );
+      assert.match(runSource, /expect\(reporting\.errors/);
       assert.match(runSource, /nextcloud-filesharing\.axe-path/);
       assert.match(runSource, /latestAccessibilitySummaryReportPath/);
-      assert.match(runSource, /axe json:/);
-      assert.match(runSource, /failed operation:/);
-      assert.match(runSource, /failedOperationSummaries/);
-      assert.match(runSource, /graphNodeId/);
+      assert.match(runSource, /accessibility/);
+      assert.doesNotMatch(runSource, /UJG journey \$\{result\.ok/);
+      assert.doesNotMatch(runSource, /console\.log\(`  evidence:/);
+
+      const reporterSource = await readFile(
+        new URL("../packages/journey-adapter-playwright/src/summary-reporter.ts", import.meta.url),
+        "utf8"
+      );
+      assert.match(reporterSource, /renderJourneyRunSummary/);
+      assert.match(reporterSource, /ujg-summary\.json/);
+      assert.match(reporterSource, /onEnd/);
+
+      const adapterSource = await readFile(
+        new URL("../packages/journey-adapter-playwright/src/reporters.ts", import.meta.url),
+        "utf8"
+      );
+      assert.match(adapterSource, /playwrightJsonEvidenceReporter/);
+      assert.match(adapterSource, /playwrightJourneyRunSummaryReporter/);
     }
   },
   {
@@ -2356,6 +2962,29 @@ function assertJourneyInputModalityId(value: string): asserts value is JourneyIn
 
 function cloneOperation(operation: TransitionPlanOperation): TransitionPlanOperation {
   return structuredClone(operation) as TransitionPlanOperation;
+}
+
+function sourceBetween(source: string, start: string, end: string): string {
+  const startIndex = source.indexOf(start);
+  const endIndex = source.indexOf(end, startIndex + start.length);
+  assert.notEqual(startIndex, -1, `Expected source to include ${start}`);
+  assert.notEqual(endIndex, -1, `Expected source to include ${end}`);
+  return source.slice(startIndex, endIndex);
+}
+
+function isOperationStarted(
+  event: JourneyProgressEvent
+): event is Extract<JourneyProgressEvent, { type: "operation-started" }> {
+  return event.type === "operation-started";
+}
+
+function isOperationTerminal(
+  event: JourneyProgressEvent
+): event is Extract<
+  JourneyProgressEvent,
+  { type: "operation-completed" | "operation-failed" }
+> {
+  return event.type === "operation-completed" || event.type === "operation-failed";
 }
 
 function fakeAdapter(

@@ -1,6 +1,6 @@
 import type { JourneyPlan } from "@openuji/journey-execution-model";
 
-import type { ExecutionResult, RunResult } from "../index.js";
+import type { ExecutionResult, RunResult } from "../results/contracts.js";
 
 export type JourneyComponentDescriptor = {
   readonly name: string;
