@@ -23,6 +23,22 @@ pnpm --filter @openuji/example-nextcloud-filesharing e2e:report
 
 The example loads `examples/nextcloud-filesharing/ujg/filesharing.ujg.jsonld`, configures the generic Playwright adapter and Nextcloud driver, runs `defaultProfile()` and `keyboardOnlyProfile()`, and attaches normalized evidence JSON to the Playwright test result. Set `UJG_EVIDENCE_STDOUT=1` to also print the full evidence JSON.
 
+## Roadmap
+
+Journey Mesh currently demonstrates model-driven execution of a federated
+Nextcloud file-sharing journey through the generic runner, UJG binding,
+Playwright adapter, Nextcloud driver, default and keyboard-only profiles, and
+axe accessibility observer.
+
+The proposed roadmap adds branch-aware execution, stable extension contracts,
+reproducible deployment validation, expanded Nextcloud scenarios, a Mastodon
+driver, runtime reliability evidence, and improved reporting and documentation.
+
+- [Technical roadmap](docs/roadmap.md)
+- [Public roadmap issue](https://github.com/openuji/journey-mesh/issues/11)
+
+The roadmap is proposed and is not a delivery commitment.
+
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
