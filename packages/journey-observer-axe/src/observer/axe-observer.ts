@@ -1,6 +1,6 @@
 import type { PlaywrightOperationObservation } from "@openuji/journey-adapter-playwright";
 
-import { observerName } from "../constants.js";
+import { observerName, wcag22Tags } from "../constants.js";
 import type {
   AxeAuditReport,
   AxeObserver,
@@ -135,6 +135,7 @@ export function axeObserver(options: AxeObserverOptions): AxeObserver {
       const sourceMetadata = planSourceMetadata(result.plan.source);
       latestPathReport = buildAxePathAuditReport({
         reportId: options.reportId,
+        wcagTags: options.tags ?? wcag22Tags,
         metadata: {
           ...(options.metadata ?? {}),
           runId: result.runId,

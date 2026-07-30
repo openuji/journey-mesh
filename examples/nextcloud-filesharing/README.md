@@ -31,15 +31,15 @@ test("executes the federated file-sharing UJG journey", async ({ browser }, test
 Start and seed the local stack first:
 
 ```sh
-pnpm --filter @openuji/example-nextcloud-filesharing stack:up
-pnpm --filter @openuji/example-nextcloud-filesharing stack:provision
-pnpm --filter @openuji/example-nextcloud-filesharing stack:seed
+pnpm  stack:up
+pnpm  stack:provision
+pnpm  stack:seed
 ```
 
 Then run the journey:
 
 ```sh
-pnpm --filter @openuji/example-nextcloud-filesharing e2e
+pnpm  e2e
 ```
 
 Representative output:

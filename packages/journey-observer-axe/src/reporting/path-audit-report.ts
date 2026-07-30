@@ -22,6 +22,7 @@ import { stringTargets } from "../shared/strings.js";
 export function buildAxePathAuditReport(input: {
   reportId: string;
   createdAt?: string;
+  wcagTags?: readonly string[];
   metadata?: AxeAuditMetadata;
   items: AxePathAuditItemInput[];
 }): AxePathAuditReport {
@@ -30,6 +31,7 @@ export function buildAxePathAuditReport(input: {
     schemaVersion: "ujg-fed-a11y.axe-path.v1",
     reportId: input.reportId,
     createdAt: input.createdAt ?? new Date().toISOString(),
+    wcagTags: [...(input.wcagTags ?? [])],
     metadata: input.metadata ?? {},
     summary: summarizePathItems(items),
     items

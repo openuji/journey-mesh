@@ -31,6 +31,7 @@ export function renderAxePathAuditHtml(
     metadataTable([
       ["Created", report.createdAt],
       ["Schema version", report.schemaVersion],
+      ["WCAG tags", report.wcagTags.join(", ")],
       ["Metadata", JSON.stringify(report.metadata, null, 2)]
     ]),
     renderPathSummary(report.summary),

@@ -127,6 +127,7 @@ export type AxePathAuditReport = {
   schemaVersion: "ujg-fed-a11y.axe-path.v1";
   reportId: string;
   createdAt: string;
+  wcagTags: string[];
   metadata: AxeAuditMetadata;
   summary: AxePathAuditSummary;
   items: AxePathAuditItem[];

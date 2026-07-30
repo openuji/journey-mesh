@@ -2306,6 +2306,7 @@ const tests: TestCase[] = [
         "wcag21aa",
         "wcag22aa"
       ]);
+      assert.deepEqual(axe.latestPathReport?.wcagTags, [...wcag22Tags]);
       assert.equal(axe.latestPathReport?.summary.audited, 2);
       assert.equal(axe.latestPathReport?.summary.notApplicable, 1);
       assert.equal(axe.latestPathReport?.items[0].scanSummaries?.["page-state"].passes, 1);
@@ -2371,6 +2372,8 @@ const tests: TestCase[] = [
       );
       assert.ok(pathHtmlAttachment?.path);
       const pathHtml = await readFile(pathHtmlAttachment.path, "utf8");
+      assert.match(pathHtml, /WCAG tags/);
+      assert.match(pathHtml, /wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa/);
       assert.match(pathHtml, /&lt;a href=https:\/\/evil\.test&gt;unsafe&lt;\/a&gt;/);
       assert.doesNotMatch(pathHtml, /<a href=https:\/\/evil\.test>unsafe<\/a>/);
       const sourceJsonHref = axe.latestPathReport?.items[0].sourceJsonHref;
@@ -2475,6 +2478,7 @@ const tests: TestCase[] = [
       const report = buildAxePathAuditReport({
         reportId: "builder-test",
         createdAt: "2026-01-01T00:00:00.000Z",
+        wcagTags: ["wcag2a", "wcag2aa"],
         metadata: { documentId: "urn:test" },
         items: [
           {
@@ -2491,6 +2495,7 @@ const tests: TestCase[] = [
       });
 
       assert.equal(report.schemaVersion, "ujg-fed-a11y.axe-path.v1");
+      assert.deepEqual(report.wcagTags, ["wcag2a", "wcag2aa"]);
       assert.equal(report.summary.audited, 1);
       assert.equal(report.items[0].metadata.stateId, "urn:state:start");
       assert.equal(report.items[0].sourceJsonHref, "default-000-start.axe.json");
