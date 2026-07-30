@@ -1245,6 +1245,72 @@ const tests: TestCase[] = [
     }
   },
   {
+    name: "operation durations exclude progress rendering time",
+    async run() {
+      const originalPerformance = globalThis.performance;
+      let now = 0;
+      Object.defineProperty(globalThis, "performance", {
+        configurable: true,
+        value: { now: () => now }
+      });
+
+      try {
+        const sourcePlan = await loadFixturePlan();
+        const state = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+        const plan: JourneyPlan = { ...sourcePlan, operations: [state] };
+        const events: JourneyProgressEvent[] = [];
+        const adapter: JourneyAdapter = {
+          name: "timed-adapter",
+          createExecution() {
+            return {
+              start() {
+                return undefined;
+              },
+              openEntry() {
+                return undefined;
+              },
+              assertState() {
+                now += 7;
+              },
+              performTransition() {
+                return undefined;
+              },
+              recordControlFlow() {
+                return undefined;
+              },
+              close() {
+                return undefined;
+              }
+            };
+          }
+        };
+
+        const result = await runJourney({
+          plan,
+          adapter,
+          profiles: [defaultProfile()],
+          progress: [
+            {
+              publish(event) {
+                if (event.type === "operation-started") now += 1000;
+                events.push(event);
+              }
+            }
+          ]
+        });
+
+        assert.equal(result.ok, true);
+        const completed = events.find((event) => event.type === "operation-completed");
+        assert.equal(completed?.durationMs, 7);
+      } finally {
+        Object.defineProperty(globalThis, "performance", {
+          configurable: true,
+          value: originalPerformance
+        });
+      }
+    }
+  },
+  {
     name: "progress run-completed is emitted before reporting begins",
     async run() {
       const calls: string[] = [];

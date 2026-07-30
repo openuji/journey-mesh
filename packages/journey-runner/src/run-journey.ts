@@ -100,7 +100,6 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
   const errors: JourneyRunError[] = [];
   const observerDispatcher = new JourneyObserverDispatcher(options.observers ?? []);
   const progress = new JourneyProgressDispatcher(options.progress ?? []);
-  const runStartedAt = performance.now();
 
   await progress.publish({
     type: "run-started",
@@ -109,6 +108,7 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
     profileCount: options.profiles.length,
     operationsPerProfile: options.plan.operations.length
   });
+  const runStartedAt = performance.now();
 
   const runStartError = await observerDispatcher.runStarted({
     adapter: componentDescriptor(options.adapter),
@@ -201,7 +201,6 @@ async function runProfileExecution({
   const currentEntryByActor = new Map<string, string>();
   let adapterExecution: JourneyAdapterExecution | undefined;
   const operations: JourneyOperationEvidence[] = [];
-  const executionStartedAt = performance.now();
 
   await progress.publish({
     type: "execution-started",
@@ -209,6 +208,7 @@ async function runProfileExecution({
     executionId: context.executionId,
     profileId: profile.id
   });
+  const executionStartedAt = performance.now();
 
   try {
     await observerDispatcher.executionStarted(descriptor);
@@ -217,7 +217,6 @@ async function runProfileExecution({
     await adapterExecution.start();
 
     for (const [operationIndex, operation] of plan.operations.entries()) {
-      const operationStartedAt = performance.now();
       const position = operationIndex + 1;
       const operationProgress = {
         executionId: context.executionId,
@@ -227,6 +226,7 @@ async function runProfileExecution({
         total: plan.operations.length
       };
       await progress.publish({ type: "operation-started", ...operationProgress });
+      const operationStartedAt = performance.now();
 
       try {
         await executeOperation({
