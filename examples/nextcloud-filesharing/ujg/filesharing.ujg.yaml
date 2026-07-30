@@ -289,11 +289,6 @@ accessible:
       label: "Remote recipient instance key"
       accessibleFeatureName: "federated-cloud-id"
       accessibleFeatureValue: "*"
-    "urn:feature:expanded-true":
-      label: "Expanded"
-      accessibleFeatureName: "expanded"
-      accessibleFeatureValue: "true"
-
   locators:
     "urn:locator:sharing-panel":
       label: "Sharing panel"

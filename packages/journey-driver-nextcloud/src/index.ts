@@ -268,16 +268,16 @@ export async function logInToNextcloud(session: NextcloudActorSession): Promise<
   await userInput.fill(session.user.username);
   await passwordInput.waitFor({ state: "visible", timeout: 30_000 });
   await passwordInput.fill(session.user.password);
-  await page.locator('button[type="submit"], input[type="submit"]').first().click();
-  await page.waitForURL(
-    (url) => !url.pathname.startsWith("/login"),
-    { timeout: 30_000 }
-  );
+  await Promise.all([
+    page.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 30_000 }),
+    page.locator('button[type="submit"], input[type="submit"]').first().click()
+  ]);
   await page.locator("#header").first().waitFor({
     state: "visible",
     timeout: 30_000
   });
   await dismissFirstRunDialog(page);
+  await awaitNextcloudApplicationSettled(session);
 }
 
 export async function awaitNextcloudApplicationSettled(

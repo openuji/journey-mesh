@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   activatePlaywrightLocator,
@@ -405,14 +407,11 @@ const tests: TestCase[] = [
       const recorderReferences = packageSources.filter((sourceFile) =>
         sourceFile.source.includes("EvidenceRecorder")
       );
-      for (const sourceFile of recorderReferences) {
-        assert.equal(
-          sourceFile.path.includes("/packages/journey-evidence/src/") ||
-            sourceFile.path.includes("/packages/journey-runner/src/"),
-          true,
-          `Only evidence and runner packages may reference EvidenceRecorder: ${sourceFile.path}`
-        );
-      }
+      assert.deepEqual(
+        recorderReferences.map((sourceFile) => sourceFile.path),
+        [],
+        "EvidenceRecorder must not be referenced after removing the evidence package"
+      );
 
       const snapshotReaders = packageSources.filter((sourceFile) =>
         sourceFile.source.includes(".snapshot()")
@@ -420,7 +419,7 @@ const tests: TestCase[] = [
       assert.deepEqual(
         snapshotReaders.map((sourceFile) => sourceFile.path),
         [],
-        "Evidence log snapshots must not remain in package sources"
+        "Packages must not read removed evidence logs"
       );
 
       for (const sourceFile of packageSources) {
@@ -437,7 +436,7 @@ const tests: TestCase[] = [
       assert.deepEqual(
         rawEmitSources.map((sourceFile) => sourceFile.path),
         [],
-        "Raw evidence emission must not remain in package sources"
+        "Packages must not emit removed evidence events"
       );
 
       const evidenceFreeSources = packageSources.filter((sourceFile) =>
@@ -560,14 +559,27 @@ const tests: TestCase[] = [
         );
       }
 
+      const ujgRefSetDefinitions = packageSources.filter((sourceFile) =>
+        sourceFile.source.includes("UjgRefSet")
+      );
+      assert.deepEqual(
+        ujgRefSetDefinitions.map((definition) => definition.path),
+        [],
+        "UjgRefSet compatibility alias must be removed with the evidence package"
+      );
+
       const directPlan: ExecutionJourneyPlan = await compileUjgJourneyPlan(
         await loadUjgDocument(fixtureUrl)
       );
-      const runnerPlanFromDirect: JourneyPlan = directPlan;
+      const runnerPlanFromExecution: JourneyPlan = directPlan;
       assertCoreCompatiblePlan(directPlan);
       assertCoreCompatibleOperation(directPlan.operations[0]);
-      assertCoreCompatiblePlan(runnerPlanFromDirect);
-      assertCoreCompatibleOperation(runnerPlanFromDirect.operations[0]);
+      assertCoreCompatiblePlan(runnerPlanFromExecution);
+      assertCoreCompatibleOperation(runnerPlanFromExecution.operations[0]);
+
+      const runnerPlan: JourneyPlan = await loadFixturePlan();
+      assertCoreCompatiblePlan(runnerPlan);
+      assertCoreCompatibleOperation(runnerPlan.operations[0]);
     }
   },
   {
@@ -655,6 +667,9 @@ const tests: TestCase[] = [
       assert.equal(controlFlow.toEntry?.id, "urn:entry:bob-pending-share-offer-cleared");
 
       const bobShares = transitionOperation(plan, "urn:transition:bob-opens-shares-overview");
+      assert.equal(bobShares.activation.bindings[0].locators[0].id, "urn:locator:shares-overview-link");
+      assert.equal(bobShares.activation.bindings[0].locators[0].role, "link");
+      assert.equal(bobShares.activation.bindings[0].locators[0].accessibleName, "Shares");
       assert.deepEqual(bobShares.activation.bindings[0].locators[0].features, []);
     }
   },
@@ -794,6 +809,7 @@ const tests: TestCase[] = [
     name: "runner executes each profile with isolated fake adapter sessions",
     async run() {
       const plan = await loadFixturePlan();
+      const fileMenuTransition = transitionOperation(plan, "urn:transition:alice-opens-file-menu");
       const calls: string[] = [];
       const adapter = fakeAdapter(calls);
       const result = await runJourney({
@@ -826,9 +842,8 @@ const tests: TestCase[] = [
             execution.profileId === "keyboard-only" &&
             execution.operations.some(
               (operation) =>
-                operation.operationId ===
-                  transitionOperation(plan, "urn:transition:alice-opens-file-menu").id &&
                 operation.operationKind === "transition" &&
+                operation.operationId === fileMenuTransition.id &&
                 operation.ok
             )
         )
@@ -1356,7 +1371,9 @@ const tests: TestCase[] = [
 
       assert.equal(minimalResult.ok, true);
       assert.deepEqual(minimalResult.plan, { id: "minimal-custom-plan" });
-      assert.deepEqual(minimalResult.evidence.executions[0]?.operations, []);
+      assert.deepEqual(minimalResult.evidence.executions, [
+        { executionId: "default-01", profileId: "default", operations: [] }
+      ]);
 
       const plan: JourneyPlan = {
         id: "custom-plan",
@@ -1408,16 +1425,15 @@ const tests: TestCase[] = [
         adapter: fakeAdapter([]),
         profiles: [defaultProfile()]
       });
-      const operationEvidence = result.evidence.executions[0]?.operations[0];
+      const [executionEvidence] = result.evidence.executions;
+      const [operationEvidence] = executionEvidence?.operations ?? [];
 
       assert.equal(result.ok, true);
       assert.equal(result.plan.source?.model, "custom-workflow");
       assert.equal(result.plan.source?.documentId, "workflow-42");
-      assert.deepEqual(operationEvidence, {
-        operationId: "operation-1",
-        operationKind: "state",
-        ok: true
-      });
+      assert.equal(operationEvidence?.operationId, "operation-1");
+      assert.equal(operationEvidence?.operationKind, "state");
+      assert.equal(operationEvidence?.ok, true);
     }
   },
   {
@@ -1440,15 +1456,11 @@ const tests: TestCase[] = [
       assert.equal(result.ok, false);
       assert.equal(result.executions[0].ok, false);
       assert.deepEqual(closeInputs, [true]);
-      assert.match(result.errors[0].message, /Injected state failure/);
-      assert.deepEqual(result.evidence.executions[0]?.operations, [
-        {
-          operationId: stateOperation(plan, "urn:state:alice-files-ready").id,
-          operationKind: "state",
-          ok: false,
-          error: result.errors[0]
-        }
-      ]);
+      assert.match(result.executions[0]?.error?.message ?? "", /Injected state failure/);
+      const failedOperation = result.evidence.executions[0]?.operations[0];
+      assert.equal(failedOperation?.operationKind, "state");
+      assert.equal(failedOperation?.ok, false);
+      assert.match(failedOperation?.error?.message ?? "", /Injected state failure/);
     }
   },
   {
@@ -1517,7 +1529,10 @@ const tests: TestCase[] = [
       assert.equal(result.ok, false);
       assert.deepEqual(closeInputs, [false]);
       assert.equal(calls.filter((call) => call === "default:teardown").length, 1);
-      assert.match(result.errors[0].message, /Injected execution completion observer failure/);
+      assert.match(
+        result.executions[0]?.error?.message ?? "",
+        /Injected execution completion observer failure/
+      );
     }
   },
   {
@@ -1607,7 +1622,7 @@ const tests: TestCase[] = [
       });
 
       assert.equal(result.ok, false);
-      assert.match(result.errors[0].message, /Injected observer failure/);
+      assert.match(result.executions[0]?.error?.message ?? "", /Injected observer failure/);
       assert.deepEqual(result.evidence.executions[0]?.operations, []);
     }
   },
@@ -1663,15 +1678,12 @@ const tests: TestCase[] = [
         profiles: [defaultProfile()],
         runId: "characterization-state-failure"
       });
+      const failedOperation = failingState.evidence.executions[0]?.operations[0];
       assert.equal(failingState.ok, false);
-      assert.deepEqual(failingState.evidence.executions[0]?.operations, [
-        {
-          operationId: state.id,
-          operationKind: "state",
-          ok: false,
-          error: failingState.errors[0]
-        }
-      ]);
+      assert.equal(failedOperation?.operationId, state.id);
+      assert.equal(failedOperation?.operationKind, "state");
+      assert.equal(failedOperation?.ok, false);
+      assert.match(failedOperation?.error?.message ?? "", /Injected state failure/);
 
       const startupFailure = await runJourney({
         plan: emptyPlan,
@@ -1680,6 +1692,10 @@ const tests: TestCase[] = [
         runId: "characterization-startup-failure"
       });
       assert.equal(startupFailure.ok, false);
+      assert.match(
+        startupFailure.executions[0]?.error?.message ?? "",
+        /Injected adapter startup failure/
+      );
       assert.deepEqual(startupFailure.evidence.executions[0]?.operations, []);
 
       const closeFailure = await runJourney({
@@ -1689,6 +1705,10 @@ const tests: TestCase[] = [
         runId: "characterization-close-failure"
       });
       assert.equal(closeFailure.ok, false);
+      assert.match(
+        closeFailure.executions[0]?.error?.message ?? "",
+        /Injected adapter close failure/
+      );
       assert.deepEqual(closeFailure.evidence.executions[0]?.operations, []);
 
       const observerFailure = await runJourney({
@@ -1706,6 +1726,10 @@ const tests: TestCase[] = [
         runId: "characterization-observer-failure"
       });
       assert.equal(observerFailure.ok, false);
+      assert.match(
+        observerFailure.executions[0]?.error?.message ?? "",
+        /Injected characterization observer failure/
+      );
       assert.deepEqual(observerFailure.evidence.executions[0]?.operations, []);
 
       const observations: string[] = [];
@@ -1740,7 +1764,7 @@ const tests: TestCase[] = [
     }
   },
   {
-    name: "playwright adapter converts role, name, context, expanded, and binding composition",
+    name: "playwright adapter converts role, name, context, and binding composition",
     async run() {
       const root = new FakeLocator("page");
       const driver = testPlaywrightDriver();
@@ -2579,6 +2603,20 @@ const tests: TestCase[] = [
     }
   },
   {
+    name: "nextcloud example pins Docker image to a versioned digest",
+    async run() {
+      const composeSource = await readFile(
+        new URL("../examples/nextcloud-filesharing/deployment/compose.yaml", import.meta.url),
+        "utf8"
+      );
+      const pinnedNextcloudImage =
+        "nextcloud:34.0.2-apache@sha256:e93ccfc952c95f18175f3d297fb2f60c35070c05ca976050c250a9ddab793e75";
+
+      assert.equal(composeSource.split(pinnedNextcloudImage).length - 1, 2);
+      assert.doesNotMatch(composeSource, /nextcloud:stable-apache/);
+    }
+  },
+  {
     name: "nextcloud example exposes e2e scripts without pnpm run collision",
     async run() {
       const source = await readFile(
@@ -2611,6 +2649,7 @@ const tests: TestCase[] = [
       assert.doesNotMatch(configSource, /trace:\s*"retain-on-failure"/);
       assert.doesNotMatch(configSource, /screenshot:\s*"only-on-failure"/);
       assert.doesNotMatch(configSource, /video:\s*"retain-on-failure"/);
+      assert.match(configSource, /UJG_EXAMPLE_TIMEOUT_MS/);
       assert.match(configSource, /outputDir:\s*"test-results"/);
       assert.match(configSource, /outputFolder:\s*"playwright-report"/);
       assert.match(configSource, /@openuji\/journey-adapter-playwright\/summary-reporter/);
@@ -3118,17 +3157,13 @@ function fakeDriverContext(): PlaywrightDriverExecutionContext {
 function fakeAdapterExecutionInput(
   context: JourneyExecutionContext
 ): Parameters<JourneyAdapter["createExecution"]>[0] {
-  return {
-    context
-  };
+  return { context };
 }
 
 function fakeDriverExecutionInput(
   context: PlaywrightDriverExecutionContext
 ): Parameters<PlaywrightJourneyDriver["createExecution"]>[0] {
-  return {
-    context
-  };
+  return { context };
 }
 
 function fakeAxeExecution(plan: JourneyPlan): JourneyExecutionDescriptor {
@@ -3333,7 +3368,7 @@ class FakeAxeTestInfo {
   constructor(private readonly id: string) {}
 
   outputPath(...pathSegments: string[]): string {
-    return `/private/tmp/openuji-${this.id}-${pathSegments.join("-")}`;
+    return join(tmpdir(), `openuji-${this.id}-${pathSegments.join("-")}`);
   }
 
   attach(

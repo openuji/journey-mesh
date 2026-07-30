@@ -13,7 +13,13 @@ export function errorToJourneyRunError(error: unknown): JourneyRunError {
     };
   }
 
-  if (isJourneyRunError(error)) return error;
+  if (isJourneyRunError(error)) {
+    return {
+      name: error.name,
+      message: error.message,
+      ...(typeof error.stack === "string" ? { stack: error.stack } : {})
+    };
+  }
 
   return {
     name: "Error",

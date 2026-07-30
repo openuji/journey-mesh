@@ -541,13 +541,6 @@
       "accessibleFeatureValue": "*"
     },
     {
-      "@type": "AccessibleFeature",
-      "@id": "urn:feature:expanded-true",
-      "label": "Expanded",
-      "accessibleFeatureName": "expanded",
-      "accessibleFeatureValue": "true"
-    },
-    {
       "@type": "AccessibleLocator",
       "@id": "urn:locator:sharing-panel",
       "label": "Sharing panel",
