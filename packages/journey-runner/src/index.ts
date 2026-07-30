@@ -3,8 +3,6 @@ import type {
   InputModalityDecision,
   JourneyPlan,
   JourneyPlanOperation,
-  JourneyPlanOperationKind,
-  JourneyPlanSource,
   StatePlanOperation,
   TransitionPlanOperation
 } from "@openuji/journey-execution-model";
@@ -21,6 +19,13 @@ import { JourneyObserverDispatcher } from "./observers/journey-observer-dispatch
 import type { JourneyObserver } from "./observers/contracts.js";
 import { JourneyProgressDispatcher } from "./progress/progress-dispatcher.js";
 import type { JourneyProgressSink } from "./progress/contracts.js";
+import { buildResult, resultOk } from "./results/build-result.js";
+import type {
+  ExecutionResult,
+  JourneyExecutionEvidence,
+  JourneyOperationEvidence,
+  RunResult
+} from "./results/contracts.js";
 
 export {
   componentDescriptor,
@@ -83,6 +88,12 @@ export type {
   JourneyProgressEvent,
   JourneyProgressSink
 } from "./progress/contracts.js";
+export type {
+  ExecutionResult,
+  JourneyExecutionEvidence,
+  JourneyOperationEvidence,
+  RunResult
+} from "./results/contracts.js";
 
 export type {
   JourneyComponentDescriptor,
@@ -153,40 +164,6 @@ export type RunJourneyOptions = {
   observers?: JourneyObserver[];
   progress?: readonly JourneyProgressSink[];
   runId?: string;
-};
-
-export type ExecutionResult = {
-  executionId: string;
-  profileId: string;
-  ok: boolean;
-  error?: JourneyRunError;
-};
-
-export type JourneyOperationEvidence = {
-  operationId: string;
-  operationKind: JourneyPlanOperationKind;
-  ok: boolean;
-  error?: JourneyRunError;
-};
-
-export type JourneyExecutionEvidence = {
-  executionId: string;
-  profileId: string;
-  operations: JourneyOperationEvidence[];
-};
-
-export type RunResult = {
-  ok: boolean;
-  runId: string;
-  plan: {
-    id: string;
-    source?: JourneyPlanSource;
-  };
-  executions: ExecutionResult[];
-  evidence: {
-    executions: JourneyExecutionEvidence[];
-  };
-  errors: JourneyRunError[];
 };
 
 type ProfileExecutionOutcome = {
@@ -452,13 +429,6 @@ function operationEvidence(
   };
 }
 
-function resultOk(
-  executions: readonly ExecutionResult[],
-  errors: readonly JourneyRunError[]
-): boolean {
-  return errors.length === 0 && executions.every((execution) => execution.ok);
-}
-
 export function consoleJourneyProgress(options: { readonly stream?: Pick<NodeJS.WriteStream, "write"> } = {}): JourneyProgressSink {
   const stream = options.stream ?? process.stdout;
   return {
@@ -472,38 +442,4 @@ export function consoleJourneyProgress(options: { readonly stream?: Pick<NodeJS.
 
 function operationLabel(operation: JourneyPlanOperation): string {
   return operation.kind === "state" ? operation.state.label ?? operation.id : operation.transition.label ?? operation.id;
-}
-
-function buildResult({
-  errors,
-  evidenceExecutions,
-  executions,
-  ok,
-  plan,
-  runId
-}: {
-  errors: readonly JourneyRunError[];
-  evidenceExecutions: readonly JourneyExecutionEvidence[];
-  executions: readonly ExecutionResult[];
-  ok: boolean;
-  plan: JourneyPlan;
-  runId: string;
-}): RunResult {
-  return {
-    ok,
-    runId,
-    plan: {
-      id: plan.id,
-      ...(plan.source ? { source: plan.source } : {})
-    },
-    executions: executions.map((execution) => ({ ...execution })),
-    evidence: {
-      executions: evidenceExecutions.map((execution) => ({
-        executionId: execution.executionId,
-        profileId: execution.profileId,
-        operations: execution.operations.map((operation) => ({ ...operation }))
-      }))
-    },
-    errors: errors.map((error) => ({ ...error }))
-  };
 }

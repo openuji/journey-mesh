@@ -1,4 +1,5 @@
-import type { JourneyRunError, RunResult } from "../index.js";
+import type { JourneyRunError } from "../errors.js";
+import type { RunResult } from "../results/contracts.js";
 
 export type JourneyReporterInput = {
   readonly result: RunResult;

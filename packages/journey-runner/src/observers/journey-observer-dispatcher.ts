@@ -2,7 +2,7 @@ import {
   errorToJourneyRunError,
   type JourneyRunError
 } from "../errors.js";
-import type { ExecutionResult, RunResult } from "../index.js";
+import type { ExecutionResult, RunResult } from "../results/contracts.js";
 import type {
   JourneyExecutionDescriptor,
   JourneyObserver,

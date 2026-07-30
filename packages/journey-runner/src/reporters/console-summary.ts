@@ -1,6 +1,6 @@
 import { relative } from "node:path";
 
-import type { ExecutionResult, RunResult } from "../index.js";
+import type { ExecutionResult, RunResult } from "../results/contracts.js";
 
 export type JourneyRunSummaryColorMode = "auto" | "always" | "never";
 

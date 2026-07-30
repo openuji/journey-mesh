@@ -472,6 +472,8 @@ const tests: TestCase[] = [
       assert.doesNotMatch(runnerSource.source, /ReporterPipeline/);
       assert.doesNotMatch(runnerSource.source, /async function publishProgress/);
       assert.doesNotMatch(runnerSource.source, /sink\.publish/);
+      assert.doesNotMatch(runnerSource.source, /function buildResult/);
+      assert.doesNotMatch(runnerSource.source, /function resultOk/);
       assert.doesNotMatch(runnerSource.source, /reporters\?:\s*JourneyReporter/);
       assert.doesNotMatch(
         runnerSource.source.replace(/\s+/g, " "),
