@@ -457,14 +457,31 @@ const tests: TestCase[] = [
         }
       }
 
-      const runnerSource = packageSources.find((sourceFile) =>
+      const runnerIndexSource = packageSources.find((sourceFile) =>
         sourceFile.path.endsWith("/packages/journey-runner/src/index.ts")
       );
+      assert.ok(runnerIndexSource);
+      const runnerSource = packageSources.find((sourceFile) =>
+        sourceFile.path.endsWith("/packages/journey-runner/src/run-journey.ts")
+      );
       assert.ok(runnerSource);
+      const observerContractsSource = packageSources.find((sourceFile) =>
+        sourceFile.path.endsWith("/packages/journey-runner/src/observers/contracts.ts")
+      );
+      assert.ok(observerContractsSource);
       const runJourneySource = sourceBetween(
         runnerSource.source,
         "export async function runJourney",
         "async function runProfileExecution"
+      );
+      assert.match(runnerIndexSource.source, /from "\.\/run-journey\.js"/);
+      assert.match(runnerIndexSource.source, /from "\.\/progress\/console-progress\.js"/);
+      assert.doesNotMatch(runnerIndexSource.source, /export async function runJourney/);
+      assert.doesNotMatch(runnerIndexSource.source, /function consoleJourneyProgress/);
+      assert.doesNotMatch(runnerIndexSource.source, /sink\.publish/);
+      assert.doesNotMatch(
+        runnerSource.source,
+        /from "\.\/reporting\/|from "\.\.\/reporting\//
       );
       assert.doesNotMatch(runJourneySource, /ReporterPipeline/);
       assert.doesNotMatch(runJourneySource, /reporter/i);
@@ -476,11 +493,11 @@ const tests: TestCase[] = [
       assert.doesNotMatch(runnerSource.source, /function resultOk/);
       assert.doesNotMatch(runnerSource.source, /reporters\?:\s*JourneyReporter/);
       assert.doesNotMatch(
-        runnerSource.source.replace(/\s+/g, " "),
+        observerContractsSource.source.replace(/\s+/g, " "),
         /JourneyObserverRunStartedInput = \{[^}]*evidence/
       );
       assert.doesNotMatch(
-        runnerSource.source.replace(/\s+/g, " "),
+        observerContractsSource.source.replace(/\s+/g, " "),
         /JourneyObserverRunCompletedInput = \{[^}]*evidence/
       );
 
@@ -1264,6 +1281,7 @@ const tests: TestCase[] = [
     async run() {
       const sourcePlan = await loadFixturePlan();
       const state = stateOperation(sourcePlan, "urn:state:alice-files-ready");
+      const transition = transitionOperation(sourcePlan, "urn:transition:alice-opens-file-menu");
       const chunks: string[] = [];
       const sink = consoleJourneyProgress({
         stream: {
@@ -1275,12 +1293,18 @@ const tests: TestCase[] = [
       });
 
       await sink.publish({
+        type: "execution-started",
+        runId: "run-1",
+        executionId: "default-01",
+        profileId: "default"
+      });
+      await sink.publish({
         type: "operation-started",
         executionId: "default-01",
         profileId: "default",
         operation: state,
         position: 1,
-        total: 1
+        total: 2
       });
       await sink.publish({
         type: "operation-completed",
@@ -1288,24 +1312,36 @@ const tests: TestCase[] = [
         profileId: "default",
         operation: state,
         position: 1,
-        total: 1,
-        durationMs: 12.4
+        total: 2,
+        durationMs: 420.4
+      });
+      await sink.publish({
+        type: "operation-started",
+        executionId: "default-01",
+        profileId: "default",
+        operation: transition,
+        position: 2,
+        total: 2
       });
       await sink.publish({
         type: "operation-failed",
         executionId: "default-01",
         profileId: "default",
-        operation: state,
-        position: 1,
-        total: 1,
-        durationMs: 34.1,
-        error: { name: "Error", message: "Injected failure" }
+        operation: transition,
+        position: 2,
+        total: 2,
+        durationMs: 30_000,
+        error: { name: "Error", message: "Expected one matching element" }
       });
 
       const output = chunks.join("");
-      assert.match(output, /operation-started 1\/1 Alice files app is ready/);
-      assert.match(output, /operation-completed 1\/1 Alice files app is ready 12ms/);
-      assert.match(output, /operation-failed 1\/1 Alice files app is ready 34ms/);
+      assert.match(output, /Profile: default/);
+      assert.match(output, /1\/2 Checking "Alice files app is ready"\.\.\./);
+      assert.match(output, /✓ completed in 420ms/);
+      assert.match(output, /2\/2 Performing "Alice opens the sharing panel"\.\.\./);
+      assert.match(output, /✗ failed after 30\.0s/);
+      assert.match(output, /Expected one matching element/);
+      assert.doesNotMatch(output, /transition-ready/);
     }
   },
   {

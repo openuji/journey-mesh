@@ -12,5 +12,6 @@ export type JourneyProgressEvent =
   | { readonly type: "run-completed"; readonly runId: string; readonly ok: boolean; readonly durationMs: number };
 
 export type JourneyProgressSink = {
+  readonly name?: string;
   publish(event: JourneyProgressEvent): Promise<void> | void;
 };
