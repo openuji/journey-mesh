@@ -1,6 +1,6 @@
-# Nested UJG authoring document aligned with the Editor's Draft state on 2026-07-16.
+# Nested UJG authoring document aligned with the UJG 1.0-rc1 context set.
 # Keeps the compact authoring structure; a compiler may expand it to normative JSON-LD nodes.
-ujgTarget: ed-2026-07-19
+ujgTarget: "1.0-rc1"
 touchpoints:
   "urn:touchpoint:nextcloud-a":
     label: "Nextcloud A"

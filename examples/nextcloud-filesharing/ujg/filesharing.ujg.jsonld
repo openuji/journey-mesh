@@ -1,14 +1,14 @@
 {
   "@context": [
-    "https://ujg.specs.openuji.org/ed/ns/core.context.jsonld",
-    "https://ujg.specs.openuji.org/ed/ns/graph.context.jsonld",
-    "https://ujg.specs.openuji.org/ed/ns/surface.context.jsonld",
-    "https://ujg.specs.openuji.org/ed/ns/phase.context.jsonld",
-    "https://ujg.specs.openuji.org/ed/ns/l10n.context.jsonld",
-    "https://ujg.specs.openuji.org/ed/ns/observability.context.jsonld",
-    "https://ujg.specs.openuji.org/ed/ns/entry-binding.context.jsonld",
-    "https://ujg.specs.openuji.org/ed/ns/effect.context.jsonld",
-    "https://ujg.specs.openuji.org/ed/ns/artifact.context.jsonld"
+    "https://ujg.specs.openuji.org/1.0-rc1/ns/core.context.jsonld",
+    "https://ujg.specs.openuji.org/1.0-rc1/ns/graph.context.jsonld",
+    "https://ujg.specs.openuji.org/1.0-rc1/ns/surface.context.jsonld",
+    "https://ujg.specs.openuji.org/1.0-rc1/ns/phase.context.jsonld",
+    "https://ujg.specs.openuji.org/1.0-rc1/ns/l10n.context.jsonld",
+    "https://ujg.specs.openuji.org/1.0-rc1/ns/observability.context.jsonld",
+    "https://ujg.specs.openuji.org/1.0-rc1/ns/entry-binding.context.jsonld",
+    "https://ujg.specs.openuji.org/1.0-rc1/ns/effect.context.jsonld",
+    "https://ujg.specs.openuji.org/1.0-rc1/ns/artifact.context.jsonld"
   ],
   "@id": "urn:ujg:document:nextcloud-federated-sharing",
   "@type": "UJGDocument",
