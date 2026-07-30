@@ -2,6 +2,7 @@
   "name": "@openuji/example-nextcloud-filesharing",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "dependencies": {
     "@openuji/journey-adapter-playwright": "workspace:*",

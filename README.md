@@ -22,3 +22,7 @@ pnpm --filter @openuji/example-nextcloud-filesharing e2e:report
 ```
 
 The example loads `examples/nextcloud-filesharing/ujg/filesharing.ujg.jsonld`, configures the generic Playwright adapter and Nextcloud driver, runs `defaultProfile()` and `keyboardOnlyProfile()`, and attaches normalized evidence JSON to the Playwright test result. Set `UJG_EVIDENCE_STDOUT=1` to also print the full evidence JSON.
+
+## License
+
+MIT. See [`LICENSE`](LICENSE).
