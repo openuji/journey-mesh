@@ -39,7 +39,7 @@ graph TD
   profiles["Profiles <br /> (default, keyboard only)"]
   adapter["Adapter <br/> (Playwright)"]
   driver["Driver <br/> (Nextcloud)"]
-  observer["Observe <br /> (axe)"]
+  observer["Observer <br /> (axe)"]
   result[RunResult]
   reporting[reportJourneyResult]
   reports[Evidence JSON and reports]
