@@ -15,21 +15,6 @@ Federated and multi-service systems can report that every service is healthy whi
 
 ## Architecture
 
-```text
-UJG JSON-LD model
-  -> compileUjgJourneyPlan(...)
-  -> JourneyPlan
-  -> runJourney(...)
-       profiles: default, keyboard-only
-       adapter: Playwright
-         driver: Nextcloud
-         observer: axe accessibility scans
-  -> reportJourneyResult(...)
-       evidence JSON + axe path report + Playwright summary
-```
-
-Diagram
-
 ```mermaid
 graph TD
   graphmodel["Graph Model <br/> (UJG JSON LD)"]
