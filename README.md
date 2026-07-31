@@ -57,7 +57,16 @@ graph TD
   reporting --> reports
 ```
 
-Today this repository supports UJG as the model binding. The model-agnostic boundary is the compiled `JourneyPlan`; future bindings such as restricted Gherkin would compile to that same shape. In the reference example, `nextcloudDriver(...)` and `axeObserver(...)` are configured through `playwrightAdapter(...)`, matching [`run.ts`](examples/nextcloud-filesharing/run.ts).
+
+### Extension responsibilities
+
+- Model bindings own model parsing, validation, source references, and execution-plan generation.
+- Automation adapters own generic execution against an automation runtime such as Playwright.
+- Application drivers own service-specific navigation, fixture setup, session isolation, and effect handling.
+- Interaction profiles own input-modality selection such as default pointer-first and keyboard-only operation.
+- Observers own evidence collection and redaction for functional, accessibility, reliability, and deployment signals.
+- Reporters own versioned output formats, human-readable summaries, and CI-compatible artifacts.
+
 
 ## Available Today
 
