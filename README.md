@@ -34,19 +34,19 @@ Diagram
 
 ```mermaid
 graph TD
-  ujg[UJG JSON LD model]
-  binding[compileUjgJourneyPlan]
+  graphmodel["Graph Model <br/> (UJG JSON LD)"]
+  binding[Compiler]
   plan[JourneyPlan]
   runner[runJourney]
-  profiles[default and keyboard only profiles]
-  adapter[Playwright adapter]
-  driver[Nextcloud driver]
-  observer[axe observer]
+  profiles["Profiles <br /> (default, keyboard only)"]
+  adapter["Adapter <br/> (Playwright)"]
+  driver["Driver <br/> (Nextcloud)"]
+  observer["Observe <br /> (axe)"]
   result[RunResult]
   reporting[reportJourneyResult]
   reports[Evidence JSON and reports]
 
-  ujg --> binding
+  graphmodel --> binding
   binding --> plan
   plan --> runner
   profiles --> runner
