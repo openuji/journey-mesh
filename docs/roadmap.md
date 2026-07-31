@@ -1,6 +1,6 @@
 # Journey Mesh Technical Roadmap
 
-> Proposed public roadmap; not necessarily funded, scheduled, or committed.
+> Proposed public roadmap; not necessarily scheduled, or committed.
 
 ## Project links
 
