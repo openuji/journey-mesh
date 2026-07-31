@@ -4,12 +4,9 @@
 
 ## Project links
 
-- Repository: https://github.com/openuji/journey-mesh
-- Website: https://journey-mesh.openuji.org/
 - Roadmap milestone: https://github.com/openuji/journey-mesh/milestone/1
 - Umbrella issue: https://github.com/openuji/journey-mesh/issues/11
-- CI workflow: https://github.com/openuji/journey-mesh/actions/workflows/ci.yml
-- Nextcloud Filesharing CI workflow: https://github.com/openuji/journey-mesh/actions/workflows/example-ci.yml
+
 
 ## Vision
 
