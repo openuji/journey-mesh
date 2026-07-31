@@ -30,9 +30,9 @@ Nextcloud file-sharing journey through the generic runner, UJG binding,
 Playwright adapter, Nextcloud driver, default and keyboard-only profiles, and
 axe accessibility observer.
 
-The proposed roadmap adds branch-aware execution, stable extension contracts,
-reproducible deployment validation, expanded Nextcloud scenarios, a Mastodon
-driver, runtime reliability evidence, and improved reporting and documentation.
+The proposed roadmap adds multipath-aware execution, stable extension contracts,
+Fediversity/Nix post-deployment and upgrade validation, expanded Nextcloud
+scenarios, a Mastodon driver, runtime reliability evidence, and improved reporting and documentation.
 
 - [Technical roadmap](docs/roadmap.md)
 - [Public roadmap issue](https://github.com/openuji/journey-mesh/issues/11)

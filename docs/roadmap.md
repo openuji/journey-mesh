@@ -19,7 +19,7 @@ adapters, application drivers, interaction profiles, evidence observers, and
 graph-linked reports.
 
 The roadmap direction is to evolve Journey Mesh from fixed happy-path execution
-into branch-aware validation of functional, accessibility, reliability, and
+into multipath-aware validation of functional, accessibility, reliability, and
 deployment outcomes.
 
 ## Why cross-service validation matters
@@ -72,9 +72,9 @@ for local review and CI.
 
 | WP | Issue | Status | Estimate | Objective | Deliverables | Acceptance criteria |
 | --- | --- | --- | ---: | --- | --- | --- |
-| WP1 | [Add branch-aware journey execution](https://github.com/openuji/journey-mesh/issues/3) | Core, proposed | 18 days | Add deterministic alternative, failure, delayed, recovery, and converging paths. | Branch guards, runtime branch reasons, expected alternatives, bounded retries and polling, replay, coverage, traversal tests. | Three non-happy-path Nextcloud journeys execute; branch reasons are stable; bounded behavior and replay are tested; branch selection, retry attempts, and evidence identifiers preserve the containing touchpoint, actor, and service-instance context; reports separate alternatives, failures, skipped, and unvisited paths. |
+| WP1 | [Add multipath-aware journey execution](https://github.com/openuji/journey-mesh/issues/3) | Core, proposed | 18 days | Add deterministic alternative, failure, delayed, recovery, and converging paths. | Branch guards, runtime branch reasons, expected alternatives, bounded retries and polling, replay, coverage, traversal tests. | Three non-happy-path Nextcloud journeys execute; branch reasons are stable; bounded behavior and replay are tested; branch selection, retry attempts, and evidence identifiers preserve the containing touchpoint, actor, and service-instance context; reports separate alternatives, failures, skipped, and unvisited paths. |
 | WP2 | [Stabilize execution and extension contracts](https://github.com/openuji/journey-mesh/issues/4) | Core, proposed | 12 days | Version model bindings, adapters, drivers, profiles, observers, and reporters. | Versioned TypeScript interfaces and JSON schemas, stable IDs, typed failures, lifecycle hooks, capability declarations, contract tests, templates, ADRs. | Every extension type has a documented versioned contract; independent extensions can run contract tests; incompatible versions produce actionable diagnostics. |
-| WP3 | [Validate journeys against reproducible deployments](https://github.com/openuji/journey-mesh/issues/5) | Core, proposed | 10 days | Execute journeys against reproducible deployments and record provenance. | Reproducible environment, deployment-output interface, actor provisioning, readiness sync, post-upgrade validation, execution comparison, CI example. | A documented command runs against two instances; endpoints come from deployment outputs; before/after-upgrade reports compare revisions, branches, outcomes, timing, and observations without credentials. |
+| WP3 | [Fediversity post-deployment and upgrade validation](https://github.com/openuji/journey-mesh/issues/5) | Core, proposed | 10 days | Implement a documented interface for consuming service endpoints, instance metadata and deployed revisions from reproducible Fediversity/Nix environments. Automate actor provisioning, readiness checks and fixtures, and demonstrate one before/after-upgrade comparison with redacted deployment provenance. | Deployment input interface, actor provisioning, readiness checks, fixtures, redacted provenance, before/after-upgrade comparison, CI example. | A documented command consumes Fediversity/Nix deployment outputs; the same journey runs before and after upgrade; reports compare revisions, branches, outcomes, timing, and observations without credentials. |
 | WP4 | [Expand the Nextcloud federation reference journeys](https://github.com/openuji/journey-mesh/issues/6) | Core, proposed | 8 days | Expand the happy path into alternative, delayed, failure, and recovery cases. | Remote-user, availability, retry, acceptance, rejection, revocation, and delay scenarios with profiles, evidence, reports, docs, and tests. | Three alternative, negative, or recovery journeys execute; reports distinguish failure classes where evidence permits; Nextcloud logic stays outside the generic runner. |
 | WP5 | [Add a Mastodon federation reference driver](https://github.com/openuji/journey-mesh/issues/7) | Core, proposed | 12 days | Prove reuse with one bounded cross-instance ActivityPub journey. | Mastodon driver, two-instance environment or deployment integration, provisioning, one primary journey with alternatives, contract tests, documentation, evidence. | Generic runtime executes Nextcloud and Mastodon; no Mastodon logic enters the core; one success and two alternative or failure paths run with bounded waits. |
 | WP6 | [Add runtime reliability evidence](https://github.com/openuji/journey-mesh/issues/8) | Core, proposed | 8 days | Correlate runtime reliability evidence with functional and accessibility evidence. | Reliability observer, versioned schema, secret redaction, thresholds, execution comparison, CI policy integration, graph-linked reporting, tests. | Evidence uses stable IDs; credentials and authorization headers are redacted; CI can enforce policies; reports correlate runtime, functional, and accessibility evidence. |
@@ -89,9 +89,9 @@ estimates, not a public rate, budget, or delivery commitment.
 
 ## Expected outcomes
 
-- Branch-aware execution of realistic cross-service alternatives, failures, delays, and recoveries.
+- Multipath-aware execution of realistic cross-service alternatives, failures, delays, and recoveries.
 - Stable contracts for model bindings, adapters, drivers, profiles, observers, and reporters.
-- Reproducible deployment validation with provenance and before/after comparison.
+- Fediversity post-deployment and upgrade validation with redacted provenance and before/after comparison.
 - Expanded Nextcloud reference coverage and one bounded Mastodon reference driver.
 - Correlated functional, accessibility, reliability, and deployment evidence.
 - CI-friendly reports and documentation that make the project easier to review and extend.
