@@ -75,4 +75,9 @@ Bob:   $NEXTCLOUD_BOB_URL
 Users:
   $NEXTCLOUD_ALICE_USER / $NEXTCLOUD_ALICE_PASSWORD
   $NEXTCLOUD_BOB_USER / $NEXTCLOUD_BOB_PASSWORD
+
+Host resolver:
+  host.docker.internal must resolve on the host.
+  If needed, add this to /etc/hosts:
+  127.0.0.1 host.docker.internal
 EOF

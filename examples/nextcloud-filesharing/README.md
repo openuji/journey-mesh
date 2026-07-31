@@ -6,16 +6,47 @@ This example runs a federated file-sharing journey between Alice and Bob from a 
 
 ## Architecture
 
+
 ```text
 ujg/filesharing.ujg.jsonld
   -> compileUjgJourneyPlan(...)
+  -> JourneyPlan
   -> runJourney(...)
        profiles: default, keyboard-only
        adapter: Playwright
-       driver: Nextcloud environment
-       observer: axe accessibility scans
+         driver: Nextcloud
+         observer: axe accessibility scans
   -> reportJourneyResult(...)
        evidence JSON + axe path report + Playwright summary
+```
+
+Diagram
+
+```mermaid
+graph TD
+  ujg[UJG JSON LD model]
+  binding[compileUjgJourneyPlan]
+  plan[JourneyPlan]
+  runner[runJourney]
+  profiles[default and keyboard only profiles]
+  adapter[Playwright adapter]
+  driver[Nextcloud driver]
+  observer[axe observer]
+  result[RunResult]
+  reporting[reportJourneyResult]
+  reports[Evidence JSON and reports]
+
+  ujg --> binding
+  binding --> plan
+  plan --> runner
+  profiles --> runner
+  driver --> adapter
+  observer --> adapter
+  adapter --> runner
+  runner --> result
+  result --> reporting
+  observer --> reporting
+  reporting --> reports
 ```
 
 The entrypoint is [`run.ts`](./run.ts). It declares the runner first, then binds it to Playwright:
@@ -31,6 +62,8 @@ test("executes the federated file-sharing UJG journey", async ({ browser }, test
 ## Run
 
 Start and seed the local stack first:
+
+See [`deployment/README.md`](./deployment/README.md) for stack details. Your host must resolve `host.docker.internal`; if it does not, add `127.0.0.1 host.docker.internal` to `/etc/hosts`.
 
 ```sh
 pnpm  stack:up

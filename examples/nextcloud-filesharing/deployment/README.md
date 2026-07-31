@@ -8,7 +8,9 @@ Local infrastructure for executing the federated file-sharing UJG journey with P
 - Bob: `http://host.docker.internal:18082`
 - Federated recipient: `bob@http://host.docker.internal:18082`
 
-The instances use the same host name with separate published ports. Playwright on the host and Nextcloud inside Docker both resolve `host.docker.internal`, so federated backend requests do not use `localhost`.
+The instances use the same host name with separate published ports. Compose maps `host.docker.internal` inside the containers with `extra_hosts`; your host OS/browser may still need `/etc/hosts` entry `127.0.0.1 host.docker.internal`.
+
+Do not switch these URLs to `localhost` unless you also update the federation setup; container-to-container federated requests can break.
 
 ## Start
 
