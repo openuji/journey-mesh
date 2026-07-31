@@ -32,6 +32,8 @@ test("executes the federated file-sharing UJG journey", async ({ browser }, test
 
 Start and seed the local stack first:
 
+See [`deployment/README.md`](./deployment/README.md) for stack details. Your host must resolve `host.docker.internal`; if it does not, add `127.0.0.1 host.docker.internal` to `/etc/hosts`.
+
 ```sh
 pnpm  stack:up
 pnpm  stack:provision
