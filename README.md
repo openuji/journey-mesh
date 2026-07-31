@@ -11,9 +11,7 @@ Links: [live demo](https://journey-mesh.openuji.org/#demo) · [roadmap](docs/roa
 
 Federated and multi-service systems can report that every service is healthy while the user journey is still broken at a boundary: account mapping, remote discovery, delayed delivery, upgrade compatibility, or evidence review. Journey Mesh makes the intended journey executable, then records evidence against the states and transitions in the model.
 
-## Fediversity Use Case
 
-The reference Fediversity use case is federated file sharing between two Nextcloud instances. Alice shares `report.pdf` from Nextcloud A to Bob on Nextcloud B; Bob accepts the remote share and verifies that the file appears. This gives reviewers a concrete cross-instance workflow that exercises federation through real browser interactions, not only service APIs.
 
 ## Architecture
 
