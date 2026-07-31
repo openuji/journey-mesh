@@ -75,6 +75,7 @@ Then run the journey:
 
 ```sh
 pnpm  e2e
+pnpm  e2e:headed # if you want to see it running in browser
 ```
 
 Representative output:
@@ -106,7 +107,7 @@ Artifacts
 Open the Playwright HTML report:
 
 ```sh
-pnpm --filter @openuji/example-nextcloud-filesharing e2e:report
+pnpm e2e:report
 ```
 
 Main files produced under `examples/nextcloud-filesharing/`:
