@@ -17,9 +17,9 @@ Do not switch these URLs to `localhost` unless you also update the federation se
 From the repository root:
 
 ```sh
-pnpm --filter @openuji/example-nextcloud-filesharing stack:up
-pnpm --filter @openuji/example-nextcloud-filesharing stack:provision
-pnpm --filter @openuji/example-nextcloud-filesharing stack:seed
+pnpm stack:up
+pnpm stack:provision
+pnpm stack:seed
 ```
 
 The scripts use `deployment/.env` when present and fall back to `deployment/.env.example`.
@@ -27,9 +27,9 @@ The scripts use `deployment/.env` when present and fall back to `deployment/.env
 ## Run
 
 ```sh
-pnpm --filter @openuji/example-nextcloud-filesharing e2e
-pnpm --filter @openuji/example-nextcloud-filesharing e2e:headed
-pnpm --filter @openuji/example-nextcloud-filesharing e2e:report
+pnpm e2e
+pnpm e2e:headed
+pnpm e2e:report
 ```
 
 The Playwright report shows the attached `ujg-evidence.json` and Axe path reports. Axe source screenshots are attached by the Axe observer for reviewed state pages.

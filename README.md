@@ -74,17 +74,6 @@ The roadmap is proposed and is not a delivery commitment.
 
 See [`examples/nextcloud-filesharing/README.md`](examples/nextcloud-filesharing/README.md) for the concise architecture flow, sample e2e output, and artifact links.
 
-The Nextcloud file-sharing example owns its own scripts:
-
-```bash
-pnpm --filter @openuji/example-nextcloud-filesharing stack:up
-pnpm --filter @openuji/example-nextcloud-filesharing stack:provision
-pnpm --filter @openuji/example-nextcloud-filesharing stack:seed
-pnpm --filter @openuji/example-nextcloud-filesharing e2e
-pnpm --filter @openuji/example-nextcloud-filesharing e2e:report
-```
-
-The example loads `examples/nextcloud-filesharing/ujg/filesharing.ujg.jsonld`, configures the generic Playwright adapter and Nextcloud driver, runs `defaultProfile()` and `keyboardOnlyProfile()`, and attaches normalized evidence JSON to the Playwright test result. Set `UJG_EVIDENCE_STDOUT=1` to also print the full evidence JSON.
 
 ## Limitations
 
