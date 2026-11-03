@@ -1,4 +1,5 @@
-import type { RunResult } from "@openuji/journey-runner";
+import { playwrightAdapterName } from "@openuji/journey-adapter-playwright";
+import type { JourneyComponentDescriptor, RunResult } from "@openuji/journey-runner";
 import { shouldFailForAxeViolations } from "../audit/strict-mode.js";
 import { auditedAxePathItem, createAxeJourneyItem, itemKey, unauditedAxePathItem } from "../journey/journey-item.js";
 import { planSourceMetadata } from "../journey/operation-metadata.js";
@@ -42,11 +43,15 @@ export function buildAxeObservedPathReport(input: {
       executionCount: input.result.executions.length,
       notApplicableProfileCount: input.result.assessments.filter((assessment) => assessment.kind === "not-applicable").length
     },
-    items: buildAxePathItems(input.evidence, input.result.runId)
+    items: buildAxePathItems(input.evidence, input.result.runId, input.result.evidence)
   });
 }
 
-export function buildAxePathItems(evidence: readonly AxeEvidence[], runId: string): readonly AxePathAuditItemInput[] {
+export function buildAxePathItems(
+  evidence: readonly AxeEvidence[],
+  runId: string,
+  runnerEvidence?: RunResult["evidence"]
+): readonly AxePathAuditItemInput[] {
   const facts = evidence.filter((fact) => factRunId(fact) === runId);
   const candidates = facts.flatMap((fact): readonly PlannedOperation[] => fact.kind === "execution-started"
     ? fact.execution.plan.operations.map((operation) => ({
@@ -63,7 +68,9 @@ export function buildAxePathItems(evidence: readonly AxeEvidence[], runId: strin
       fact.evidence.executionId === target.executionId && fact.evidence.operation.id === target.operation.id
         ? fact.evidence : previous,
     undefined);
-    return projectPathItem(observed ? { ...target, operation: observed.operation } : target, observed);
+    const adapter = runnerEvidence?.executions.find((execution) => execution.executionId === target.executionId)
+      ?.operations.find((operation) => operation.operationId === target.operation.id)?.adapter;
+    return projectPathItem(observed ? { ...target, operation: observed.operation } : target, observed, adapter);
   }));
 }
 
@@ -76,8 +83,15 @@ export function strictAxeFailureReports(evidence: readonly AxeEvidence[], runId:
   }));
 }
 
-function projectPathItem(target: PlannedOperation, observed: AxeOperationEvidence | undefined): AxePathAuditItemInput {
+function projectPathItem(
+  target: PlannedOperation,
+  observed: AxeOperationEvidence | undefined,
+  adapter: JourneyComponentDescriptor | undefined
+): AxePathAuditItemInput {
   const item = createAxeJourneyItem(target.profileId, target.executionId, target.operation);
+  if (!observed && adapter && adapter.name !== playwrightAdapterName) {
+    return unauditedAxePathItem(item, "not-applicable", `Operation was routed to adapter ${adapter.name}; no Playwright accessibility surface was observed.`);
+  }
   if (target.operation.kind === "control-flow" || observed?.stage === "control-flow-recorded") {
     return unauditedAxePathItem(item, "not-applicable", "Control-flow items do not resolve to a page surface.");
   }

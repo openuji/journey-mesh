@@ -126,9 +126,11 @@ type BrowserContextRecord = {
 const roleOptionFeatureNames = new Set(["expanded"]);
 const defaultAssertionTimeoutMs = 30_000;
 
+export const playwrightAdapterName = "@openuji/journey-adapter-playwright";
+
 export function playwrightAdapter(options: PlaywrightAdapterOptions): JourneyAdapter {
   return {
-    name: "@openuji/journey-adapter-playwright",
+    name: playwrightAdapterName,
     version: "0.1.0",
 
     createExecution(input) {

@@ -128,11 +128,20 @@ observation -> screenshot/audit collection -> immutable facts
 plan snapshots + facts -> path report + accessibility summary
 ```
 
-`buildAxePathItems(evidence, runId)` derives audited, skipped, and not-applicable
+`buildAxePathItems(evidence, runId, runnerEvidence?)` derives audited, skipped, and not-applicable
 items and their reasons. Unvisited operations come from the execution's plan
 snapshot. The latest observation supplies each operation's path item; all
 completed scans remain available when deriving strict-mode failures. Facts are
 scoped by run ID so reusing an observer does not mix reports across runs.
+
+`buildAxeObservedPathReport` passes `result.evidence` into that projection. Runner
+operation records are matched by execution ID and operation ID. An operation
+without axe observations that is attributed to another adapter is not applicable
+to this observer, with a reason naming that adapter. Its functional outcome is
+unchanged, including failures. Missing attribution or an unreached operation
+never implies a different adapter; existing projection rules still apply,
+including skipped unobserved web surfaces. Actual axe observations take
+precedence over adapter attribution.
 
 Audit failures are recorded before being propagated to the runner, preserving
 any screenshot evidence. Report and summary builders read these facts without

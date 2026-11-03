@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import {
   activatePlaywrightLocator,
   playwrightAdapter,
+  playwrightAdapterName,
   playwrightCommandForModality,
   playwrightJsonEvidenceReporter,
   playwrightJourneyRunSummaryReporter,
@@ -58,6 +59,7 @@ import {
   type AxeAuditReport,
   type AxeAuditRunnerInput,
   type AxeObserver,
+  type AxePathAuditItem,
   type AxeResults
 } from "@openuji/journey-observer-axe";
 import { defaultProfile, inputModalityProfile, keyboardOnlyProfile, touchpointProfile } from "@openuji/journey-profiles";
@@ -1573,6 +1575,11 @@ const tests: TestCase[] = [
         }
       }));
       const environmentCalls: string[] = [];
+      const axe = axeObserver({
+        testInfo: new FakeAxeTestInfo("mixed-adapter-axe") as never,
+        reportId: "mixed-adapter-axe",
+        auditRunner: async (input) => fakeAxeReport(input)
+      });
       const web = playwrightAdapter({
         browser: browser as never,
         driver: {
@@ -1585,7 +1592,7 @@ const tests: TestCase[] = [
           }
         },
         assertionTimeoutMs: 1,
-        executionObservers: [{
+        executionObservers: [axe, {
           name: "web-observer",
           observeOperation: ({ operation }) => { webOperations.push(operation); }
         }]
@@ -1612,12 +1619,30 @@ const tests: TestCase[] = [
       });
 
       assert.equal(result.ok, true, JSON.stringify(result.errors));
+      await reportAxe(axe, result);
       const aliceOperations = plan.operations.filter((operation) =>
         operation.touchpointId === "urn:touchpoint:nextcloud-a"
       );
       const bobOperations = plan.operations.filter((operation) =>
         operation.touchpointId === "urn:touchpoint:nextcloud-b"
       );
+      const pathItems: readonly AxePathAuditItem[] | undefined = axe.latestPathReport?.items;
+      assert.ok(pathItems);
+      for (const execution of result.executions) {
+        const items: readonly AxePathAuditItem[] = pathItems.filter((item) => item.metadata.executionId === execution.executionId);
+        assert.deepEqual(items.map((item) => item.metadata.operationId), plan.operations.map((operation) => operation.id));
+        for (const [index, operation] of plan.operations.entries()) {
+          const item = items[index];
+          if (operation.touchpointId === "urn:touchpoint:nextcloud-b") {
+            assert.equal(item?.status, "not-applicable");
+            assert.match(item?.reason ?? "", /routed to adapter native-test-adapter/);
+            assert.doesNotMatch(item?.reason ?? "", /runner ended/);
+          } else {
+            assert.equal(item?.status, operation.kind === "control-flow" ? "not-applicable" : "audited");
+          }
+        }
+      }
+      assert.equal(axe.latestPathReport?.summary.skipped, 0);
       assert.deepEqual(webOperations, [...aliceOperations, ...aliceOperations]);
       for (const profile of profiles) {
         const expected = await Promise.all(bobOperations.map(async (operation) => {
@@ -1661,6 +1686,93 @@ const tests: TestCase[] = [
         `${profile.id}:teardown`
       ]));
       assert.equal(browser.closeCalls, 0);
+    }
+  },
+  {
+    name: "mixed axe reports distinguish foreign attempts from web failures and unreached operations",
+    async run() {
+      const source = await loadFixturePlan();
+      const nativeBefore = stateOperation(source, "urn:state:bob-incoming-share-visible");
+      const webState = stateOperation(source, "urn:state:alice-files-ready");
+      const nativeAfter = stateOperation(source, "urn:state:bob-shared-report-visible");
+      const plan = { ...source, operations: [nativeBefore, webState, nativeAfter] };
+      const driver = testPlaywrightDriver();
+      for (const failure of ["web", "native"] as const) {
+        const axe = axeObserver({
+          testInfo: new FakeAxeTestInfo(`mixed-failed-${failure}`) as never,
+          reportId: `mixed-failed-${failure}`,
+          auditRunner() { throw new Error("Unexpected audit before web target resolution"); }
+        });
+        const result = await runJourney({
+          plan,
+          profiles: [defaultProfile()],
+          adapter: touchpointAdapter({
+            [webState.touchpointId]: playwrightAdapter({
+              browser: new FakeBrowser(1) as never,
+              executionObservers: [axe],
+              driver: {
+                ...driver,
+                createExecution(input) {
+                  return {
+                    ...driver.createExecution(input),
+                    pageForOperation() { throw new Error("Web surface unavailable"); }
+                  };
+                }
+              }
+            }),
+            [nativeBefore.touchpointId]: {
+              ...fakeAdapter([], { failStateId: failure === "native" ? nativeBefore.state.id : undefined }),
+              name: "native-test-adapter"
+            }
+          })
+        });
+        assert.equal(result.ok, false);
+        const operations = result.evidence.executions[0]?.operations;
+        assert.equal(operations?.length, failure === "web" ? 2 : 1);
+        assert.equal(operations?.at(-1)?.outcome.kind, "failed");
+        await reportAxe(axe, result);
+        const items = axe.latestPathReport?.items;
+        assert.deepEqual(items?.map((item) => item.status), ["not-applicable", "skipped", "skipped"]);
+        assert.match(items?.[0]?.reason ?? "", /routed to adapter native-test-adapter/);
+        assert.match(items?.[1]?.reason ?? "", /runner ended/);
+        assert.match(items?.[2]?.reason ?? "", /runner ended/);
+      }
+    }
+  },
+  {
+    name: "axe adapter attribution is scoped by execution and preserves unknown provenance",
+    async run() {
+      const source = await loadFixturePlan();
+      const state = stateOperation(source, "urn:state:alice-files-ready");
+      const plan = { ...source, operations: [state] };
+      const executions = ["native", "web", "legacy"].map((id) => ({
+        ...fakeAxeExecution(plan), executionId: `${id}-execution`, profile: { id }
+      }));
+      const axe = axeObserver({ testInfo: new FakeAxeTestInfo("attribution-scope") as never, reportId: "attribution-scope" });
+      for (const execution of executions) axe.onExecutionStarted?.({ execution });
+      const result: RunResult = {
+        ...fakeRunResult(plan, executions.map((execution) => executionResult(execution, true))),
+        evidence: {
+          executions: [2, 1, 0].map((index) => ({
+            executionId: executions[index]!.executionId,
+            profileId: executions[index]!.profile.id,
+            operations: [{
+              operationId: state.id,
+              operationKind: state.kind,
+              outcome: { kind: "passed" },
+              ...(index < 2 ? { adapter: { name: index === 0 ? "native-test-adapter" : playwrightAdapterName } } : {})
+            }]
+          }))
+        }
+      };
+      const facts = axe.evidence;
+      const report = buildAxeObservedPathReport({
+        reportId: "attribution-scope", createdAt: "2026-01-01T00:00:00.000Z", result, evidence: facts, wcagTags: wcag22Tags
+      });
+      assert.deepEqual(report.items.map((item) => item.metadata.profileId), ["native", "web", "legacy"]);
+      assert.deepEqual(report.items.map((item) => item.status), ["not-applicable", "skipped", "skipped"]);
+      assert.match(report.items[0]?.reason ?? "", /native-test-adapter/);
+      assert.strictEqual(axe.evidence, facts);
     }
   },
   {
@@ -4035,6 +4147,10 @@ class FakeBrowserContext {
 class FakePage extends FakeLocator {
   readonly screenshotPaths: string[] = [];
 
+  url(): string {
+    return "https://example.test/apps/files/";
+  }
+
   async screenshot(options: { path: string }): Promise<Buffer> {
     this.screenshotPaths.push(options.path);
     return Buffer.from("");
@@ -4053,7 +4169,7 @@ function testPlaywrightDriver(): PlaywrightJourneyDriver {
           return undefined;
         },
         pageForOperation() {
-          return new FakeLocator("page") as never;
+          return new FakePage("page") as never;
         },
         transitionValue() {
           return undefined;
