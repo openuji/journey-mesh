@@ -6,6 +6,7 @@ import type {
   AxeRuleResultType,
   AxeResults
 } from "../types.js";
+import type { Immutable } from "../shared/immutable.js";
 import { axeNodeHtmlId } from "../artifacts/report-file-names.js";
 import { summarizeResults } from "../reporting/report-summary.js";
 import {
@@ -46,7 +47,7 @@ export function renderAxeAuditHtml(report: AxeAuditReport): string {
 function renderAuditScan(
   scanId: AxeAuditScanId,
   label: string,
-  results: AxeResults
+  results: Immutable<AxeResults>
 ): string {
   return [
     `<section id="scan-${escapeAttribute(scanId)}">`,
@@ -63,7 +64,7 @@ function renderAuditScan(
 function renderRuleResults(
   scanId: AxeAuditScanId,
   resultType: AxeRuleResultType,
-  results: AxeRuleResult[]
+  results: readonly Immutable<AxeRuleResult>[]
 ): string {
   if (results.length === 0) return "<p>None.</p>";
   return results.map((result) => [
@@ -81,7 +82,7 @@ function renderAxeNode(
   scanId: AxeAuditScanId,
   resultType: AxeRuleResultType,
   ruleId: string,
-  node: AxeNode,
+  node: Immutable<AxeNode>,
   nodeIndex: number
 ): string {
   return [

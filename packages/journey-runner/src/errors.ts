@@ -1,7 +1,7 @@
 export type JourneyRunError = {
-  name: string;
-  message: string;
-  stack?: string;
+  readonly name: string;
+  readonly message: string;
+  readonly stack?: string;
 };
 
 export function errorToJourneyRunError(error: unknown): JourneyRunError {

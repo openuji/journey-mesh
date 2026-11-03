@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 
 import {
   activatePlaywrightLocator,
   playwrightAdapter,
+  playwrightCommandForModality,
   playwrightJsonEvidenceReporter,
   playwrightJourneyRunSummaryReporter,
   type PlaywrightExecutionObserver,
@@ -45,7 +49,10 @@ import {
 } from "@openuji/journey-model-ujg";
 import {
   axeObserver,
+  buildAxeAuditReport,
   buildAxeAccessibilitySummaryReport,
+  buildAxeObservedPathReport,
+  buildAxePathItems,
   buildAxePathAuditReport,
   wcag22Tags,
   type AxeAuditReport,
@@ -53,12 +60,12 @@ import {
   type AxeObserver,
   type AxeResults
 } from "@openuji/journey-observer-axe";
-import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
+import { defaultProfile, inputModalityProfile, keyboardOnlyProfile, touchpointProfile } from "@openuji/journey-profiles";
 import {
-  consoleJourneyProgress,
+  executionPassed,
   reportJourneyResult,
-  renderJourneyRunSummary,
   runJourney,
+  touchpointAdapter,
   type ControlFlowPlanOperation,
   type ExecutionResult,
   type InputModalityDecision,
@@ -66,6 +73,7 @@ import {
   type JourneyExecutionDescriptor,
   type JourneyExecutionContext,
   type JourneyObserver,
+  type JourneyOutcome,
   type JourneyPlan,
   type JourneyPlanOperation,
   type JourneyProgressEvent,
@@ -76,7 +84,8 @@ import {
   type StatePlanOperation,
   type TransitionPlanOperation
 } from "@openuji/journey-runner";
-import { nextcloudEnvironment } from "../examples/nextcloud-filesharing/environment.js";
+import { consoleJourneyProgress, renderJourneyRunSummary } from "@openuji/journey-runner/console";
+import { nextcloudDriverOptions, nextcloudEnvironment } from "../examples/nextcloud-filesharing/environment.js";
 
 const fixtureUrl = new URL("../examples/nextcloud-filesharing/ujg/filesharing.ujg.jsonld", import.meta.url);
 
@@ -410,15 +419,6 @@ const tests: TestCase[] = [
         "EvidenceRecorder must not be referenced after removing the evidence package"
       );
 
-      const snapshotReaders = packageSources.filter((sourceFile) =>
-        sourceFile.source.includes(".snapshot()")
-      );
-      assert.deepEqual(
-        snapshotReaders.map((sourceFile) => sourceFile.path),
-        [],
-        "Packages must not read removed evidence logs"
-      );
-
       for (const sourceFile of packageSources) {
         assert.equal(
           sourceFile.source.includes("context.evidence"),
@@ -472,7 +472,7 @@ const tests: TestCase[] = [
         "async function runProfileExecution"
       );
       assert.match(runnerIndexSource.source, /from "\.\/run-journey\.js"/);
-      assert.match(runnerIndexSource.source, /from "\.\/progress\/console-progress\.js"/);
+      assert.doesNotMatch(runnerIndexSource.source, /console-progress|console-summary/);
       assert.doesNotMatch(runnerIndexSource.source, /export async function runJourney/);
       assert.doesNotMatch(runnerIndexSource.source, /function consoleJourneyProgress/);
       assert.doesNotMatch(runnerIndexSource.source, /sink\.publish/);
@@ -781,13 +781,13 @@ const tests: TestCase[] = [
       const keyboardButton = select(keyboardOnlyProfile(), button);
       const keyboardOption = select(keyboardOnlyProfile(), option);
 
-      assert.equal(defaultButton.command, "pointer-click");
+      assert.equal(playwrightCommandForModality(defaultButton.modality.id), "pointer-click");
       assert.equal(defaultButton.modality.id, pointerInputModalityId);
-      assert.equal(defaultTextEntry.command, "keyboard-text-entry");
+      assert.equal(playwrightCommandForModality(defaultTextEntry.modality.id), "keyboard-text-entry");
       assert.equal(defaultTextEntry.modality.id, keyboardTextEntryInputModalityId);
-      assert.equal(keyboardButton.command, "keyboard-space");
+      assert.equal(playwrightCommandForModality(keyboardButton.modality.id), "keyboard-space");
       assert.equal(keyboardButton.modality.id, keyboardSpaceInputModalityId);
-      assert.equal(keyboardOption.command, "keyboard-enter");
+      assert.equal(playwrightCommandForModality(keyboardOption.modality.id), "keyboard-enter");
       assert.equal(keyboardOption.modality.id, keyboardEnterInputModalityId);
       for (const decision of [
         defaultButton,
@@ -809,8 +809,8 @@ const tests: TestCase[] = [
       const opaqueEvent = cloneOperation(multiProfileTextEntry);
       opaqueEvent.activation.eventId = "urn:observation-event:opaque-activation";
       const opaqueEventDecision = select(defaultProfile(), opaqueEvent);
-      assert.equal(suffixedEventDecision.command, "pointer-click");
-      assert.equal(opaqueEventDecision.command, suffixedEventDecision.command);
+      assert.equal(suffixedEventDecision.modality.id, pointerInputModalityId);
+      assert.equal(opaqueEventDecision.modality.id, suffixedEventDecision.modality.id);
 
       const pointerOnly = cloneOperation(button);
       pointerOnly.activation.requiredInputModalityProfiles =
@@ -863,7 +863,7 @@ const tests: TestCase[] = [
               (operation) =>
                 operation.operationKind === "transition" &&
                 operation.operationId === fileMenuTransition.id &&
-                operation.ok
+                operation.outcome.kind === "passed"
             )
         )
       );
@@ -877,12 +877,12 @@ const tests: TestCase[] = [
         {
           executionId: "default-01",
           profileId: "default",
-          ok: true
+          outcome: { kind: "passed" }
         },
         {
           executionId: "keyboard-only-02",
           profileId: "keyboard-only",
-          ok: true
+          outcome: { kind: "passed" }
         }
       ]);
 
@@ -924,10 +924,12 @@ const tests: TestCase[] = [
         {
           executionId: "default-01",
           profileId: "default",
-          ok: false,
-          error: {
-            name: "LocatorError",
-            message: "Expected one locator"
+          outcome: {
+            kind: "failed",
+            error: {
+              name: "LocatorError",
+              message: "Expected one locator"
+            }
           }
         }
       ]);
@@ -948,7 +950,7 @@ const tests: TestCase[] = [
         {
           executionId: "default-01",
           profileId: "default",
-          ok: true
+          outcome: { kind: "passed" }
         }
       ]);
       const evidence = playwrightJsonEvidenceReporter({ testInfo });
@@ -1166,6 +1168,7 @@ const tests: TestCase[] = [
       assert.equal(result.ok, true);
       assert.deepEqual(events.map((event) => event.type), [
         "run-started",
+        "profiles-assessed",
         "execution-started",
         "operation-started",
         "operation-completed",
@@ -1189,7 +1192,7 @@ const tests: TestCase[] = [
       assert.ok((operationCompleted?.durationMs ?? -1) >= 0);
 
       const executionCompleted = events.find((event) => event.type === "execution-completed");
-      assert.equal(executionCompleted?.ok, true);
+      assert.equal(executionCompleted?.result.outcome.kind, "passed");
       assert.ok((executionCompleted?.durationMs ?? -1) >= 0);
 
       const runCompleted = events.find((event) => event.type === "run-completed");
@@ -1220,6 +1223,7 @@ const tests: TestCase[] = [
       assert.equal(result.errors.some((error) => error.message.includes("progress")), false);
       assert.deepEqual(events.map((event) => event.type), [
         "run-started",
+        "profiles-assessed",
         "execution-started",
         "operation-started",
         "operation-failed",
@@ -1236,7 +1240,7 @@ const tests: TestCase[] = [
       assert.match(failed?.error.message ?? "", /Injected state failure/);
 
       const executionCompleted = events.find((event) => event.type === "execution-completed");
-      assert.equal(executionCompleted?.ok, false);
+      assert.equal(executionCompleted?.result.outcome.kind, "failed");
       const runCompleted = events.find((event) => event.type === "run-completed");
       assert.equal(runCompleted?.ok, false);
     }
@@ -1538,7 +1542,637 @@ const tests: TestCase[] = [
       assert.equal(operationEvidence?.operationId, "operation-1");
       assert.equal(operationEvidence?.graphNodeId, undefined);
       assert.equal(operationEvidence?.operationKind, "state");
-      assert.equal(operationEvidence?.ok, true);
+      assert.equal(operationEvidence?.outcome.kind, "passed");
+    }
+  },
+  {
+    name: "touchpoint adapter runs web and native modalities with shared fixtures and child provenance",
+    async run() {
+      const source = await loadFixturePlan();
+      const tap = { id: "urn:test:input:tap" };
+      const touch = { id: "urn:test:profile:touch", modalities: [tap] };
+      const plan: JourneyPlan = {
+        ...source,
+        operations: source.operations.map((operation) =>
+          operation.kind === "transition" && operation.touchpointId === "urn:touchpoint:nextcloud-b"
+            ? { ...operation, activation: { ...operation.activation, requiredInputModalityProfiles: [touch] } }
+            : operation
+        )
+      };
+      const browser = new FakeBrowser(1);
+      const webOperations: JourneyPlanOperation[] = [];
+      const nativeCalls: string[] = [];
+      const events: JourneyProgressEvent[] = [];
+      const driver = testPlaywrightDriver();
+      const nativeProfile = inputModalityProfile({ id: "touch", modalityPreference: [tap.id] });
+      const profiles = [defaultProfile(), keyboardOnlyProfile()].map((webProfile) => touchpointProfile({
+        id: `${webProfile.id}-web-touch-mobile`,
+        profiles: {
+          "urn:touchpoint:nextcloud-a": webProfile,
+          "urn:touchpoint:nextcloud-b": nativeProfile
+        }
+      }));
+      const environmentCalls: string[] = [];
+      const web = playwrightAdapter({
+        browser: browser as never,
+        driver: {
+          ...driver,
+          createExecution(input) {
+            return {
+              ...driver.createExecution(input),
+              transitionValue: () => "bob@example.test"
+            };
+          }
+        },
+        assertionTimeoutMs: 1,
+        executionObservers: [{
+          name: "web-observer",
+          observeOperation: ({ operation }) => { webOperations.push(operation); }
+        }]
+      });
+      const result = await runJourney({
+        plan,
+        adapter: touchpointAdapter({
+          "urn:touchpoint:nextcloud-a": web,
+          "urn:touchpoint:nextcloud-b": {
+            ...fakeAdapter(nativeCalls),
+            name: "native-test-adapter"
+          }
+        }),
+        profiles,
+        environment: {
+          setup(context) { environmentCalls.push(`${context.profile.id}:setup`); },
+          verifyEffect({ context, effect }) { environmentCalls.push(`${context.profile.id}:effect:${effect.id}`); },
+          teardown({ context, executionFailed }) {
+            assert.equal(executionFailed, false);
+            environmentCalls.push(`${context.profile.id}:teardown`);
+          }
+        },
+        progress: [{ publish: (event) => { events.push(event); } }]
+      });
+
+      assert.equal(result.ok, true, JSON.stringify(result.errors));
+      const aliceOperations = plan.operations.filter((operation) =>
+        operation.touchpointId === "urn:touchpoint:nextcloud-a"
+      );
+      const bobOperations = plan.operations.filter((operation) =>
+        operation.touchpointId === "urn:touchpoint:nextcloud-b"
+      );
+      assert.deepEqual(webOperations, [...aliceOperations, ...aliceOperations]);
+      for (const profile of profiles) {
+        const expected = await Promise.all(bobOperations.map(async (operation) => {
+          if (operation.kind === "state") return `${profile.id}:state:${operation.state.id}`;
+          if (operation.kind === "control-flow") {
+            return `${profile.id}:control-flow:${operation.transition.id}`;
+          }
+          assert.ok(profile.selectInputModality);
+          const decision = await profile.selectInputModality(operation, {} as JourneyExecutionContext);
+          assert.equal(decision.profileId, profile.id);
+          assert.equal("command" in decision, false);
+          return `${profile.id}:transition:${operation.transition.id}:${decision.modality.id}`;
+        }));
+        assert.deepEqual(nativeCalls.filter((call) =>
+          call.startsWith(`${profile.id}:state:`) ||
+          call.startsWith(`${profile.id}:transition:`) ||
+          call.startsWith(`${profile.id}:control-flow:`)
+        ), expected);
+      }
+      assert.deepEqual(events.filter(isOperationStarted).map((event) => event.operation), [
+        ...plan.operations, ...plan.operations
+      ]);
+      const terminals = events.filter(isOperationTerminal);
+      assert.deepEqual(terminals.map((event) => event.operation), [...plan.operations, ...plan.operations]);
+      assert.ok(terminals.every((event) => event.type === "operation-completed"));
+      for (const execution of result.evidence.executions) {
+        assert.deepEqual(execution.operations.map((operation) => operation.operationId),
+          plan.operations.map((operation) => operation.id)
+        );
+        assert.deepEqual(execution.operations.map((operation) => operation.adapter),
+          plan.operations.map((operation) => operation.touchpointId === "urn:touchpoint:nextcloud-a"
+            ? { name: "@openuji/journey-adapter-playwright", version: "0.1.0" }
+            : { name: "native-test-adapter" })
+        );
+      }
+      assert.deepEqual(environmentCalls, profiles.flatMap((profile) => [
+        `${profile.id}:setup`,
+        ...plan.operations.flatMap((operation) => operation.kind === "transition"
+          ? operation.effects.map((effect) => `${profile.id}:effect:${effect.id}`)
+          : []),
+        `${profile.id}:teardown`
+      ]));
+      assert.equal(browser.closeCalls, 0);
+    }
+  },
+  {
+    name: "Playwright rejects a model-defined native modality without resolving a web target",
+    async run() {
+      const source = await loadFixturePlan();
+      const operation = cloneOperation(transitionOperation(source, "urn:transition:alice-opens-file-menu"));
+      operation.activation.requiredInputModalityProfiles = [{
+        id: "urn:test:native-input",
+        modalities: [{ id: "urn:test:native-swipe" }]
+      }];
+      const driver = testPlaywrightDriver();
+      let pageRequested = false;
+      const result = await runJourney({
+        plan: { ...source, operations: [operation] },
+        profiles: [inputModalityProfile({ id: "swipe", modalityPreference: ["urn:test:native-swipe"] })],
+        adapter: playwrightAdapter({
+          browser: new FakeBrowser(1) as never,
+          driver: {
+            ...driver,
+            createExecution(input) {
+              return {
+                ...driver.createExecution(input),
+                pageForOperation() { pageRequested = true; throw new Error("Unexpected target lookup"); }
+              };
+            }
+          }
+        })
+      });
+      assert.equal(result.ok, false);
+      assert.match(result.errors[0]?.message ?? "", /does not support input modality urn:test:native-swipe/);
+      assert.equal(pageRequested, false);
+    }
+  },
+  {
+    name: "no-input transitions need no selector and report unaudited completion with applicable execution counts",
+    async run() {
+      const source = await loadFixturePlan();
+      const operation = cloneOperation(transitionOperation(source, "urn:transition:bob-accepts-share"));
+      operation.activation.requiredInputModalityProfiles = [];
+      operation.activation.bindings = [];
+      delete operation.entryBinding;
+      const calls: string[] = [];
+      const driver = testPlaywrightDriver();
+      const axe = axeObserver({
+        testInfo: new FakeAxeTestInfo("no-input-completed") as never,
+        reportId: "no-input-completed",
+        auditRunner() { throw new Error("Unexpected audit without a locator"); }
+      });
+      const result = await runJourney({
+        plan: { ...source, operations: [operation] },
+        profiles: [
+          { id: "automatic" },
+          { id: "excluded", appliesTo: () => false }
+        ],
+        adapter: playwrightAdapter({
+          browser: new FakeBrowser(1) as never,
+          executionObservers: [axe, {
+            name: "completion-observer",
+            observeOperation(observation) {
+              assert.equal("locator" in observation, false);
+              assert.equal("page" in observation, false);
+              calls.push(observation.stage);
+            }
+          }],
+          driver: {
+            ...driver,
+            createExecution(input) {
+              return {
+                ...driver.createExecution(input),
+                pageForOperation() { throw new Error("Unexpected UI target"); },
+                afterTransition(received, decision) {
+                  assert.strictEqual(received, operation);
+                  assert.equal(decision, undefined);
+                  calls.push("automatic-transition");
+                }
+              };
+            }
+          }
+        }),
+        environment: {
+          verifyEffect({ decision, effect }) {
+            assert.equal(decision, undefined);
+            calls.push(effect.id);
+          }
+        }
+      });
+      assert.equal(result.ok, true, JSON.stringify(result.errors));
+      assert.deepEqual(calls, ["automatic-transition", "transition-completed", ...operation.effects.map((effect) => effect.id)]);
+      await reportAxe(axe, result);
+      assert.equal(axe.latestPathReport?.items.length, 1);
+      const item = axe.latestPathReport?.items[0];
+      assert.equal(item?.status, "not-applicable");
+      assert.equal(item?.metadata.transitionId, operation.transition.id);
+      assert.match(item?.reason ?? "", /No-input transition completed without a locator/);
+      assert.equal(axe.latestPathReport?.summary.audited, 0);
+      assert.equal(axe.latestPathReport?.metadata.executionCount, 1);
+      assert.equal(axe.latestPathReport?.metadata.notApplicableProfileCount, 1);
+    }
+  },
+  {
+    name: "profiles without selectors fail input transitions with an actionable error",
+    async run() {
+      const source = await loadFixturePlan();
+      const operation = transitionOperation(source, "urn:transition:alice-opens-file-menu");
+      const automatic = { id: "automatic-only" };
+      for (const profile of [automatic, touchpointProfile({
+        id: "composed-automatic-only", profiles: { [operation.touchpointId]: automatic }
+      })]) {
+        const calls: string[] = [];
+        const result = await runJourney({
+          plan: { ...source, operations: [operation] },
+          profiles: [profile],
+          adapter: fakeAdapter(calls)
+        });
+        assert.equal(result.ok, false);
+        assert.match(result.errors[0]?.message ?? "", /Profile automatic-only has no input modality selector for transition/);
+        assert.equal(calls.some((call) => call.includes(":transition:")), false);
+        assert.equal(result.evidence.executions[0]?.operations[0]?.outcome.kind, "failed");
+      }
+    }
+  },
+  {
+    name: "preflight excludes inapplicable profiles without creating executions or lifecycle events",
+    async run() {
+      const plan = await loadFixturePlan();
+      const setupProfiles: string[] = [];
+      const calls: string[] = [];
+      const events: JourneyProgressEvent[] = [];
+      const excluded = keyboardOnlyProfile({
+        appliesTo: (operation) => operation.touchpointId === "urn:touchpoint:nextcloud-a"
+      });
+      const result = await runJourney({
+        plan,
+        adapter: fakeAdapter(calls),
+        profiles: [defaultProfile(), excluded],
+        environment: { setup: (context) => { setupProfiles.push(context.profile.id); } },
+        progress: [{ publish: (event) => { events.push(event); } }]
+      });
+      assert.equal(result.ok, true);
+      assert.deepEqual(setupProfiles, ["default"]);
+      assert.equal(result.executions.length, 1);
+      assert.equal(result.evidence.executions.length, 1);
+      const excludedAssessment = result.assessments[1];
+      assert.equal(excludedAssessment?.kind, "not-applicable");
+      assert.ok(excludedAssessment?.kind === "not-applicable");
+      assert.match(excludedAssessment.reason, /urn:touchpoint:nextcloud-b/);
+      assert.ok(calls.every((call) => !call.startsWith("keyboard-only:")));
+      assert.deepEqual(events.filter((event) => event.type === "execution-started").map((event) => event.profileId), ["default"]);
+      assert.deepEqual(events.filter((event) => event.type === "execution-completed").map((event) => event.result.profileId), ["default"]);
+      assert.ok(events.some((event) => event.type === "profiles-assessed"));
+      assert.match(renderJourneyRunSummary({ result }, { color: "never" }), /1\/1 passed; 1 not applicable/);
+      const completedRuns: RunResult[] = [];
+      const allExcluded = await runJourney({
+        plan, adapter: fakeAdapter([]), profiles: [excluded],
+        observers: [{ name: "all-excluded-observer", onRunCompleted: ({ result }) => { completedRuns.push(result); } }]
+      });
+      assert.equal(allExcluded.ok, false);
+      assert.deepEqual(allExcluded.executions, []);
+      assert.deepEqual(allExcluded.evidence.executions, []);
+      assert.deepEqual(allExcluded.errors, [{
+        name: "NoApplicableProfileExecutionsError", message: "No applicable profile executions"
+      }]);
+      assert.deepEqual(completedRuns[0]?.errors, allExcluded.errors);
+      assert.match(renderJourneyRunSummary({ result: allExcluded }, { color: "never" }), /No applicable profile executions/);
+
+      const operation = cloneOperation(transitionOperation(plan, "urn:transition:alice-opens-file-menu"));
+      operation.activation.requiredInputModalityProfiles = [{ id: "touch", modalities: [{ id: "urn:test:tap" }] }];
+      const unsupported = await runJourney({
+        plan: { ...plan, operations: [operation] }, adapter: fakeAdapter([]), profiles: [keyboardOnlyProfile()]
+      });
+      assert.equal(unsupported.ok, false);
+      assert.equal(unsupported.assessments[0]?.kind, "applicable");
+      assert.equal(unsupported.executions[0]?.outcome.kind, "failed");
+      assert.match(unsupported.errors[0]?.message ?? "", /No supported input modality/);
+    }
+  },
+  {
+    name: "all profile assessments finish before execution and assessment failures create no execution",
+    async run() {
+      const source = await loadFixturePlan();
+      const plan = { ...source, operations: [stateOperation(source, "urn:state:alice-files-ready")] };
+      const order: string[] = [];
+      const observedProfiles: string[] = [];
+      const profiles = ["first", "excluded", "assessment-error", "last"].map((id) => ({
+        id,
+        appliesTo() {
+          order.push(`assess:${id}`);
+          if (id === "assessment-error") throw new Error("Injected applicability failure");
+          return id !== "excluded";
+        }
+      }));
+      const result = await runJourney({
+        plan,
+        profiles,
+        adapter: fakeAdapter([], { onCreate: ({ profile }) => { order.push(`create:${profile.id}`); } }),
+        environment: { setup: ({ profile }) => { order.push(`setup:${profile.id}`); } },
+        observers: [{
+          name: "assessment-observer",
+          onRunStarted({ assessments }) {
+            assert.deepEqual(assessments.map((assessment) => assessment.kind), [
+              "applicable", "not-applicable", "failed", "applicable"
+            ]);
+            order.push("run-started");
+          },
+          onExecutionStarted({ execution }) { observedProfiles.push(execution.profile.id); }
+        }]
+      });
+      assert.deepEqual(order.slice(0, 5), [
+        "assess:first", "assess:excluded", "assess:assessment-error", "assess:last", "run-started"
+      ]);
+      assert.deepEqual(observedProfiles, ["first", "last"]);
+      assert.deepEqual(result.executions.map((execution) => execution.executionId), ["first-01", "last-04"]);
+      assert.deepEqual(result.evidence.executions.map((execution) => execution.profileId), ["first", "last"]);
+      assert.ok(result.executions.every(executionPassed));
+      assert.equal(result.ok, false);
+      assert.equal(result.errors.length, 1);
+      assert.equal(result.errors[0]?.message, "Injected applicability failure");
+      assert.match(renderJourneyRunSummary({ result }, { color: "never" }), /assessment-error\s+assessment failed/);
+      assert.ok(order.every((call) => !["setup:excluded", "setup:assessment-error", "create:excluded", "create:assessment-error"].includes(call)));
+    }
+  },
+  {
+    name: "completed outcomes and report values cannot be mutated by observers",
+    async run() {
+      const source = await loadFixturePlan();
+      const state = stateOperation(source, "urn:state:alice-files-ready");
+      const seen: RunResult[] = [];
+      const versions = ["original"];
+      const result = await runJourney({
+        plan: { ...source, source: { model: "immutable-test", references: { versions } }, operations: [state] },
+        profiles: [{ id: "passing" }, { id: "failing" }],
+        adapter: {
+          name: "immutable-results-test",
+          createExecution(input) {
+            return fakeAdapter([], {
+              failStateId: input.context.profile.id === "failing" ? state.state.id : undefined
+            }).createExecution(input);
+          }
+        },
+        observers: [{
+          name: "mutation-attempt-observer",
+          onRunCompleted({ result: snapshot }) {
+            seen.push(snapshot);
+            assert.ok(Object.isFrozen(snapshot));
+            assert.ok(Object.isFrozen(snapshot.executions));
+            assert.ok(Object.isFrozen(snapshot.assessments));
+            assert.ok(Object.isFrozen(snapshot.evidence.executions));
+            const sourceVersions = snapshot.plan.source?.references?.versions;
+            assert.ok(Array.isArray(sourceVersions));
+            assert.equal(Reflect.set(sourceVersions, "0", "overwritten"), false);
+            assert.equal(Reflect.set(snapshot, "ok", true), false);
+            const passed = snapshot.executions[0];
+            assert.ok(passed);
+            assert.equal(Reflect.set(passed, "status", "not-applicable"), false);
+            assert.equal(Reflect.set(passed.outcome, "kind", "failed"), false);
+            const failure = snapshot.executions[1]?.outcome;
+            assert.ok(failure?.kind === "failed");
+            assert.equal(Reflect.set(failure.error, "message", "overwritten"), false);
+            assert.equal(Reflect.set(snapshot.errors[0]!, "message", "overwritten"), false);
+            const operation = snapshot.evidence.executions[0]?.operations[0];
+            assert.ok(operation);
+            assert.equal(Reflect.set(operation, "outcome", failure), false);
+          }
+        }]
+      });
+      assert.strictEqual(result, seen[0]);
+      assert.equal(result.ok, false);
+      assert.equal(executionPassed(result.executions[0]!), true);
+      assert.equal(executionPassed(result.executions[1]!), false);
+      assert.match(result.errors[0]?.message ?? "", /Injected state failure/);
+      versions[0] = "changed by caller";
+      assert.deepEqual(result.plan.source?.references?.versions, ["original"]);
+      for (const execution of result.executions) {
+        assert.ok(["ok", "error", "status", "reason"].every((key) => !(key in execution)));
+      }
+    }
+  },
+  {
+    name: "runner environment cleans partial setup and all adapter/effect failure paths",
+    async run() {
+      const plan = await loadFixturePlan();
+      for (const failure of ["setup", "create", "start", "state", "effect", "close", "teardown"] as const) {
+        const calls: string[] = [];
+        const adapterCalls: string[] = [];
+        const result = await runJourney({
+          plan,
+          profiles: [defaultProfile()],
+          adapter: fakeAdapter(adapterCalls, {
+            failCreate: failure === "create",
+            failStart: failure === "start",
+            failStateId: failure === "state" ? "urn:state:alice-files-ready" : undefined,
+            failClose: failure === "close",
+            onClose: () => { calls.push("adapter-close"); }
+          }),
+          environment: {
+            setup() {
+              calls.push("setup");
+              if (failure === "setup") throw new Error("Injected environment setup failure");
+            },
+            verifyEffect() {
+              if (failure === "effect") throw new Error("Injected effect verification failure");
+            },
+            teardown({ executionFailed }) {
+              calls.push("teardown");
+              assert.equal(executionFailed, failure !== "teardown");
+              if (failure === "teardown") throw new Error("Injected environment teardown failure");
+            }
+          }
+        });
+        assert.equal(result.ok, false, failure);
+        assert.match(result.errors[0]?.message ?? "", /Injected/);
+        assert.equal(calls[0], "setup");
+        assert.equal(calls.at(-1), "teardown");
+        assert.equal(calls.filter((call) => call === "teardown").length, 1);
+        if (failure === "setup") assert.deepEqual(adapterCalls, []);
+        if (failure !== "setup" && failure !== "create") assert.equal(calls[1], "adapter-close");
+        if (failure === "effect") assert.equal(result.evidence.executions[0]?.operations.at(-1)?.outcome.kind, "failed");
+      }
+
+      const failures = await runJourney({
+        plan,
+        profiles: [defaultProfile()],
+        adapter: fakeAdapter([], { failStateId: "urn:state:alice-files-ready", failClose: true }),
+        environment: { teardown() { throw new Error("Environment cleanup failure"); } }
+      });
+      assert.match(failures.errors[0]?.message ?? "", /Injected state failure/);
+      assert.match(failures.errors[0]?.message ?? "", /Injected adapter close failure/);
+      assert.match(failures.errors[0]?.message ?? "", /Environment cleanup failure/);
+    }
+  },
+  {
+    name: "Nextcloud environment fails a transition whose effect has no verifier",
+    async run() {
+      const source = await loadFixturePlan();
+      const transition = transitionOperation(source, "urn:transition:bob-accepts-share");
+      const effect = transition.effects[0];
+      assert.ok(effect);
+      assert.ok(nextcloudEnvironment.verifyEffect);
+      for (const effectId of ["urn:test:effect:unverified", "toString"]) {
+        const operation = { ...transition, effects: [{ ...effect, id: effectId }] };
+        const closeInputs: boolean[] = [];
+        const result = await runJourney({
+          plan: { ...source, operations: [operation] },
+          profiles: [defaultProfile()],
+          adapter: fakeAdapter([], { onClose: ({ executionFailed }) => { closeInputs.push(executionFailed); } }),
+          environment: { verifyEffect: nextcloudEnvironment.verifyEffect }
+        });
+        assert.equal(result.ok, false);
+        assert.equal(result.errors[0]?.message, `No Nextcloud effect verifier for ${effectId}`);
+        assert.equal(result.evidence.executions[0]?.operations[0]?.outcome.kind, "failed");
+        assert.deepEqual(closeInputs, [true]);
+      }
+    }
+  },
+  {
+    name: "runner entry point executes without Node builtins or globals",
+    async run() {
+      await promisify(execFile)(process.execPath, [
+        "--experimental-vm-modules", fileURLToPath(new URL("./runner-portability.mjs", import.meta.url))
+      ]);
+    }
+  },
+  {
+    name: "touchpoint adapter shares each adapter execution across routes and isolates profiles",
+    async run() {
+      const plan = await loadFixturePlan();
+      const calls: string[] = [];
+      const contexts: JourneyExecutionContext[] = [];
+      const unusedCalls: string[] = [];
+      const shared = fakeAdapter(calls, { onCreate: (context) => { contexts.push(context); } });
+      const result = await runJourney({
+        plan,
+        adapter: touchpointAdapter({
+          "urn:touchpoint:nextcloud-a": shared,
+          "urn:touchpoint:nextcloud-b": shared,
+          unused: fakeAdapter(unusedCalls)
+        }),
+        profiles: [defaultProfile(), keyboardOnlyProfile()]
+      });
+
+      assert.equal(result.ok, true);
+      assert.deepEqual(calls.filter((call) => /:(create|setup|teardown)$/.test(call)), [
+        "default:create", "default:setup", "default:teardown",
+        "keyboard-only:create", "keyboard-only:setup", "keyboard-only:teardown"
+      ]);
+      assert.deepEqual(contexts.map((context) => context.executionId), ["default-01", "keyboard-only-02"]);
+      assert.notStrictEqual(contexts[0], contexts[1]);
+      assert.ok(contexts.every((context) => context.plan === plan));
+      assert.deepEqual(unusedCalls, []);
+    }
+  },
+  {
+    name: "touchpoint adapter rejects missing routes before any runtime setup",
+    async run() {
+      assert.throws(() => touchpointAdapter({}), /at least one touchpoint/);
+      const plan = await loadFixturePlan();
+      const calls: string[] = [];
+      const environmentCalls: string[] = [];
+      const adapter = touchpointAdapter({ "urn:touchpoint:nextcloud-a": fakeAdapter(calls) });
+      const result = await runJourney({
+        plan, adapter, profiles: [defaultProfile()],
+        environment: { setup() { environmentCalls.push("setup"); } }
+      });
+
+      assert.equal(result.ok, false);
+      assert.match(result.errors[0]?.message ?? "", /No adapter for touchpoint urn:touchpoint:nextcloud-b/);
+      assert.deepEqual(calls, []);
+      assert.deepEqual(environmentCalls, []);
+      assert.deepEqual(result.evidence.executions[0]?.operations, []);
+    }
+  },
+  {
+    name: "touchpoint adapter cleans up creation, startup, and operation failures in reverse order",
+    async run() {
+      const plan = await loadFixturePlan();
+      for (const failure of ["create", "start", "state"] as const) {
+        const closeInputs: string[] = [];
+        const webCalls: string[] = [];
+        const nativeCalls: string[] = [];
+        const result = await runJourney({
+          plan,
+          adapter: touchpointAdapter({
+            "urn:touchpoint:nextcloud-a": fakeAdapter(webCalls, {
+              onClose: ({ executionFailed }) => { closeInputs.push(`web:${String(executionFailed)}`); }
+            }),
+            "urn:touchpoint:nextcloud-b": fakeAdapter(nativeCalls, {
+              failCreate: failure === "create",
+              failStart: failure === "start",
+              failStateId: failure === "state" ? "urn:state:bob-incoming-share-visible" : undefined,
+              onClose: ({ executionFailed }) => { closeInputs.push(`native:${String(executionFailed)}`); }
+            })
+          }),
+          profiles: [defaultProfile()]
+        });
+
+        assert.equal(result.ok, false, failure);
+        assert.match(result.errors[0]?.message ?? "", /Injected/);
+        assert.deepEqual(closeInputs, failure === "create" ? ["web:true"] : ["native:true", "web:true"]);
+        assert.equal(webCalls.filter((call) => call.endsWith(":teardown")).length, 1);
+        assert.equal(nativeCalls.filter((call) => call.endsWith(":teardown")).length, failure === "create" ? 0 : 1);
+      }
+    }
+  },
+  {
+    name: "touchpoint adapter attempts all cleanup and closes idempotently after cleanup errors",
+    async run() {
+      const plan = await loadFixturePlan();
+      const closed: string[] = [];
+      const adapter = touchpointAdapter({
+        "urn:touchpoint:nextcloud-a": fakeAdapter([], {
+          failClose: true,
+          onClose: () => { closed.push("web"); }
+        }),
+        "urn:touchpoint:nextcloud-b": fakeAdapter([], {
+          failClose: true,
+          onClose: () => { closed.push("native"); }
+        })
+      });
+      const execution = adapter.createExecution({
+        context: { runId: "cleanup-run", executionId: "cleanup-execution", plan, profile: defaultProfile() }
+      });
+      const state = stateOperation(plan, "urn:state:alice-files-ready");
+
+      await assert.rejects(async () => execution.assertState(state), /not started/);
+      await execution.start();
+      await assert.rejects(async () => execution.start(), /cannot start from started/);
+      await assert.rejects(async () => execution.close({ executionFailed: false }), (error: unknown) => {
+        assert.ok(error instanceof AggregateError);
+        assert.equal(error.errors.length, 2);
+        assert.match(error.message, /Injected adapter close failure/);
+        return true;
+      });
+      await execution.close({ executionFailed: false });
+      assert.deepEqual(closed, ["native", "web"]);
+      await assert.rejects(async () => execution.assertState(state), /not started/);
+    }
+  },
+  {
+    name: "runner tracks entry navigation separately for each actor and touchpoint",
+    async run() {
+      const source = await loadFixturePlan();
+      const state = stateOperation(source, "urn:state:alice-files-ready");
+      assert.ok(state.entryBinding);
+      const nativeState = { ...state, id: "native-state", touchpointId: "native" };
+      const changedEntry = {
+        ...state,
+        id: "changed-entry-state",
+        entryBinding: { ...state.entryBinding, value: "another-entry" }
+      };
+      const plan: JourneyPlan = {
+        ...source,
+        operations: [state, nativeState, nativeState, state, changedEntry]
+      };
+      const webCalls: string[] = [];
+      const nativeCalls: string[] = [];
+      const result = await runJourney({
+        plan,
+        adapter: touchpointAdapter({
+          [state.touchpointId]: fakeAdapter(webCalls),
+          native: fakeAdapter(nativeCalls)
+        }),
+        profiles: [defaultProfile()]
+      });
+
+      assert.equal(result.ok, true);
+      assert.deepEqual(webCalls.filter((call) => call.includes(":open:")), [
+        `default:open:${state.entryBinding.value}`, "default:open:another-entry"
+      ]);
+      assert.deepEqual(nativeCalls.filter((call) => call.includes(":open:")), [
+        `default:open:${state.entryBinding.value}`
+      ]);
     }
   },
   {
@@ -1559,13 +2193,13 @@ const tests: TestCase[] = [
       });
 
       assert.equal(result.ok, false);
-      assert.equal(result.executions[0].ok, false);
+      assert.equal(result.executions[0].outcome.kind, "failed");
       assert.deepEqual(closeInputs, [true]);
-      assert.match(result.executions[0]?.error?.message ?? "", /Injected state failure/);
+      assert.match(failureMessage(result.executions[0]?.outcome), /Injected state failure/);
       const failedOperation = result.evidence.executions[0]?.operations[0];
       assert.equal(failedOperation?.operationKind, "state");
-      assert.equal(failedOperation?.ok, false);
-      assert.match(failedOperation?.error?.message ?? "", /Injected state failure/);
+      assert.equal(failedOperation?.outcome.kind, "failed");
+      assert.match(failureMessage(failedOperation?.outcome), /Injected state failure/);
     }
   },
   {
@@ -1635,7 +2269,7 @@ const tests: TestCase[] = [
       assert.deepEqual(closeInputs, [false]);
       assert.equal(calls.filter((call) => call === "default:teardown").length, 1);
       assert.match(
-        result.executions[0]?.error?.message ?? "",
+        failureMessage(result.executions[0]?.outcome),
         /Injected execution completion observer failure/
       );
     }
@@ -1665,7 +2299,7 @@ const tests: TestCase[] = [
           capabilityChecks.push(!("observers" in execution));
         },
         onExecutionCompleted({ execution, result }) {
-          calls.push(`execution-completed:${execution.executionId}:${String(result.ok)}`);
+          calls.push(`execution-completed:${execution.executionId}:${String(executionPassed(result))}`);
           capabilityChecks.push(!("context" in result));
         },
         onRunCompleted({ result }) {
@@ -1701,7 +2335,8 @@ const tests: TestCase[] = [
           operationId: plan.operations[0].id,
           graphNodeId: (plan.operations[0] as StatePlanOperation).state.id,
           operationKind: "state",
-          ok: true
+          adapter: { name: "fake-adapter" },
+          outcome: { kind: "passed" }
         }
       ]);
     }
@@ -1728,7 +2363,7 @@ const tests: TestCase[] = [
       });
 
       assert.equal(result.ok, false);
-      assert.match(result.executions[0]?.error?.message ?? "", /Injected observer failure/);
+      assert.match(failureMessage(result.executions[0]?.outcome), /Injected observer failure/);
       assert.deepEqual(result.evidence.executions[0]?.operations, []);
     }
   },
@@ -1788,8 +2423,8 @@ const tests: TestCase[] = [
       assert.equal(failingState.ok, false);
       assert.equal(failedOperation?.operationId, state.id);
       assert.equal(failedOperation?.operationKind, "state");
-      assert.equal(failedOperation?.ok, false);
-      assert.match(failedOperation?.error?.message ?? "", /Injected state failure/);
+      assert.equal(failedOperation?.outcome.kind, "failed");
+      assert.match(failureMessage(failedOperation?.outcome), /Injected state failure/);
 
       const startupFailure = await runJourney({
         plan: emptyPlan,
@@ -1799,7 +2434,7 @@ const tests: TestCase[] = [
       });
       assert.equal(startupFailure.ok, false);
       assert.match(
-        startupFailure.executions[0]?.error?.message ?? "",
+        failureMessage(startupFailure.executions[0]?.outcome),
         /Injected adapter startup failure/
       );
       assert.deepEqual(startupFailure.evidence.executions[0]?.operations, []);
@@ -1812,7 +2447,7 @@ const tests: TestCase[] = [
       });
       assert.equal(closeFailure.ok, false);
       assert.match(
-        closeFailure.executions[0]?.error?.message ?? "",
+        failureMessage(closeFailure.executions[0]?.outcome),
         /Injected adapter close failure/
       );
       assert.deepEqual(closeFailure.evidence.executions[0]?.operations, []);
@@ -1833,7 +2468,7 @@ const tests: TestCase[] = [
       });
       assert.equal(observerFailure.ok, false);
       assert.match(
-        observerFailure.executions[0]?.error?.message ?? "",
+        failureMessage(observerFailure.executions[0]?.outcome),
         /Injected characterization observer failure/
       );
       assert.deepEqual(observerFailure.evidence.executions[0]?.operations, []);
@@ -1865,7 +2500,8 @@ const tests: TestCase[] = [
           operationId: state.id,
           graphNodeId: state.state.id,
           operationKind: "state",
-          ok: true
+          adapter: { name: "@openuji/journey-adapter-playwright", version: "0.1.0" },
+          outcome: { kind: "passed" }
         }
       ]);
     }
@@ -2164,19 +2800,22 @@ const tests: TestCase[] = [
           operationId: state.id,
           graphNodeId: state.state.id,
           operationKind: "state",
-          ok: true
+          adapter: { name: "@openuji/journey-adapter-playwright", version: "0.1.0" },
+          outcome: { kind: "passed" }
         },
         {
           operationId: transition.id,
           graphNodeId: transition.transition.id,
           operationKind: "transition",
-          ok: true
+          adapter: { name: "@openuji/journey-adapter-playwright", version: "0.1.0" },
+          outcome: { kind: "passed" }
         },
         {
           operationId: controlFlow.id,
           graphNodeId: controlFlow.transition.id,
           operationKind: "control-flow",
-          ok: true
+          adapter: { name: "@openuji/journey-adapter-playwright", version: "0.1.0" },
+          outcome: { kind: "passed" }
         }
       ]);
     }
@@ -2245,6 +2884,178 @@ const tests: TestCase[] = [
       assert.equal(secondBrowserContext.closed, true);
       assert.equal(browserContext.closeCalls, 1);
       assert.equal(secondBrowserContext.closeCalls, 1);
+    }
+  },
+  {
+    name: "axe audit report formatting derives immutable evidence from explicit data inputs",
+    run() {
+      const metadata = { notes: ["original"] };
+      const input = {
+        auditId: "pure-audit",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        url: "https://example.test/apps/files/?x=1#fragment",
+        strict: true,
+        metadata
+      };
+      const scans = {
+        pageState: fakeAxeResults({ passes: 1, violations: 1 }),
+        matchedSurface: fakeAxeResults({ passes: 1 })
+      };
+      const report = buildAxeAuditReport(input, ["wcag2a"], scans);
+      assert.deepEqual(buildAxeAuditReport(input, ["wcag2a"], scans), report);
+      assert.equal(report.createdAt, input.createdAt);
+      assert.equal(report.url, input.url);
+      assert.equal(report.strict, true);
+      assert.equal(report.summary.violations, 1);
+      assert.equal(report.summary.passes, 2);
+      assert.equal(report.evidence.pageState.nodes[0]?.urlPath, "/apps/files/?x=1#fragment");
+      assert.equal(report.evidence.pageState.nodes[0]?.resultType, "violation");
+      assert.ok(Object.isFrozen(report.scans.pageState.violations));
+      metadata.notes.push("changed by caller");
+      scans.pageState.violations.length = 0;
+      assert.deepEqual(report.metadata.notes, ["original"]);
+      assert.equal(report.scans.pageState.violations.length, 1);
+    }
+  },
+  {
+    name: "axe path classification replays immutable facts without changing evidence or reading mutable inputs",
+    async run() {
+      const source = await loadFixturePlan();
+      const state = stateOperation(source, "urn:state:alice-files-ready");
+      const automatic = cloneOperation(transitionOperation(source, "urn:transition:bob-accepts-share"));
+      automatic.activation.requiredInputModalityProfiles = [];
+      const unvisited = transitionOperation(source, "urn:transition:alice-opens-file-menu");
+      const controlFlow = source.operations.find((operation): operation is ControlFlowPlanOperation => operation.kind === "control-flow");
+      assert.ok(controlFlow);
+      const plan = { ...source, operations: [state, automatic, controlFlow, unvisited] };
+      const page = new FakeAxePage();
+      const rawReport = fakeAxeReport({ auditId: "immutable-scan", page: page as never });
+      const originalStateLabel = state.state.label;
+      const axe = axeObserver({
+        testInfo: new FakeAxeTestInfo("immutable-evidence") as never,
+        reportId: "immutable-evidence",
+        auditRunner: async () => {
+          state.state.label = "changed during scan";
+          return rawReport;
+        }
+      });
+      const execution = fakeAxeExecution(plan);
+      const empty = axe.evidence;
+      assert.strictEqual(empty, axe.evidence);
+      assert.ok(Object.isFrozen(empty));
+      axe.onExecutionStarted?.({ execution });
+      const started = axe.evidence;
+      assert.equal(started.length, 1);
+      assert.equal(axe.latestPathReport, undefined);
+      await axe.observeOperation?.({
+        execution, operation: state, stage: "state-asserted", expectedMatchCount: 1,
+        page: page as never, locator: new FakeAxeLocator() as never
+      });
+      await axe.observeOperation?.({ execution, operation: automatic, stage: "transition-completed" });
+      await axe.observeOperation?.({ execution, operation: controlFlow, stage: "control-flow-recorded" });
+      const facts = axe.evidence;
+      assert.equal(empty.length, 0);
+      assert.equal(started.length, 1);
+      assert.equal(facts.length, 4);
+      assert.ok(facts.every((fact) => Object.isFrozen(fact)));
+      const observed = facts.find((fact) => fact.kind === "operation-observed" && "audit" in fact.evidence);
+      assert.ok(observed?.kind === "operation-observed" && "audit" in observed.evidence && observed.evidence.audit.kind === "completed");
+      assert.equal(Reflect.set(observed.evidence.audit.report.summary, "violations", 99), false);
+      assert.ok(facts.every((fact) => !("status" in fact) && !("reason" in fact)));
+
+      // Mutating the caller's plan or scan result cannot rewrite captured facts.
+      state.state.label = "changed by caller";
+      assert.equal(Reflect.set(rawReport.summary, "violations", 99), true);
+      const input = {
+        reportId: "replayed-evidence",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        result: fakeRunResult(plan, [executionResult(execution, true)]),
+        evidence: facts,
+        wcagTags: wcag22Tags
+      };
+      const first = buildAxeObservedPathReport(input);
+      assert.deepEqual(buildAxeObservedPathReport(input), first);
+      const summary = buildAxeAccessibilitySummaryReport({ pathReport: first });
+      assert.equal(summary.generatedAt, input.createdAt);
+      assert.deepEqual(buildAxeAccessibilitySummaryReport({ pathReport: first }), summary);
+      assert.strictEqual(axe.evidence, facts);
+      assert.ok(Object.isFrozen(first));
+      assert.ok(Object.isFrozen(first.items));
+      assert.deepEqual(first.items.map((item) => item.status), ["audited", "not-applicable", "not-applicable", "skipped"]);
+      assert.equal(first.items[0]?.summary?.violations, 0);
+      assert.notEqual(first.items[0]?.metadata.stateLabel, "changed by caller");
+      assert.equal(first.items[0]?.metadata.stateLabel, originalStateLabel);
+      assert.match(first.items[1]?.reason ?? "", /No-input transition completed/);
+      assert.match(first.items[3]?.reason ?? "", /runner ended/);
+      assert.equal(buildAxePathItems(facts.filter((fact) => fact.kind === "operation-observed"), execution.runId).length, 3);
+    }
+  },
+  {
+    name: "axe strict failures derive from scan history and remain isolated across runs",
+    async run() {
+      const source = await loadFixturePlan();
+      const state = stateOperation(source, "urn:state:alice-files-ready");
+      const plan = { ...source, operations: [state] };
+      let scans = 0;
+      const axe = axeObserver({
+        testInfo: new FakeAxeTestInfo("strict-history") as never,
+        reportId: "strict-history",
+        strict: true,
+        auditRunner(input) {
+          scans += 1;
+          return Promise.resolve(fakeAxeReport(input, { violations: scans === 1 ? 1 : 0 }));
+        }
+      });
+      const firstExecution = fakeAxeExecution(plan);
+      const observe = (execution: JourneyExecutionDescriptor) => axe.observeOperation?.({
+        execution, operation: state, stage: "state-asserted", expectedMatchCount: 1,
+        page: new FakeAxePage() as never, locator: new FakeAxeLocator() as never
+      });
+      axe.onExecutionStarted?.({ execution: firstExecution });
+      await observe(firstExecution);
+      await observe(firstExecution);
+      const firstFacts = axe.evidence;
+      await assert.rejects(() => reportAxe(axe, fakeRunResult(plan, [executionResult(firstExecution, true)])), /Axe found 1 WCAG violation/);
+      assert.equal(axe.latestPathReport?.summary.violations, 0);
+      assert.strictEqual(axe.evidence, firstFacts);
+
+      const secondExecution = { ...firstExecution, runId: "second-run" };
+      axe.onExecutionStarted?.({ execution: secondExecution });
+      await observe(secondExecution);
+      await reportAxe(axe, { ...fakeRunResult(plan, [executionResult(secondExecution, true)]), runId: secondExecution.runId });
+      assert.equal(firstFacts.length, 3);
+      assert.equal(axe.evidence.length, 5);
+      assert.equal(axe.latestPathReport?.metadata.runId, secondExecution.runId);
+      assert.equal(axe.latestPathReport?.items.length, 1);
+      assert.equal(axe.latestPathReport?.summary.violations, 0);
+    }
+  },
+  {
+    name: "axe keeps failed screenshot evidence while a scoped audit succeeds",
+    async run() {
+      const source = await loadFixturePlan();
+      const state = stateOperation(source, "urn:state:alice-files-ready");
+      const plan = { ...source, operations: [state] };
+      const axe = axeObserver({
+        testInfo: new FakeAxeTestInfo("screenshot-failure-fact") as never,
+        reportId: "screenshot-failure-fact",
+        sourceScreenshots: { states: true },
+        auditRunner: async (input) => fakeAxeReport(input)
+      });
+      const execution = fakeAxeExecution(plan);
+      await axe.observeOperation?.({
+        execution, operation: state, stage: "state-asserted", expectedMatchCount: 1,
+        page: { url: () => "https://example.test", screenshot() { throw new Error("Screenshot failed"); } } as never,
+        locator: new FakeAxeLocator() as never
+      });
+      assert.equal(axe.evidence.length, 1);
+      const fact = axe.evidence[0];
+      assert.ok(fact?.kind === "operation-observed" && "audit" in fact.evidence);
+      assert.equal(fact.evidence.audit.kind, "completed");
+      assert.equal(fact.evidence.screenshot.kind, "failed");
+      await reportAxe(axe, fakeRunResult(plan, [executionResult(execution, true)]));
+      assert.equal(axe.latestPathReport?.items[0]?.status, "audited");
+      assert.equal(axe.latestPathReport?.items[0]?.sourceScreenshotError, "Screenshot failed");
     }
   },
   {
@@ -2462,6 +3273,10 @@ const tests: TestCase[] = [
           stage: "state-asserted"
         });
       }, /axe scan failed/);
+      const failureFact = axe.evidence.find((fact) => fact.kind === "operation-observed");
+      assert.ok(failureFact?.kind === "operation-observed" && "audit" in failureFact.evidence);
+      assert.equal(failureFact.evidence.audit.kind, "failed");
+      assert.equal(failureFact.evidence.screenshot.kind, "captured");
       await reportAxe(axe, fakeRunResult(plan, [executionResult(execution, false)]));
 
       const item = axe.latestPathReport?.items[0];
@@ -2684,16 +3499,17 @@ const tests: TestCase[] = [
   {
     name: "nextcloud example config supplies fixture semantics outside reusable packages",
     async run() {
-      assert.equal(typeof nextcloudEnvironment.entries["nextcloud.files"], "function");
-      assert.equal(typeof nextcloudEnvironment.entries["nextcloud.pendingShares"], "function");
+      assert.equal(typeof nextcloudDriverOptions.entries["nextcloud.files"], "function");
+      assert.equal(typeof nextcloudDriverOptions.entries["nextcloud.pendingShares"], "function");
       assert.equal(
-        typeof nextcloudEnvironment.effectHandlers?.["urn:effect:alice-confirm-share"],
+        typeof nextcloudEnvironment.verifyEffect,
         "function"
       );
-      assert.equal(
-        typeof nextcloudEnvironment.effectHandlers?.["urn:effect:bob-accept-share"],
-        "function"
-      );
+      assert.equal(typeof nextcloudEnvironment.setup, "function");
+      assert.equal(typeof nextcloudEnvironment.teardown, "function");
+      assert.equal(nextcloudDriverOptions.setupExecution, undefined);
+      assert.equal(nextcloudDriverOptions.teardownExecution, undefined);
+      assert.equal(nextcloudDriverOptions.effectHandlers, undefined);
 
       const exampleSource = await readFile(
         new URL("../examples/nextcloud-filesharing/environment.ts", import.meta.url),
@@ -2957,6 +3773,7 @@ function select(
   profile: ReturnType<typeof defaultProfile>,
   operation: TransitionPlanOperation
 ): InputModalityDecision {
+  assert.ok(profile.selectInputModality);
   return profile.selectInputModality(operation, {} as JourneyExecutionContext) as InputModalityDecision;
 }
 
@@ -3039,7 +3856,7 @@ function fakeAdapter(
         },
 
         performTransition(operation, decision) {
-          calls.push(`${context.profile.id}:transition:${operation.transition.id}:${decision.command}`);
+          calls.push(`${context.profile.id}:transition:${operation.transition.id}:${decision?.modality.id ?? "automatic"}`);
         },
 
         recordControlFlow(operation) {
@@ -3298,13 +4115,14 @@ function fakeRunResult(
   executions: ExecutionResult[]
 ): RunResult {
   return {
-    ok: executions.every((execution) => execution.ok),
+    ok: executions.length > 0 && executions.every(executionPassed),
     runId: "axe-run",
     plan: {
       id: plan.id,
       ...(plan.source ? { source: plan.source } : {})
     },
     executions,
+    assessments: executions.map((execution) => ({ kind: "applicable", profile: { id: execution.profileId } })),
     evidence: {
       executions: executions.map((execution) => ({
         executionId: execution.executionId,
@@ -3312,7 +4130,7 @@ function fakeRunResult(
         operations: []
       }))
     },
-    errors: executions.flatMap((execution) => execution.error ? [execution.error] : [])
+    errors: executions.flatMap((execution) => execution.outcome.kind === "failed" ? [execution.outcome.error] : [])
   };
 }
 
@@ -3323,8 +4141,13 @@ function executionResult(
   return {
     executionId: execution.executionId,
     profileId: execution.profile.id,
-    ok
+    outcome: ok ? { kind: "passed" } : { kind: "failed", error: { name: "Error", message: "Test execution failure" } }
   };
+}
+
+function failureMessage(outcome: JourneyOutcome | undefined): string {
+  assert.ok(outcome?.kind === "failed", "Expected a failed outcome");
+  return outcome.error.message;
 }
 
 async function runStrictAxeObserver(strict: boolean): Promise<void> {

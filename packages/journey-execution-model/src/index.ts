@@ -22,6 +22,7 @@ export type AccessibleFeature = LabeledRef & {
 };
 
 export type ResolvedAccessibleLocator = LabeledRef & {
+  /** Model role identifier. Adapters map its vocabulary to their runtime or reject it. */
   role?: string;
   accessibleName?: string;
   accessibleDescription?: string;
@@ -36,6 +37,7 @@ export const keyboardSpaceInputModalityId = "observability:keyboard-space" as co
 export const keyboardEnterInputModalityId = "observability:keyboard-enter" as const;
 export const pointerInputModalityId = "observability:pointer" as const;
 
+/** Built-in conveniences, not an exhaustive list of executable modalities. */
 export const journeyInputModalityIds = [
   keyboardTextEntryInputModalityId,
   keyboardSpaceInputModalityId,
@@ -43,11 +45,11 @@ export const journeyInputModalityIds = [
   pointerInputModalityId
 ] as const;
 
-export type JourneyInputModalityId = (typeof journeyInputModalityIds)[number];
+/** @deprecated Use string; modality IDs are open model identifiers. */
+export type JourneyInputModalityId = string;
 
-export type ResolvedJourneyInputModality = ResolvedInputModality & {
-  id: JourneyInputModalityId;
-};
+/** @deprecated Use ResolvedInputModality; this alias does not restrict modality IDs. */
+export type ResolvedJourneyInputModality = ResolvedInputModality;
 
 export type ResolvedInputModalityProfile = LabeledRef & {
   modalities: ResolvedInputModality[];
@@ -177,15 +179,8 @@ export type JourneyPlan = CoreJourneyPlan<JourneyPlanOperation> & {
   readonly source?: JourneyPlanSource;
 };
 
-export type JourneyInteractionCommand =
-  | "pointer-click"
-  | "keyboard-enter"
-  | "keyboard-space"
-  | "keyboard-text-entry";
-
 export type InputModalityDecision = {
   profileId: string;
   inputModalityProfile: ResolvedInputModalityProfile;
-  modality: ResolvedJourneyInputModality;
-  command: JourneyInteractionCommand;
+  modality: ResolvedInputModality;
 };

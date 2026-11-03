@@ -15,6 +15,7 @@ import type {
   AxeJourneyOperation
 } from "../types.js";
 import { addOptional, unique } from "../shared/json.js";
+import type { Immutable } from "../shared/immutable.js";
 
 export function metadataForOperation(
   profileId: string,
@@ -62,7 +63,7 @@ export function planSourceMetadata(source: JourneyPlanSource | undefined): JsonO
 
 function stateOperationMetadata(
   metadata: AxeAuditMetadata,
-  operation: StatePlanOperation
+  operation: Immutable<StatePlanOperation>
 ): AxeAuditMetadata {
   metadata.stateId = operation.state.id;
   metadata.surfaceId = operation.surface.id;
@@ -78,7 +79,7 @@ function stateOperationMetadata(
 
 function transitionOperationMetadata(
   metadata: AxeAuditMetadata,
-  operation: TransitionPlanOperation
+  operation: Immutable<TransitionPlanOperation>
 ): AxeAuditMetadata {
   metadata.transitionId = operation.transition.id;
   metadata.fromStateId = operation.transition.from;
@@ -102,7 +103,7 @@ function transitionOperationMetadata(
 
 function controlFlowOperationMetadata(
   metadata: AxeAuditMetadata,
-  operation: Exclude<AxeJourneyOperation, StatePlanOperation | TransitionPlanOperation>
+  operation: Extract<AxeJourneyOperation, { kind: "control-flow" }>
 ): AxeAuditMetadata {
   metadata.transitionId = operation.transition.id;
   addOptional(metadata, "transitionLabel", operation.transition.label);
@@ -129,7 +130,7 @@ function sourceReferencesMetadata(references: JourneySourceReferences | undefine
   return metadata;
 }
 
-function bindingMetadata(binding: ResolvedObservationBinding): JsonObject {
+function bindingMetadata(binding: Immutable<ResolvedObservationBinding>): JsonObject {
   const metadata: JsonObject = {
     bindingId: binding.id,
     surfaceId: binding.surfaceId,
@@ -153,7 +154,7 @@ function bindingMetadata(binding: ResolvedObservationBinding): JsonObject {
   return metadata;
 }
 
-function locatorMetadata(locator: ResolvedAccessibleLocator): JsonObject {
+function locatorMetadata(locator: Immutable<ResolvedAccessibleLocator>): JsonObject {
   const metadata: JsonObject = {
     locatorId: locator.id,
     features: locator.features.map(featureMetadata),
@@ -177,7 +178,7 @@ function featureMetadata(feature: { id: string; name: string; value: string; lab
   return metadata;
 }
 
-function effectMetadata(effect: ResolvedEffect): JsonObject {
+function effectMetadata(effect: Immutable<ResolvedEffect>): JsonObject {
   return {
     effectId: effect.id,
     producedRefs: [...effect.producedRefs],
@@ -187,7 +188,7 @@ function effectMetadata(effect: ResolvedEffect): JsonObject {
   };
 }
 
-function artifactMetadata(artifact: ResolvedEffect["produced"][number]): JsonObject {
+function artifactMetadata(artifact: Immutable<ResolvedEffect["produced"][number]>): JsonObject {
   const metadata: JsonObject = {
     artifactId: artifact.id,
     targetTouchpointRefs: [...artifact.targetTouchpointRefs]
@@ -207,12 +208,12 @@ function addUniqueEventMetadata(metadata: JsonObject, eventIds: string[]): void 
   }
 }
 
-function locatorIds(bindings: ResolvedObservationBinding[]): string[] {
+function locatorIds(bindings: readonly Immutable<ResolvedObservationBinding>[]): string[] {
   return unique(
     bindings.flatMap((binding) => binding.locators.flatMap((locator) => collectLocatorIds(locator)))
   );
 }
 
-function collectLocatorIds(locator: ResolvedAccessibleLocator): string[] {
+function collectLocatorIds(locator: Immutable<ResolvedAccessibleLocator>): string[] {
   return [locator.id, ...locator.contexts.flatMap((context) => collectLocatorIds(context))];
 }

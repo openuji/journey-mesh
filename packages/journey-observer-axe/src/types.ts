@@ -1,6 +1,8 @@
 import type { AxeBuilder } from "@axe-core/playwright";
 import type { TestInfo } from "@playwright/test";
 import type { Locator, Page } from "playwright";
+import type { Immutable } from "./shared/immutable.js";
+import type { AxeEvidence } from "./observer/evidence.js";
 
 import type {
   PlaywrightExecutionObserver,
@@ -49,7 +51,7 @@ export type AxeAuditScanResults = {
   matchedSurface: AxeResults;
 };
 
-export type AxeAuditReport = {
+export type AxeAuditReport = Immutable<{
   auditId: string;
   createdAt: string;
   url: string;
@@ -65,7 +67,7 @@ export type AxeAuditReport = {
     pageState: AxeScanEvidence;
     matchedSurface: AxeScanEvidence;
   };
-};
+}>;
 
 export type AxePathAuditFindingNode = {
   nodeIndex: number;
@@ -90,7 +92,7 @@ export type AxePathAuditFindings = {
   incomplete: AxePathAuditFinding[];
 };
 
-export type AxePathAuditItem = {
+export type AxePathAuditItem = Immutable<{
   itemId: string;
   groupId?: string;
   groupLabel?: string;
@@ -109,7 +111,7 @@ export type AxePathAuditItem = {
   summary?: AxeAuditSummary;
   scanSummaries?: AxeAuditScanSummaries;
   findings?: AxePathAuditFindings;
-};
+}>;
 
 export type AxePathAuditSummary = {
   items: number;
@@ -123,7 +125,7 @@ export type AxePathAuditSummary = {
   scanSummaries: AxeAuditScanSummaries;
 };
 
-export type AxePathAuditReport = {
+export type AxePathAuditReport = Immutable<{
   schemaVersion: "ujg-fed-a11y.axe-path.v1";
   reportId: string;
   createdAt: string;
@@ -131,7 +133,7 @@ export type AxePathAuditReport = {
   metadata: AxeAuditMetadata;
   summary: AxePathAuditSummary;
   items: AxePathAuditItem[];
-};
+}>;
 
 export type AxeAccessibilitySummaryEntry = {
   id: string;
@@ -154,7 +156,7 @@ export type AxeAccessibilitySummaryProfile = {
   transitions: Record<string, AxeAccessibilitySummaryEntry>;
 };
 
-export type AxeAccessibilitySummaryReport = {
+export type AxeAccessibilitySummaryReport = Immutable<{
   schemaVersion: "ujg-fed-a11y.accessibility-summary-by-graph-id.v1";
   generatedAt: string;
   source: {
@@ -169,9 +171,9 @@ export type AxeAccessibilitySummaryReport = {
   states?: Record<string, AxeAccessibilitySummaryEntry>;
   transitions?: Record<string, AxeAccessibilitySummaryEntry>;
   profiles?: Record<string, AxeAccessibilitySummaryProfile>;
-};
+}>;
 
-export type AxePathAuditItemInput =
+export type AxePathAuditItemInput = Immutable<
   | {
       itemId: string;
       groupId?: string;
@@ -190,14 +192,14 @@ export type AxePathAuditItemInput =
       reason: string;
       sourceScreenshotHref?: string;
       sourceScreenshotError?: string;
-    };
+    }>;
 
 export type AxeAuditRunnerInput = {
   page: Page;
   testInfo: TestInfo;
   resolvedLocator: Locator;
   auditId: string;
-  metadata?: AxeAuditMetadata;
+  metadata?: Immutable<AxeAuditMetadata>;
   tags?: readonly string[];
   strict?: boolean;
   evidenceTimeoutMs?: number;
@@ -208,7 +210,7 @@ export type AxeAuditRunner = (input: AxeAuditRunnerInput) => Promise<AxeAuditRep
 export type AxeObserverOptions = {
   testInfo: TestInfo;
   reportId: string;
-  metadata?: AxeAuditMetadata;
+  metadata?: Immutable<AxeAuditMetadata>;
   strict?: boolean;
   tags?: readonly string[];
   evidenceTimeoutMs?: number;
@@ -225,21 +227,22 @@ export type AxeObserverOptions = {
 };
 
 export type AxeObserver = PlaywrightExecutionObserver & JourneyReporter & {
+  readonly evidence: readonly AxeEvidence[];
   readonly latestPathReport?: AxePathAuditReport;
   readonly latestPathReportPath?: string;
   readonly latestAccessibilitySummaryReport?: AxeAccessibilitySummaryReport;
   readonly latestAccessibilitySummaryReportPath?: string;
 };
 
-export type AxeJourneyOperation = PlaywrightOperationObservation["operation"];
+export type AxeJourneyOperation = Immutable<PlaywrightOperationObservation["operation"]>;
 
-export type AxeJourneyItem = {
+export type AxeJourneyItem = Immutable<{
   auditId: string;
   itemId: string;
   groupId: string;
   groupLabel: string;
   metadata: AxeAuditMetadata;
-};
+}>;
 
 export type AxePathSourceScreenshotFields = {
   sourceScreenshotHref?: string;

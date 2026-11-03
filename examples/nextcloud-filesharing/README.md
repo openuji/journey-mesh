@@ -4,6 +4,13 @@
 
 This example runs a federated file-sharing journey between Alice and Bob from a UJG model, through Journey Mesh, into Playwright browser automation.
 
+[`run.ts`](./run.ts) assigns each touchpoint with `touchpointAdapter(...)`. Both
+touchpoints currently share one Playwright adapter. The [adapter contract](../../docs/automation-adapters.md)
+and [Android migration notes](../../docs/nextcloud-android.md) describe how Bob can
+use a separate runtime and which Nextcloud code can be reused. Service fixtures
+and effect checks run once per profile through `nextcloudEnvironment`; browser
+sessions and entries are configured separately in `nextcloudDriverOptions`.
+
 ## Architecture
 
 
@@ -13,6 +20,7 @@ ujg/filesharing.ujg.jsonld
   -> JourneyPlan
   -> runJourney(...)
        profiles: default, keyboard-only
+       environment: HTTP fixtures, effect checks, cleanup
        adapter: Playwright
          driver: Nextcloud
          observer: axe accessibility scans

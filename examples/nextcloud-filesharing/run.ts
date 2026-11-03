@@ -10,17 +10,18 @@ import { compileUjgJourneyPlan } from "@openuji/journey-model-ujg";
 import { axeObserver, isAxeStrict } from "@openuji/journey-observer-axe";
 import { defaultProfile, keyboardOnlyProfile } from "@openuji/journey-profiles";
 import {
-  consoleJourneyProgress,
   reportJourneyResult,
   runJourney,
+  touchpointAdapter,
   type JourneyRunError,
   type RunResult
 } from "@openuji/journey-runner";
+import { consoleJourneyProgress } from "@openuji/journey-runner/console";
 
-import { nextcloudEnvironment } from "./environment.js";
+import { nextcloudDriverOptions, nextcloudEnvironment } from "./environment.js";
 
 // Architecture sketch:
-// UJG JSON-LD -> JourneyPlan -> runJourney(profiles + Playwright adapter)
+// UJG JSON-LD -> JourneyPlan -> runJourney(profiles + adapters by touchpoint)
 // Playwright adapter -> Nextcloud driver -> browser automation
 // Axe observer + reporters -> Playwright artifacts + console summary
 const journey = new URL("./ujg/filesharing.ujg.jsonld", import.meta.url);
@@ -51,13 +52,19 @@ function createNextcloudFilesharingRunner() {
       });
       const reporters = [evidence, axe, summary];
 
-      // The adapter is the boundary from neutral Journey Mesh operations to browser work.
+      const web = playwrightAdapter({
+        driver: nextcloudDriver(nextcloudDriverOptions),
+        browser,
+        executionObservers: [axe]
+      });
+
+      // Each model touchpoint selects its runtime. Both currently share the web adapter.
       const result = await runJourney({
         plan,
-        adapter: playwrightAdapter({
-          driver: nextcloudDriver(nextcloudEnvironment),
-          browser,
-          executionObservers: [axe]
+        environment: nextcloudEnvironment,
+        adapter: touchpointAdapter({
+          "urn:touchpoint:nextcloud-a": web,
+          "urn:touchpoint:nextcloud-b": web
         }),
         profiles: [defaultProfile(), keyboardOnlyProfile()],
         progress: [consoleJourneyProgress()]

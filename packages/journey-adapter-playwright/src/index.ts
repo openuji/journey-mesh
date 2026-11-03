@@ -18,7 +18,6 @@ import {
   type JourneyAdapterCloseInput,
   type JourneyAdapterExecution,
   type JourneyAdapterExecutionInput,
-  type JourneyInteractionCommand,
   type JourneyExecutionContext,
   type JourneyExecutionDescriptor,
   type JourneyPlanOperation,
@@ -30,6 +29,10 @@ import {
 } from "@openuji/journey-runner";
 import type { PlaywrightExecutionObserver } from "./observers/contracts.js";
 import { PlaywrightObserverDispatcher } from "./observers/playwright-observer-dispatcher.js";
+import { playwrightCommandForModality, type PlaywrightInteractionCommand } from "./input-modalities.js";
+
+export { playwrightCommandForModality } from "./input-modalities.js";
+export type { PlaywrightInteractionCommand } from "./input-modalities.js";
 
 export {
   playwrightJsonEvidenceReporter,
@@ -89,7 +92,7 @@ export type PlaywrightJourneyDriverExecution = {
   transitionValue(operation: TransitionPlanOperation): Promise<string | undefined> | string | undefined;
   afterTransition(
     operation: TransitionPlanOperation,
-    decision: InputModalityDecision
+    decision?: InputModalityDecision
   ): Promise<void> | void;
   recordControlFlow(operation: ControlFlowPlanOperation): Promise<void> | void;
   close(input: PlaywrightDriverCloseInput): Promise<void> | void;
@@ -210,9 +213,23 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
 
   async performTransition(
     operation: TransitionPlanOperation,
-    decision: InputModalityDecision
+    decision?: InputModalityDecision
   ): Promise<void> {
     const driver = this.requireStartedDriver();
+    if (!decision) {
+      if (operation.activation.requiredInputModalityProfiles.length > 0) {
+        throw new Error(`Transition ${operation.transition.id} requires an input modality decision`);
+      }
+      await driver.afterTransition(operation);
+      await this.observers.observe({
+        execution: this.execution,
+        operation,
+        stage: "transition-completed"
+      });
+      return;
+    }
+    // Reject unsupported modalities before resolving targets or interacting with the page.
+    const command = playwrightCommandForModality(decision.modality.id);
     const context = this.requireDriverContext();
     const page = await driver.pageForOperation(operation);
     const locator = await toPlaywrightObservationLocator(page, operation.activation.bindings, {
@@ -235,11 +252,11 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
       stage: "transition-ready"
     });
 
-    const text = decision.command === "keyboard-text-entry"
+    const text = command === "keyboard-text-entry"
       ? await driver.transitionValue(operation)
       : undefined;
 
-    await activatePlaywrightLocator(locator, decision.command, text);
+    await activatePlaywrightLocator(locator, command, text);
     await driver.afterTransition(operation, decision);
   }
 
@@ -371,7 +388,7 @@ export async function toPlaywrightLocator(
 
 export async function activatePlaywrightLocator(
   locator: Locator,
-  command: JourneyInteractionCommand,
+  command: PlaywrightInteractionCommand,
   text?: string
 ): Promise<void> {
   switch (command) {

@@ -7,6 +7,7 @@ import type {
 } from "../types.js";
 import { pathAuditHtmlFileName } from "../artifacts/report-file-names.js";
 import { emptyAxeSummary } from "./report-summary.js";
+import { immutableSnapshot } from "../shared/immutable.js";
 import {
   artifactHref,
   profileIdForItem,
@@ -40,46 +41,41 @@ export function buildAxeAccessibilitySummaryReport(input: {
 
   if (profileIds.length <= 1) {
     const profile = profiles[profileIds[0] ?? ""] ?? emptyAccessibilitySummaryProfile();
-    return {
+    return immutableSnapshot({
       schemaVersion: "ujg-fed-a11y.accessibility-summary-by-graph-id.v1",
-      generatedAt: input.generatedAt ?? new Date().toISOString(),
+      generatedAt: input.generatedAt ?? input.pathReport.createdAt,
       source,
       states: profile.states,
       transitions: profile.transitions
-    };
+    });
   }
 
-  return {
+  return immutableSnapshot({
     schemaVersion: "ujg-fed-a11y.accessibility-summary-by-graph-id.v1",
-    generatedAt: input.generatedAt ?? new Date().toISOString(),
+    generatedAt: input.generatedAt ?? input.pathReport.createdAt,
     source,
     profiles
-  };
+  });
 }
 
 function groupAccessibilityEntriesByProfile(
   report: AxePathAuditReport,
   artifactBaseHref?: string
 ): Record<string, AxeAccessibilitySummaryProfile> {
-  const profiles: Record<string, AxeAccessibilitySummaryProfile> = {};
-
-  for (const item of report.items) {
+  return report.items.reduce<Record<string, AxeAccessibilitySummaryProfile>>((profiles, item) => {
     const target = accessibilityEntryTarget(item);
-    if (!target) continue;
+    if (!target) return profiles;
 
     const profileId = profileIdForItem(item);
     const profile = profiles[profileId] ?? emptyAccessibilitySummaryProfile();
-    profiles[profileId] = profile;
-
     const entry = accessibilitySummaryEntry(item, target.id, report.reportId, artifactBaseHref);
-    if (target.kind === "state") {
-      addAccessibilitySummaryEntry(profile.states, entry);
-    } else {
-      addAccessibilitySummaryEntry(profile.transitions, entry);
-    }
-  }
-
-  return profiles;
+    return {
+      ...profiles,
+      [profileId]: target.kind === "state"
+        ? { ...profile, states: addAccessibilitySummaryEntry(profile.states, entry) }
+        : { ...profile, transitions: addAccessibilitySummaryEntry(profile.transitions, entry) }
+    };
+  }, {});
 }
 
 function emptyAccessibilitySummaryProfile(): AxeAccessibilitySummaryProfile {
@@ -108,7 +104,7 @@ function accessibilitySummaryEntry(
   reportId: string,
   artifactBaseHref?: string
 ): AxeAccessibilitySummaryEntry {
-  const entry: AxeAccessibilitySummaryEntry = {
+  return {
     id,
     itemId: item.itemId,
     auditId: item.auditId ?? null,
@@ -118,28 +114,19 @@ function accessibilitySummaryEntry(
       pageState: item.scanSummaries?.["page-state"] ?? emptyAxeSummary(),
       matchedSurface: item.scanSummaries?.["matched-surface"] ?? emptyAxeSummary()
     },
-    sourceHtmlHref: `${artifactHref(pathAuditHtmlFileName(reportId), artifactBaseHref)}#${item.itemId}`
+    sourceHtmlHref: `${artifactHref(pathAuditHtmlFileName(reportId), artifactBaseHref)}#${item.itemId}`,
+    ...(item.sourceScreenshotHref ? { sourceScreenshotHref: artifactHref(item.sourceScreenshotHref, artifactBaseHref) } : {}),
+    ...(item.reason ? { reason: item.reason } : {})
   };
-
-  if (item.sourceScreenshotHref) {
-    entry.sourceScreenshotHref = artifactHref(item.sourceScreenshotHref, artifactBaseHref);
-  }
-  if (item.reason) {
-    entry.reason = item.reason;
-  }
-
-  return entry;
 }
 
 function addAccessibilitySummaryEntry(
   entries: Record<string, AxeAccessibilitySummaryEntry>,
   entry: AxeAccessibilitySummaryEntry
-): void {
+): Record<string, AxeAccessibilitySummaryEntry> {
   const existing = entries[entry.id];
-  if (!existing) {
-    entries[entry.id] = entry;
-    return;
-  }
-
-  existing.additionalItems = [...(existing.additionalItems ?? []), entry];
+  return {
+    ...entries,
+    [entry.id]: existing ? { ...existing, additionalItems: [...(existing.additionalItems ?? []), entry] } : entry
+  };
 }

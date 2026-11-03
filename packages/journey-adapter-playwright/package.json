@@ -10,6 +10,7 @@
   },
   "types": "./src/index.ts",
   "dependencies": {
+    "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
     "playwright": "^1.61.1"
   },

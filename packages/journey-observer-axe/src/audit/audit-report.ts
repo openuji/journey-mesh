@@ -1,5 +1,3 @@
-import type { Page } from "playwright";
-
 import type {
   AxeAuditReport,
   AxeAuditRunnerInput,
@@ -14,52 +12,44 @@ import type {
 } from "../types.js";
 import { addAxeSummaries, summarizeResults } from "../reporting/report-summary.js";
 import { stringTargets, urlPath } from "../shared/strings.js";
-import { isAxeStrict } from "./strict-mode.js";
+import { immutableSnapshot } from "../shared/immutable.js";
 
 export function buildAxeAuditReport(
-  input: AxeAuditRunnerInput,
-  tags: string[],
+  input: Pick<AxeAuditRunnerInput, "auditId" | "metadata"> & { createdAt: string; url: string; strict: boolean },
+  tags: readonly string[],
   scans: AxeAuditScanResults
 ): AxeAuditReport {
   const evidence = {
-    pageState: collectScanEvidence(input.page, "page-state", scans.pageState),
-    matchedSurface: collectScanEvidence(input.page, "matched-surface", scans.matchedSurface)
+    pageState: collectScanEvidence(input.url, "page-state", scans.pageState),
+    matchedSurface: collectScanEvidence(input.url, "matched-surface", scans.matchedSurface)
   };
 
-  return {
+  return immutableSnapshot({
     auditId: input.auditId,
-    createdAt: new Date().toISOString(),
-    url: input.page.url(),
-    strict: input.strict ?? isAxeStrict(),
+    createdAt: input.createdAt,
+    url: input.url,
+    strict: input.strict,
     wcagTags: [...tags],
     metadata: input.metadata ?? {},
     summary: addAxeSummaries(summarizeResults(scans.pageState), summarizeResults(scans.matchedSurface)),
     scans,
     evidence
-  };
+  });
 }
 
 function collectScanEvidence(
-  page: Page,
+  url: string,
   scanId: AxeAuditScanId,
   results: AxeResults
 ): AxeScanEvidence {
-  const nodes: AxeNodeEvidence[] = [];
-  for (const result of results.violations) {
-    for (const [nodeIndex, node] of result.nodes.entries()) {
-      nodes.push(createNodeEvidence(page, scanId, "violation", result, node, nodeIndex));
-    }
-  }
-  for (const result of results.incomplete) {
-    for (const [nodeIndex, node] of result.nodes.entries()) {
-      nodes.push(createNodeEvidence(page, scanId, "incomplete", result, node, nodeIndex));
-    }
-  }
-  return { nodes };
+  return { nodes: [
+    ...results.violations.flatMap((result) => result.nodes.map((node, index) => createNodeEvidence(url, scanId, "violation", result, node, index))),
+    ...results.incomplete.flatMap((result) => result.nodes.map((node, index) => createNodeEvidence(url, scanId, "incomplete", result, node, index)))
+  ] };
 }
 
 function createNodeEvidence(
-  page: Page,
+  url: string,
   scanId: AxeAuditScanId,
   resultType: AxeRuleResultType,
   result: AxeRuleResult,
@@ -70,8 +60,8 @@ function createNodeEvidence(
     resultType,
     violationId: result.id,
     nodeIndex,
-    url: page.url(),
-    urlPath: urlPath(page.url()),
+    url,
+    urlPath: urlPath(url),
     target: stringTargets(node)
   };
 }

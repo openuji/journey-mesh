@@ -52,6 +52,13 @@ graph TD
 - Observers own evidence collection and redaction for functional, accessibility, reliability, and deployment signals.
 - Reporters own versioned output formats, human-readable summaries, and CI-compatible artifacts.
 
+The runtime-neutral `JourneyAdapter` contract also supports composing adapters by
+touchpoint with `touchpointAdapter(...)`. This allows different runtimes in one
+journey. See [adapter contracts](docs/automation-adapters.md) and the
+[Android migration path](docs/nextcloud-android.md). Model-defined input modalities,
+profiles composed by touchpoint, and shared environment hooks keep runtime
+commands and service fixtures out of the adapter contract.
+
 
 ## Available Today
 

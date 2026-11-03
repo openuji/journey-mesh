@@ -61,7 +61,7 @@ export type NextcloudTransitionValueInput = {
 export type NextcloudEffectHandlerInput = {
   operation: TransitionPlanOperation;
   effectId: string;
-  decision: InputModalityDecision;
+  decision?: InputModalityDecision;
   context: NextcloudDriverContext;
   session: NextcloudActorSession;
 };
@@ -77,8 +77,11 @@ export type NextcloudDriverOptions = {
   users: Record<string, NextcloudUserConfig>;
   entries: Record<string, NextcloudEntryHandler>;
   transitionValues?: Record<string, string | NextcloudTransitionValueProvider>;
+  /** Prefer runner environment.verifyEffect for shared service checks. */
   effectHandlers?: Record<string, NextcloudEffectHandler>;
+  /** Prefer runner environment.setup for fixtures shared across runtimes. */
   setupExecution?: (context: NextcloudDriverContext) => Awaitable<void>;
+  /** Prefer runner environment.teardown for fixtures shared across runtimes. */
   teardownExecution?: (context: NextcloudDriverContext) => Awaitable<void>;
   login?: (session: NextcloudActorSession) => Awaitable<void>;
   awaitApplicationSettled?: (session: NextcloudActorSession) => Awaitable<void>;
@@ -166,7 +169,7 @@ class NextcloudExecution implements PlaywrightJourneyDriverExecution {
 
   async afterTransition(
     operation: TransitionPlanOperation,
-    decision: InputModalityDecision
+    decision?: InputModalityDecision
   ): Promise<void> {
     const session = await this.getSession(operation);
 

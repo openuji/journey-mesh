@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import type { JourneyEnvironment } from "@openuji/journey-runner";
 
 import {
   deleteFileIfExists,
@@ -48,7 +49,7 @@ const federatedRecipient =
   process.env.NEXTCLOUD_FEDERATED_RECIPIENT ??
   `${bobUser.username}@${String(bobTouchpoint.baseURL)}`;
 
-export const nextcloudEnvironment: NextcloudDriverOptions = {
+export const nextcloudDriverOptions: NextcloudDriverOptions = {
   touchpoints: {
     "urn:touchpoint:nextcloud-a": aliceTouchpoint,
     "urn:touchpoint:nextcloud-b": bobTouchpoint
@@ -63,13 +64,22 @@ export const nextcloudEnvironment: NextcloudDriverOptions = {
   },
   transitionValues: {
     "urn:transition:alice-enters-remote-bob": staticTransitionValue(federatedRecipient)
+  }
+};
+
+const effectChecks = new Map<string, () => Promise<void>>([
+  ["urn:effect:alice-confirm-share", expectAliceOutgoingFederatedShareExists],
+  ["urn:effect:bob-accept-share", expectAcceptedFederatedShareHasMountedFile]
+]);
+
+export const nextcloudEnvironment: JourneyEnvironment = {
+  setup: ensureFederatedShareFixtureIsClean,
+  verifyEffect: ({ effect }) => {
+    const verify = effectChecks.get(effect.id);
+    if (!verify) throw new Error(`No Nextcloud effect verifier for ${effect.id}`);
+    return verify();
   },
-  effectHandlers: {
-    "urn:effect:alice-confirm-share": expectAliceOutgoingFederatedShareExists,
-    "urn:effect:bob-accept-share": expectAcceptedFederatedShareHasMountedFile
-  },
-  setupExecution: ensureFederatedShareFixtureIsClean,
-  teardownExecution: async () => {
+  teardown: async () => {
     if (process.env.NEXTCLOUD_PRESERVE_FIXTURES === "1") return;
     await deleteIncomingRemoteShares(bobTouchpoint, bobUser);
     await deleteFileIfExists(bobTouchpoint, bobUser, fixtureFileName);

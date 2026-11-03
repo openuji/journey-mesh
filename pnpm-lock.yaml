@@ -72,6 +72,9 @@ importers:
 
   packages/journey-adapter-playwright:
     dependencies:
+      '@openuji/journey-execution-model':
+        specifier: workspace:*
+        version: link:../journey-execution-model
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner

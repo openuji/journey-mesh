@@ -7,6 +7,7 @@ import type {
 } from "../types.js";
 import { safeFileSegment } from "../shared/strings.js";
 import { metadataForOperation } from "./operation-metadata.js";
+import { immutableSnapshot } from "../shared/immutable.js";
 
 export function createAxeJourneyItem(
   profileId: string,
@@ -16,40 +17,13 @@ export function createAxeJourneyItem(
   const graphNodeId = graphNodeIdForOperation(operation);
   const itemId = `${profileId}-${String(operation.sequence).padStart(3, "0")}-${graphNodeSlug(graphNodeId)}`;
 
-  return {
+  return immutableSnapshot({
     auditId: itemId,
     itemId,
     groupId: `${profileId}:${operation.entry.id}`,
     groupLabel: `${profileId} ${operation.entry.label ?? operation.entry.id}`,
     metadata: metadataForOperation(profileId, executionId, graphNodeId, operation)
-  };
-}
-
-export function initialAxePathItem(
-  journeyItem: AxeJourneyItem,
-  operation: AxeJourneyOperation
-): AxePathAuditItemInput {
-  if (operation.kind === "control-flow") {
-    return unauditedAxePathItem(
-      journeyItem,
-      "not-applicable",
-      "Control-flow items do not resolve to a page surface."
-    );
-  }
-
-  if (operation.kind === "state" && operation.target.expectedMatchCount !== 1) {
-    return unauditedAxePathItem(
-      journeyItem,
-      "skipped",
-      `Expected match count ${operation.target.expectedMatchCount} cannot be scoped to one matched locator.`
-    );
-  }
-
-  return unauditedAxePathItem(
-    journeyItem,
-    "skipped",
-    "Plan item was not audited because the runner ended before this item could be scanned."
-  );
+  });
 }
 
 export function auditedAxePathItem(
