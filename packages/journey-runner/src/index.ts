@@ -8,6 +8,7 @@ export {
 } from "./reporting/report-journey-result.js";
 export { errorToJourneyRunError } from "./errors.js";
 export { runJourney } from "./run-journey.js";
+export { routedAdapter } from "./adapters/routed-adapter.js";
 export { touchpointAdapter } from "./adapters/touchpoint-adapter.js";
 export { executionPassed } from "./results/outcomes.js";
 

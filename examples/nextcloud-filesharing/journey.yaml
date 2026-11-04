@@ -1,0 +1,135 @@
+version: 1
+outputDir: ./test-results
+
+envFiles:
+  - ./deployment/.env.example
+  - path: ./deployment/.env
+    optional: true
+  - env: NEXTCLOUD_STACK_ENV_FILE
+    optional: true
+
+model:
+  use: '@openuji/journey-model-ujg/plugin'
+
+tests:
+  browser-sharing:
+    timeoutMs: '${UJG_EXAMPLE_TIMEOUT_MS:-600000}'
+    journeys:
+      - id: alice-offers
+        source: ./ujg/filesharing.ujg.jsonld
+        select: urn:journey:alice-federated-sharing
+        adapter: web
+      - id: bob-accepts
+        source: ./ujg/filesharing.ujg.jsonld
+        select: urn:journey:bob-remote-share
+        adapter: web
+    profiles:
+      - id: default
+        journeys: { alice-offers: default, bob-accepts: default }
+      - id: keyboard-only
+        journeys: { alice-offers: keyboard, bob-accepts: keyboard }
+    environment: &environment
+      use: ./environment.ts
+      options:
+        aliceTouchpoint: &aliceService
+          baseURL: '${NEXTCLOUD_ALICE_URL}'
+        bobTouchpoint: &bobService
+          baseURL: '${NEXTCLOUD_BOB_URL}'
+        aliceUser: &aliceAccount
+          label: Alice
+          username: '${NEXTCLOUD_ALICE_USER}'
+          password: '${NEXTCLOUD_ALICE_PASSWORD}'
+        bobUser: &bobAccount
+          label: Bob
+          username: '${NEXTCLOUD_BOB_USER}'
+          password: '${NEXTCLOUD_BOB_PASSWORD}'
+        fixturePath: ./deployment/fixtures/report.pdf
+        preserveFixtures: '${NEXTCLOUD_PRESERVE_FIXTURES:-false}'
+
+  native-recipient-sharing:
+    timeoutMs: '${UJG_EXAMPLE_TIMEOUT_MS:-600000}'
+    environment: *environment
+    journeys:
+      - id: alice-offers
+        source: ./ujg/filesharing.ujg.jsonld
+        select: urn:journey:alice-federated-sharing
+        adapter: web
+      - id: bob-accepts
+        source: ./ujg/filesharing.android.ujg.jsonld
+        select: urn:journey:bob-remote-share
+        adapter: android
+    profiles:
+      - id: default-web-touch-android
+        journeys: { alice-offers: default, bob-accepts: touch }
+      - id: keyboard-web-touch-android
+        journeys: { alice-offers: keyboard, bob-accepts: touch }
+
+adapters:
+  web:
+    use: '@openuji/journey-adapter-playwright/plugin'
+    options:
+      browser: chromium
+      headless: '${HEADLESS:-true}'
+      actionTimeoutMs: 30000
+      navigationTimeoutMs: 30000
+    driver:
+      use: '@openuji/journey-driver-nextcloud/plugin'
+      options:
+        touchpoints: &touchpoints
+          urn:touchpoint:nextcloud-a: *aliceService
+          urn:touchpoint:nextcloud-b: *bobService
+        users: &users
+          urn:user:alice: *aliceAccount
+          urn:user:bob: *bobAccount
+        entries:
+          nextcloud.files: /apps/files/
+          nextcloud.pendingShares: /apps/files/pendingshares
+        transitionValues:
+          urn:transition:alice-enters-remote-bob: '${NEXTCLOUD_FEDERATED_RECIPIENT}'
+    observers:
+      - use: '@openuji/journey-observer-axe/plugin'
+        options:
+          reportId: nextcloud-filesharing.axe-path
+          strict: '${AXE_STRICT:-false}'
+          sourceScreenshots:
+            states: true
+            fullPage: true
+
+  android:
+    use: '@openuji/journey-adapter-appium/plugin'
+    options:
+      endpoint: '${APPIUM_URL:-http://127.0.0.1:4723/}'
+      assertionTimeoutMs: 60000
+    driver:
+      use: '@openuji/journey-driver-nextcloud-android/plugin'
+      options:
+        touchpoints: *touchpoints
+        users: *users
+        runtimeManifest: ./android/runtime.json
+        apkDirectory: ./.android
+        apk: '${NEXTCLOUD_ANDROID_APK:-}'
+        devices:
+          urn:touchpoint:nextcloud-b:
+            udid: '${ANDROID_UDID}'
+        entries:
+          nextcloud.android.notifications: notifications
+    observers:
+      - use: '@openuji/journey-observer-android-accessibility/plugin'
+        options:
+          reportId: nextcloud-filesharing.android-accessibility
+          screenshots: true
+          strict: '${ANDROID_A11Y_STRICT:-false}'
+
+profiles:
+  default:
+    use: '@openuji/journey-profiles/plugin'
+    options: { preset: default }
+  keyboard:
+    use: '@openuji/journey-profiles/plugin'
+    options: { preset: keyboard-only }
+  touch:
+    use: '@openuji/journey-profiles/plugin'
+    options:
+      id: touch
+      modalityPreference: ['urn:openuji:input:touch-tap']
+

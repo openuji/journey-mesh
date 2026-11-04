@@ -11,18 +11,30 @@
     "@openuji/journey-model-ujg": "workspace:*",
     "@openuji/journey-observer-axe": "workspace:*",
     "@openuji/journey-profiles": "workspace:*",
-    "@openuji/journey-runner": "workspace:*"
+    "@openuji/journey-runner": "workspace:*",
+    "@openuji/journey-adapter-appium": "workspace:*",
+    "@openuji/journey-driver-nextcloud-android": "workspace:*",
+    "@openuji/journey-observer-android-accessibility": "workspace:*",
+    "@openuji/journey-cli": "workspace:*",
+    "@openuji/journey-runtime": "workspace:*"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.0"
+    "appium": "3.9.0",
+    "appium-uiautomator2-driver": "8.7.3",
+    "playwright": "^1.61.1"
   },
   "scripts": {
-    "e2e": "playwright test --config playwright.config.ts",
-    "e2e:headed": "playwright test --config playwright.config.ts --headed",
-    "e2e:report": "playwright show-report playwright-report",
+    "e2e": "journey-mesh test journey.yaml --test browser-sharing",
+    "e2e:headed": "HEADLESS=false journey-mesh test journey.yaml --test browser-sharing",
+    "e2e:report": "journey-mesh report test-results",
     "stack:provision": "sh deployment/scripts/provision.sh",
     "stack:reset": "sh deployment/scripts/reset.sh",
     "stack:seed": "sh deployment/scripts/seed.sh",
-    "stack:up": "sh deployment/scripts/up.sh"
+    "stack:up": "sh deployment/scripts/up.sh",
+    "e2e:android": "node android/check-runtime.mjs && journey-mesh test journey.yaml --test native-recipient-sharing",
+    "android:apk": "node android/download-apk.mjs",
+    "android:check": "node android/check-runtime.mjs",
+    "journey:test": "journey-mesh test journey.yaml",
+    "journey:validate": "journey-mesh validate journey.yaml"
   }
 }

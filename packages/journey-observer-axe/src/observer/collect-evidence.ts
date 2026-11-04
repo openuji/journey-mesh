@@ -35,6 +35,7 @@ export async function collectAxeEvidence(
   const locator = observation.locator;
   const auditOptions = {
     testInfo: options.testInfo,
+    artifacts: options.artifacts,
     strict: options.strict,
     tags: options.tags ? [...options.tags] : undefined,
     evidenceTimeoutMs: options.evidenceTimeoutMs

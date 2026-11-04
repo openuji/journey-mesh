@@ -1,4 +1,4 @@
-import type { JourneyPlanOperationKind, JourneyPlanSource } from "@openuji/journey-execution-model";
+import type { JourneyOperationSource, JourneyPlanOperationKind, JourneyPlanSource } from "@openuji/journey-execution-model";
 
 import type { JourneyRunError } from "../errors.js";
 import type { JourneyComponentDescriptor, JourneyProfileDescriptor } from "../observers/contracts.js";
@@ -23,6 +23,7 @@ export type JourneyOperationEvidence = Readonly<{
   operationId: string;
   graphNodeId?: string;
   operationKind: JourneyPlanOperationKind;
+  source?: JourneyOperationSource;
   adapter?: JourneyComponentDescriptor;
   outcome: JourneyOutcome;
 }>;

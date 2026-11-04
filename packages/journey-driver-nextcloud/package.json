@@ -5,13 +5,16 @@
   "license": "MIT",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./service": "./src/service.ts",
+    "./plugin": "./src/plugin.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
     "@openuji/journey-adapter-playwright": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
-    "playwright": "^1.61.1"
+    "playwright": "^1.61.1",
+    "@openuji/journey-runtime": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -14,6 +14,7 @@ export type JourneyExecutionContext = {
   readonly executionId: string;
   readonly profile: JourneyProfile;
   readonly plan: JourneyPlan;
+  readonly signal?: AbortSignal;
 };
 
 /** @deprecated Use JourneyExecutionContext. */
@@ -30,7 +31,7 @@ export type JourneyAdapterCloseInput = {
 export type JourneyAdapter = {
   readonly name: string;
   readonly version?: string;
-  /** Describe the executing child without handles or allocation, before environment setup. */
+  /** Describe the child before setup; may reject unsupported model targets without allocating handles. */
   describeOperation?(operation: JourneyPlanOperation): JourneyComponentDescriptor;
   createExecution(input: JourneyAdapterExecutionInput): JourneyAdapterExecution;
 };

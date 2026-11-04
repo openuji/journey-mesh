@@ -107,6 +107,8 @@ export type PlaywrightAdapterOptions = {
   contextOptions?: BrowserContextOptions;
   browserType?: Pick<BrowserType, "launch">;
   assertionTimeoutMs?: number;
+  actionTimeoutMs?: number;
+  navigationTimeoutMs?: number;
 };
 
 export type LocatorRoot = Page | Locator;
@@ -132,6 +134,11 @@ export function playwrightAdapter(options: PlaywrightAdapterOptions): JourneyAda
   return {
     name: playwrightAdapterName,
     version: "0.1.0",
+    describeOperation(operation) {
+      if (operation.kind === "state") validatePlaywrightBindings(operation.target.bindings);
+      if (operation.kind === "transition" && operation.activation.requiredInputModalityProfiles.length) validatePlaywrightBindings(operation.activation.bindings);
+      return { name: playwrightAdapterName, version: "0.1.0" };
+    },
 
     createExecution(input) {
       return new PlaywrightAdapterExecution(input, options);
@@ -172,6 +179,10 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
 
     this.browser = this.options.browser ?? await launchBrowser(this.options);
     this.ownsBrowser = this.options.browser === undefined;
+    if (this.context.signal?.aborted) {
+      if (this.ownsBrowser) await this.browser.close();
+      this.context.signal.throwIfAborted();
+    }
     this.driverContext = {
       ...this.context,
       browser: this.browser,
@@ -182,6 +193,7 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     });
 
     await this.driverExecution.start();
+    this.context.signal?.throwIfAborted();
     this.lifecycle = "started";
   }
 
@@ -200,9 +212,11 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     });
 
     await assertPlaywrightLocator(locator, operation.target.expectedMatchCount, {
-      timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs
+      timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs,
+      signal: this.context.signal
     });
 
+    this.context.signal?.throwIfAborted();
     await this.observers.observe({
       execution: this.execution,
       expectedMatchCount: operation.target.expectedMatchCount,
@@ -223,7 +237,8 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
         throw new Error(`Transition ${operation.transition.id} requires an input modality decision`);
       }
       await driver.afterTransition(operation);
-      await this.observers.observe({
+      this.context.signal?.throwIfAborted();
+    await this.observers.observe({
         execution: this.execution,
         operation,
         stage: "transition-completed"
@@ -241,9 +256,11 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     });
 
     await assertPlaywrightLocator(locator, 1, {
-      timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs
+      timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs,
+      signal: this.context.signal
     });
 
+    this.context.signal?.throwIfAborted();
     await this.observers.observe({
       execution: this.execution,
       decision,
@@ -258,13 +275,16 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
       ? await driver.transitionValue(operation)
       : undefined;
 
+    this.context.signal?.throwIfAborted();
     await activatePlaywrightLocator(locator, command, text);
+    this.context.signal?.throwIfAborted();
     await driver.afterTransition(operation, decision);
   }
 
   async recordControlFlow(operation: ControlFlowPlanOperation): Promise<void> {
     const driver = this.requireStartedDriver();
     await driver.recordControlFlow(operation);
+    this.context.signal?.throwIfAborted();
     await this.observers.observe({
       execution: this.execution,
       operation,
@@ -278,16 +298,16 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     }
 
     this.lifecycle = "closing";
-
-    try {
-      await this.driverExecution?.close({ executionFailed: input.executionFailed });
-    } finally {
-      await closeTrackedBrowserContexts(this.browserContexts);
-      if (this.ownsBrowser && this.browser) {
-        await this.browser.close();
-      }
-      this.lifecycle = "closed";
+    const failures: unknown[] = [];
+    try { await this.driverExecution?.close({ executionFailed: input.executionFailed }); } catch (error) { failures.push(error); }
+    for (const record of this.browserContexts) {
+      try { await record.browserContext.close(); } catch (error) { failures.push(error); }
     }
+    if (this.ownsBrowser && this.browser) {
+      try { await this.browser.close(); } catch (error) { failures.push(error); }
+    }
+    this.lifecycle = "closed";
+    if (failures.length) throw new AggregateError(failures, `Playwright cleanup failed: ${failures.map((error) => error instanceof Error ? error.message : String(error)).join("; ")}`);
   }
 
   private async createBrowserContext(
@@ -297,6 +317,9 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     const id = `context-${String(this.browserContexts.length + 1).padStart(2, "0")}`;
     const label = input.label ?? id;
     const browserContext = await browser.newContext(this.options.contextOptions);
+    if (this.context.signal?.aborted) { await browserContext.close(); this.context.signal.throwIfAborted(); }
+    if (this.options.actionTimeoutMs) browserContext.setDefaultTimeout(this.options.actionTimeoutMs);
+    if (this.options.navigationTimeoutMs) browserContext.setDefaultNavigationTimeout(this.options.navigationTimeoutMs);
     const record: BrowserContextRecord = {
       id,
       label,
@@ -309,6 +332,7 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
   }
 
   private requireStartedDriver(): PlaywrightJourneyDriverExecution {
+    this.context.signal?.throwIfAborted();
     if (this.lifecycle !== "started" || !this.driverExecution) {
       throw new Error(`Playwright adapter execution ${this.context.executionId} is not started`);
     }
@@ -339,20 +363,6 @@ async function launchBrowser(options: PlaywrightAdapterOptions): Promise<Browser
     headless: options.headless ?? true,
     ...options.launchOptions
   });
-}
-
-async function closeTrackedBrowserContexts(
-  browserContexts: readonly BrowserContextRecord[]
-): Promise<void> {
-  await Promise.all(
-    browserContexts.map(async (record) => {
-      try {
-        await record.browserContext.close();
-      } catch {
-        // Context close failures were previously reported only as detail evidence.
-      }
-    })
-  );
 }
 
 export async function toPlaywrightObservationLocator(
@@ -419,6 +429,9 @@ async function toPlaywrightBindingLocator(
   binding: ResolvedObservationBinding,
   options?: LocatorResolutionOptions
 ): Promise<Locator> {
+  if (binding.surfaceInstanceResolver && binding.surfaceInstanceResolver.instanceKeyFeature.value !== "*") {
+    throw new Error(`Playwright does not support SurfaceInstanceResolver ${binding.surfaceInstanceResolver.id}`);
+  }
   if (binding.locators.length === 0) {
     throw new Error(`ObservationBinding ${binding.id} must define at least one locator`);
   }
@@ -457,7 +470,7 @@ function applyFeature(locator: Locator, feature: AccessibleFeature): Locator {
 async function assertPlaywrightLocator(
   locator: Locator,
   expectedCount: number,
-  options: { timeoutMs: number }
+  options: { timeoutMs: number; signal?: AbortSignal }
 ): Promise<void> {
   await pollUntil(
     async () => {
@@ -466,10 +479,12 @@ async function assertPlaywrightLocator(
     },
     {
       message: `Expected locator count ${expectedCount}`,
-      timeoutMs: options.timeoutMs
+      timeoutMs: options.timeoutMs,
+      signal: options.signal
     }
   );
 
+  options.signal?.throwIfAborted();
   if (expectedCount > 0) {
     await locator.first().waitFor({
       state: "visible",
@@ -480,13 +495,15 @@ async function assertPlaywrightLocator(
 
 async function pollUntil(
   check: () => Promise<string>,
-  options: { message: string; timeoutMs: number }
+  options: { message: string; timeoutMs: number; signal?: AbortSignal }
 ): Promise<void> {
   const startedAt = Date.now();
   let lastValue = "not-run";
 
   while (Date.now() - startedAt <= options.timeoutMs) {
+    options.signal?.throwIfAborted();
     lastValue = await check();
+    options.signal?.throwIfAborted();
     if (lastValue === "ok") return;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
@@ -495,7 +512,7 @@ async function pollUntil(
 }
 
 function expandedOption(locator: ResolvedAccessibleLocator): boolean | undefined {
-  const expandedFeatures = locator.features.filter((feature) => feature.name === "expanded");
+  const expandedFeatures = locator.features.filter((feature) => feature.name === "expanded" && feature.value !== "*");
   if (expandedFeatures.length === 0) return undefined;
   if (expandedFeatures.length > 1) {
     throw new Error(`AccessibleLocator ${locator.id} repeats expanded`);
@@ -518,4 +535,37 @@ function escapeRegExp(value: string): string {
 
 function assertNever(value: never): never {
   throw new Error(`Unhandled command ${value}`);
+}
+
+const supportedRoles: ReadonlySet<string> = new Set<Parameters<Page["getByRole"]>[0]>([
+  "alert", "alertdialog", "application", "article", "banner", "blockquote", "button", "caption",
+  "cell", "checkbox", "code", "columnheader", "combobox", "complementary", "contentinfo", "definition",
+  "deletion", "dialog", "directory", "document", "emphasis", "feed", "figure", "form",
+  "generic", "grid", "gridcell", "group", "heading", "img", "insertion", "link",
+  "list", "listbox", "listitem", "log", "main", "marquee", "math", "meter",
+  "menu", "menubar", "menuitem", "menuitemcheckbox", "menuitemradio", "navigation", "none", "note",
+  "option", "paragraph", "presentation", "progressbar", "radio", "radiogroup", "region", "row",
+  "rowgroup", "rowheader", "scrollbar", "search", "searchbox", "separator", "slider", "spinbutton",
+  "status", "strong", "subscript", "superscript", "switch", "tab", "table", "tablist",
+  "tabpanel", "term", "textbox", "time", "timer", "toolbar", "tooltip", "tree",
+  "treegrid", "treeitem",
+]);
+
+function validatePlaywrightBindings(bindings: readonly ResolvedObservationBinding[]): void {
+  if (!bindings.length) throw new Error("Expected at least one ObservationBinding");
+  const locator = (value: ResolvedAccessibleLocator): void => {
+    if (!value.role) throw new Error(`AccessibleLocator ${value.id} does not declare a role`);
+    if (!supportedRoles.has(value.role)) throw new Error(`Unsupported Playwright role for AccessibleLocator ${value.id}`);
+    if (value.accessibleDescription) throw new Error(`AccessibleLocator ${value.id} uses accessibleDescriptionRef, which this adapter does not yet support`);
+    expandedOption(value);
+    for (const feature of value.features) {
+      if (feature.name !== "expanded" && feature.value !== "*") throw new Error(`No Playwright adapter for AccessibleFeature ${feature.name}`);
+    }
+    value.contexts.forEach(locator);
+  };
+  for (const binding of bindings) {
+    if (binding.surfaceInstanceResolver && binding.surfaceInstanceResolver.instanceKeyFeature.value !== "*") throw new Error(`Playwright does not support SurfaceInstanceResolver ${binding.surfaceInstanceResolver.id}`);
+    if (!binding.locators.length) throw new Error(`ObservationBinding ${binding.id} must define at least one locator`);
+    binding.locators.forEach(locator);
+  }
 }

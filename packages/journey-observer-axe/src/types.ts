@@ -1,5 +1,6 @@
 import type { AxeBuilder } from "@axe-core/playwright";
-import type { TestInfo } from "@playwright/test";
+import type { JourneyArtifactStore } from "@openuji/journey-runtime/plugin";
+import type { AxeArtifactSink } from "./artifacts/artifact-target.js";
 import type { Locator, Page } from "playwright";
 import type { Immutable } from "./shared/immutable.js";
 import type { AxeEvidence } from "./observer/evidence.js";
@@ -196,7 +197,8 @@ export type AxePathAuditItemInput = Immutable<
 
 export type AxeAuditRunnerInput = {
   page: Page;
-  testInfo: TestInfo;
+  testInfo?: AxeArtifactSink;
+  artifacts?: JourneyArtifactStore;
   resolvedLocator: Locator;
   auditId: string;
   metadata?: Immutable<AxeAuditMetadata>;
@@ -208,7 +210,8 @@ export type AxeAuditRunnerInput = {
 export type AxeAuditRunner = (input: AxeAuditRunnerInput) => Promise<AxeAuditReport>;
 
 export type AxeObserverOptions = {
-  testInfo: TestInfo;
+  testInfo?: AxeArtifactSink;
+  artifacts?: JourneyArtifactStore;
   reportId: string;
   metadata?: Immutable<AxeAuditMetadata>;
   strict?: boolean;

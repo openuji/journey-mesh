@@ -1,0 +1,85 @@
+name: Nextcloud Android CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nextcloud-android-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Alice web / Bob Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      ANDROID_UDID: emulator-5554
+      APPIUM_HOME: ${{ github.workspace }}/.tmp/appium
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check Android runtime manifest
+        id: android-runtime
+        run: pnpm --filter @openuji/example-nextcloud-filesharing android:check --github-output
+      - name: Build and prepare tooling
+        run: |
+          pnpm build
+          pnpm --filter @openuji/example-nextcloud-filesharing exec playwright install --with-deps chromium
+          pnpm --filter @openuji/example-nextcloud-filesharing android:apk
+          pnpm --filter @openuji/example-nextcloud-filesharing exec appium driver install --source=local "$GITHUB_WORKSPACE/examples/nextcloud-filesharing/node_modules/appium-uiautomator2-driver"
+      - name: Configure canonical service URLs
+        run: |
+          stack_host=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
+          stack_env=$(node examples/nextcloud-filesharing/android/configure-stack.mjs "$stack_host")
+          echo "NEXTCLOUD_STACK_ENV_FILE=$stack_env" >> "$GITHUB_ENV"
+      - name: Start and provision services
+        run: |
+          pnpm --filter @openuji/example-nextcloud-filesharing stack:up
+          pnpm --filter @openuji/example-nextcloud-filesharing stack:provision
+          pnpm --filter @openuji/example-nextcloud-filesharing stack:seed
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run mixed journey on API 35
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: ${{ steps.android-runtime.outputs.api-level }}
+          target: ${{ steps.android-runtime.outputs.target }}
+          arch: ${{ steps.android-runtime.outputs.arch }}
+          profile: ${{ steps.android-runtime.outputs.profile }}
+          emulator-boot-timeout: 300
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash examples/nextcloud-filesharing/android/run-ci.sh
+      - name: Reset services
+        if: always()
+        run: pnpm --filter @openuji/example-nextcloud-filesharing stack:reset
+      - name: Upload evidence and logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nextcloud-filesharing-android
+          if-no-files-found: warn
+          path: |
+            examples/nextcloud-filesharing/test-results
+            .tmp/android-logs

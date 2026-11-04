@@ -5,11 +5,13 @@
   "license": "MIT",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./plugin": "./src/plugin.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@openuji/journey-execution-model": "workspace:*"
+    "@openuji/journey-execution-model": "workspace:*",
+    "@openuji/journey-runtime": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

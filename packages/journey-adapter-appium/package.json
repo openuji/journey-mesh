@@ -1,0 +1,21 @@
+{
+  "name": "@openuji/journey-adapter-appium",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./plugin": "./src/plugin.ts"
+  },
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@openuji/journey-runner": "workspace:*",
+    "webdriverio": "9.20.0",
+    "@openuji/journey-runtime": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

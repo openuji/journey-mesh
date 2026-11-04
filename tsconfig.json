@@ -1,15 +1,50 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/journey-core/tsconfig.json" },
-    { "path": "packages/journey-execution-model/tsconfig.json" },
-    { "path": "packages/journey-runner/tsconfig.json" },
-    { "path": "packages/journey-model-ujg/tsconfig.json" },
-    { "path": "packages/journey-profiles/tsconfig.json" },
-    { "path": "packages/journey-adapter-playwright/tsconfig.json" },
-    { "path": "packages/journey-driver-nextcloud/tsconfig.json" },
-    { "path": "packages/journey-observer-axe/tsconfig.json" },
-    { "path": "examples/nextcloud-filesharing/tsconfig.json" },
-    { "path": "tests/tsconfig.json" }
+    {
+      "path": "packages/journey-core/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-execution-model/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-runner/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-model-ujg/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-profiles/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-adapter-playwright/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-driver-nextcloud/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-observer-axe/tsconfig.json"
+    },
+    {
+      "path": "examples/nextcloud-filesharing/tsconfig.json"
+    },
+    {
+      "path": "tests/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-adapter-appium/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-driver-nextcloud-android/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-observer-android-accessibility/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-runtime/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-cli/tsconfig.json"
+    }
   ]
 }

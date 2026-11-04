@@ -1,3 +1,4 @@
+import { axeArtifacts } from "../artifacts/artifact-target.js";
 import { observerName, wcag22Tags } from "../constants.js";
 import type { AxeObserver, AxeObserverOptions, AxePathAuditReport, AxeAccessibilitySummaryReport } from "../types.js";
 import { attachAxeAccessibilitySummaryReport, attachAxePathAuditReport, testResultDirectoryName } from "../artifacts/report-attachments.js";
@@ -16,6 +17,7 @@ type PublishedReports = Readonly<{
 }>;
 
 export function axeObserver(options: AxeObserverOptions): AxeObserver {
+  const artifacts = axeArtifacts(options);
   const journal = new AxeEvidenceJournal();
   const auditRunner = options.auditRunner ?? runAxeAudit;
   // The artifact boundary publishes one completed bundle, never provisional path items.
@@ -57,10 +59,10 @@ export function axeObserver(options: AxeObserverOptions): AxeObserver {
         generatedAt: pathReport.createdAt,
         delivery: options.accessibilitySummary?.delivery,
         artifactBaseHref: options.accessibilitySummary?.artifactBaseHref,
-        testResultDirectoryName: testResultDirectoryName(options.testInfo)
+        testResultDirectoryName: testResultDirectoryName(artifacts)
       });
-      const pathReportPath = await attachAxePathAuditReport(options.testInfo, pathReport);
-      const accessibilitySummaryPath = await attachAxeAccessibilitySummaryReport(options.testInfo, accessibilitySummary);
+      const pathReportPath = await attachAxePathAuditReport(artifacts, pathReport);
+      const accessibilitySummaryPath = await attachAxeAccessibilitySummaryReport(artifacts, accessibilitySummary);
       published = Object.freeze({ pathReport, pathReportPath, accessibilitySummary, accessibilitySummaryPath });
 
       const failures = strictAxeFailureReports(evidence, result.runId);

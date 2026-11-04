@@ -42,6 +42,19 @@ example uses ARIA roles; the execution model does not enforce a universal role
 vocabulary. Playwright resolves supported roles through `getByRole`. Native
 adapters must explicitly map or reject roles, names, features, and contexts.
 
+An `AccessibleFeature` value of `"*"` leaves that feature unconstrained, including
+features without a runtime mapping. A wildcard surface-instance key likewise
+adds no instance restriction. Both adapters currently reject concrete
+surface-instance resolvers instead of silently ignoring them. Concrete features
+still require an adapter mapping; role vocabularies and name matching remain
+runtime-specific. The shared translation table in `tests/android.test.ts` covers
+these wildcard and resolver rules.
+
+Native queries count only targets with `displayed="true"`. Ancestor contexts
+retain their structural role even when the ancestor itself is invisible: a
+Compose container can have visible descendants. Contexts, including nested
+contexts, preserve the complete preceding scope.
+
 ## Profiles across touchpoints
 
 `inputModalityProfile({ id, modalityPreference })` selects among model-declared
@@ -174,9 +187,11 @@ await runJourney({
 });
 ```
 
-Here `web` and `android` are adapters supplied by the caller. The runnable
-Nextcloud example currently assigns one Playwright instance to both touchpoints;
-Appium is not implemented yet.
+Here `web` and `android` are adapters supplied by a programmatic caller. The
+Nextcloud example instead declares its journey/adapter pairs in `journey.yaml`:
+`browser-sharing` assigns both journeys to one web adapter;
+`native-recipient-sharing` assigns Bob's selected journey to Appium and its native
+accessibility observer. Both are ordinary tests executed by the same CLI.
 
 The router selects by exact `operation.touchpointId` and checks every route before
 shared fixture setup. One child execution is created per distinct adapter object
@@ -190,8 +205,12 @@ Entry navigation is tracked per actor and touchpoint. The runner owns operation
 order, progress, and functional evidence.
 
 An adapter can implement the resource-free `describeOperation(operation)` method
-to report the actual executing child. The runner resolves descriptions before
-setup and emits a sanitized name/version descriptor in each operation's
+to report the actual executing child and reject unsupported model targets.
+Routing delegates this hook only for that child's operations. Appium compiles
+state and input-transition targets here, before shared fixtures, session creation,
+or earlier web actions. No-input transitions do not resolve targets;
+profile-specific modality decisions are still checked when selected.
+The runner resolves descriptions before setup and emits a sanitized name/version descriptor in each operation's
 `evidence.adapter`, including failed operations. `onRunStarted` still identifies
 the top-level composition. Runtime observers stay on their child adapters;
 Playwright observers receive pages/locators, and an Android observer can receive
@@ -226,6 +245,12 @@ import { runJourney } from "@openuji/journey-runner";
 import { consoleJourneyProgress, renderJourneyRunSummary } from "@openuji/journey-runner/console";
 ```
 
+The VM portability check runs that main module graph without Node builtins or
+Node globals. It exercises state, input and no-input transitions, effects,
+control flow, progress, evidence, and failure cleanup. Node types remain available
+for the separate console entry point; this is a runtime guard for the runner,
+not a browser compatibility claim for WebdriverIO or the artifact collectors.
+
 Existing adapter factories and single-adapter calls remain valid. Callers must
 replace `decision.command` with an adapter-owned mapping from `decision.modality.id`,
 accept an optional decision in transition hooks, and update console imports.
@@ -237,5 +262,20 @@ appear only in the earlier `profiles-assessed` event.
 Legacy evidence without adapter provenance remains readable through the optional
 `JourneyOperationEvidence.adapter` field.
 
-See [Nextcloud Android migration notes](nextcloud-android.md) for driver reuse,
-mobile model bindings, and the native observer work still to be implemented.
+See [Nextcloud Android](nextcloud-android.md) for the implemented native adapter,
+model bindings, evidence processing, setup, and validation limits.
+
+## YAML test composition
+
+The normal entrypoint is now `journey-mesh test journey.yaml`. A test explicitly
+selects each journey and assigns its named adapter. The generic runtime composes
+one plan per test, with shared fixtures and reporting per profile; there are no
+platform-specific test harnesses. See [YAML tests](yaml-tests.md) for configuration,
+plugin construction, artifacts, cancellation, and compatibility.
+
+`routedAdapter(resolve)` owns the shared routing lifecycle; `touchpointAdapter`
+remains its compatible touchpoint-based wrapper. Operation evidence optionally
+includes detached source references for composed test/journey occurrences.
+Axe accepts a shared `artifacts` store as an alternative to legacy `testInfo`.
+The runner context optionally carries `signal`; custom environment hooks should
+cooperate with cancellation, while teardown must still run after cancellation.

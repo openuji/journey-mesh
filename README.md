@@ -47,7 +47,7 @@ graph TD
 
 - Model bindings own model parsing, validation, source references, and execution-plan generation.
 - Automation adapters own generic execution against an automation runtime such as Playwright.
-- Application drivers own service-specific navigation, fixture setup, session isolation, and effect handling.
+- Application drivers own service-specific navigation and session isolation; shared environments own fixture setup, effect verification, and cleanup.
 - Interaction profiles own input-modality selection such as default pointer-first and keyboard-only operation.
 - Observers own evidence collection and redaction for functional, accessibility, reliability, and deployment signals.
 - Reporters own versioned output formats, human-readable summaries, and CI-compatible artifacts.
@@ -62,8 +62,8 @@ commands and service fixtures out of the adapter contract.
 
 ## Available Today
 
-- Generic runner, UJG binding, Playwright adapter, Nextcloud driver, default and keyboard-only profiles, and axe observer.
-- A working Nextcloud federated file-sharing example with local stack scripts and CI artifact upload.
+- Generic runner, UJG binding, Playwright and Android Appium adapters, Nextcloud web/native drivers, composed input profiles, and web/native accessibility observers.
+- A Nextcloud federated file-sharing example with web and explicit Alice-web/Bob-Android modes, local stack scripts, and CI artifact upload.
 - Published demo and known-good report:
   [journey-mesh.openuji.org](https://journey-mesh.openuji.org/) and
   [nextcloud-filesharing.axe-path](https://journey-mesh.openuji.org/accessibility/filesharing/artifacts/nextcloud-filesharing.axe-path).
@@ -77,16 +77,29 @@ The proposed roadmap adds multipath-aware execution, stable extension contracts,
 
 The roadmap is proposed and is not a delivery commitment.
 
-## Nextcloud Example
+## YAML journey tests
 
-See [`examples/nextcloud-filesharing/README.md`](examples/nextcloud-filesharing/README.md) for the concise architecture flow, sample e2e output, and artifact links.
+Declare selected journeys and their adapters in one YAML file, then execute them
+with the same command for any runtime combination:
 
+```sh
+journey-mesh test journey.yaml --test browser-sharing
+journey-mesh test journey.yaml # all declared tests; prepare every configured runtime first
+journey-mesh validate journey.yaml --test browser-sharing
+journey-mesh report test-results
+```
+
+The [Nextcloud configuration](examples/nextcloud-filesharing/journey.yaml) contains
+both browser-only and native-recipient tests. Fixtures and reporting belong to
+the test; adapters own browser and device resources. See the
+[configuration and plugin contract](docs/yaml-tests.md) and
+[example setup](examples/nextcloud-filesharing/README.md).
 
 ## Limitations
 
 - Current execution compiles the checked-in UJG into a linear plan; ambiguous branches are rejected.
 - The only application driver in this repository is the Nextcloud reference driver.
-- The example requires a local Docker-based Nextcloud stack and `host.docker.internal` resolution.
+- The example requires a Docker-based Nextcloud stack with canonical URLs reachable by its runtimes; Android mode also requires a dedicated emulator/device.
 - Accessibility evidence supports journey review, but it is not WCAG certification.
 - Extension APIs and report formats are prototype contracts.
 - Roadmap items are proposed work, not committed delivery.

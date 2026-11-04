@@ -6,13 +6,15 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./summary-reporter": "./src/summary-reporter.ts"
+    "./summary-reporter": "./src/summary-reporter.ts",
+    "./plugin": "./src/plugin.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
     "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
-    "playwright": "^1.61.1"
+    "playwright": "^1.61.1",
+    "@openuji/journey-runtime": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

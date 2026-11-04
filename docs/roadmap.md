@@ -32,7 +32,7 @@ These capabilities are verified in this repository:
 | Nextcloud driver | Supports the federated file-sharing reference example. |
 | Interaction profiles | Includes default and keyboard-only profiles. |
 | Axe observer | Records accessibility observations and produces path and summary reports. |
-| Normalized evidence | Attaches Journey Mesh evidence JSON to Playwright results. |
+| Normalized evidence | Writes portable evidence JSON and links observer artifacts from a standalone report. |
 | Nextcloud federation example | Provisions two local instances for Alice and Bob and runs the file-sharing journey. |
 | CI | Provides package checks and a pull-request workflow for the Nextcloud filesharing example. |
 

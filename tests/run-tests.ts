@@ -87,7 +87,7 @@ import {
   type TransitionPlanOperation
 } from "@openuji/journey-runner";
 import { consoleJourneyProgress, renderJourneyRunSummary } from "@openuji/journey-runner/console";
-import { nextcloudDriverOptions, nextcloudEnvironment } from "../examples/nextcloud-filesharing/environment.js";
+import { nextcloudEnvironment } from "./nextcloud-environment.js";
 
 const fixtureUrl = new URL("../examples/nextcloud-filesharing/ujg/filesharing.ujg.jsonld", import.meta.url);
 
@@ -574,7 +574,7 @@ const tests: TestCase[] = [
       const forbiddenObserverCast = "as " + "JourneyObserver";
       for (const sourceFile of [...packageSources, ...testSources, ...exampleSources]) {
         assert.equal(
-          sourceFile.source.includes(forbiddenObserverCast),
+          new RegExp(`\\b${forbiddenObserverCast}\\b`).test(sourceFile.source),
           false,
           `Playwright observers must not be registered through JourneyObserver casts: ${sourceFile.path}`
         );
@@ -2446,6 +2446,7 @@ const tests: TestCase[] = [
         {
           operationId: plan.operations[0].id,
           graphNodeId: (plan.operations[0] as StatePlanOperation).state.id,
+          source: plan.operations[0].source,
           operationKind: "state",
           adapter: { name: "fake-adapter" },
           outcome: { kind: "passed" }
@@ -2611,6 +2612,7 @@ const tests: TestCase[] = [
         {
           operationId: state.id,
           graphNodeId: state.state.id,
+          source: state.source,
           operationKind: "state",
           adapter: { name: "@openuji/journey-adapter-playwright", version: "0.1.0" },
           outcome: { kind: "passed" }
@@ -2911,6 +2913,7 @@ const tests: TestCase[] = [
         {
           operationId: state.id,
           graphNodeId: state.state.id,
+          source: state.source,
           operationKind: "state",
           adapter: { name: "@openuji/journey-adapter-playwright", version: "0.1.0" },
           outcome: { kind: "passed" }
@@ -2918,6 +2921,7 @@ const tests: TestCase[] = [
         {
           operationId: transition.id,
           graphNodeId: transition.transition.id,
+          source: transition.source,
           operationKind: "transition",
           adapter: { name: "@openuji/journey-adapter-playwright", version: "0.1.0" },
           outcome: { kind: "passed" }
@@ -2925,6 +2929,7 @@ const tests: TestCase[] = [
         {
           operationId: controlFlow.id,
           graphNodeId: controlFlow.transition.id,
+          source: controlFlow.source,
           operationKind: "control-flow",
           adapter: { name: "@openuji/journey-adapter-playwright", version: "0.1.0" },
           outcome: { kind: "passed" }
@@ -3611,17 +3616,12 @@ const tests: TestCase[] = [
   {
     name: "nextcloud example config supplies fixture semantics outside reusable packages",
     async run() {
-      assert.equal(typeof nextcloudDriverOptions.entries["nextcloud.files"], "function");
-      assert.equal(typeof nextcloudDriverOptions.entries["nextcloud.pendingShares"], "function");
       assert.equal(
         typeof nextcloudEnvironment.verifyEffect,
         "function"
       );
       assert.equal(typeof nextcloudEnvironment.setup, "function");
       assert.equal(typeof nextcloudEnvironment.teardown, "function");
-      assert.equal(nextcloudDriverOptions.setupExecution, undefined);
-      assert.equal(nextcloudDriverOptions.teardownExecution, undefined);
-      assert.equal(nextcloudDriverOptions.effectHandlers, undefined);
 
       const exampleSource = await readFile(
         new URL("../examples/nextcloud-filesharing/environment.ts", import.meta.url),
@@ -3655,98 +3655,6 @@ const tests: TestCase[] = [
 
       assert.equal(composeSource.split(pinnedNextcloudImage).length - 1, 2);
       assert.doesNotMatch(composeSource, /nextcloud:stable-apache/);
-    }
-  },
-  {
-    name: "nextcloud example exposes e2e scripts without pnpm run collision",
-    async run() {
-      const source = await readFile(
-        new URL("../examples/nextcloud-filesharing/package.json", import.meta.url),
-        "utf8"
-      );
-      const packageJson = JSON.parse(source) as { scripts?: Record<string, string> };
-      assert.equal(packageJson.scripts?.e2e, "playwright test --config playwright.config.ts");
-      assert.equal(
-        packageJson.scripts?.["e2e:headed"],
-        "playwright test --config playwright.config.ts --headed"
-      );
-      assert.equal(
-        packageJson.scripts?.["e2e:report"],
-        "playwright show-report playwright-report"
-      );
-      assert.equal(packageJson.scripts?.run, undefined);
-      assert.equal(packageJson.scripts?.["run:headed"], undefined);
-    }
-  },
-  {
-    name: "nextcloud example defines local Playwright Test config and evidence attachment",
-    async run() {
-      const configSource = await readFile(
-        new URL("../examples/nextcloud-filesharing/playwright.config.ts", import.meta.url),
-        "utf8"
-      );
-      assert.match(configSource, /testMatch:\s*"run\.ts"/);
-      assert.match(configSource, /workers:\s*1/);
-      assert.doesNotMatch(configSource, /trace:\s*"retain-on-failure"/);
-      assert.doesNotMatch(configSource, /screenshot:\s*"only-on-failure"/);
-      assert.doesNotMatch(configSource, /video:\s*"retain-on-failure"/);
-      assert.match(configSource, /UJG_EXAMPLE_TIMEOUT_MS/);
-      assert.match(configSource, /outputDir:\s*"test-results"/);
-      assert.match(configSource, /outputFolder:\s*"playwright-report"/);
-      assert.match(configSource, /@openuji\/journey-adapter-playwright\/summary-reporter/);
-      assert.doesNotMatch(configSource, /\.\/ujg-summary-reporter\.ts/);
-
-      const runSource = await readFile(
-        new URL("../examples/nextcloud-filesharing/run.ts", import.meta.url),
-        "utf8"
-      );
-      assert.match(runSource, /from "@playwright\/test"/);
-      assert.match(runSource, /test\("executes the federated file-sharing UJG journey"/);
-      assert.match(runSource, /const runner = createNextcloudFilesharingRunner\(\);[\s\S]*test\("executes the federated file-sharing UJG journey"[\s\S]*await runner\.run\(\{\s*browser:\s*browser as Browser,\s*testInfo\s*\}\)/);
-      assert.match(runSource, /Architecture sketch:/);
-      assert.match(runSource, /UJG_EVIDENCE_STDOUT/);
-      assert.match(runSource, /browser:\s*browser as Browser/);
-      assert.doesNotMatch(runSource, /printJourneyRunSummary/);
-      assert.doesNotMatch(runSource, /testInfo\.attach\("ujg-evidence\.json"/);
-      assert.doesNotMatch(runSource, /testInfo\.attach\("ujg-summary\.json"/);
-      assert.doesNotMatch(runSource, /function attachRunSummary/);
-      assert.doesNotMatch(runSource, /function runSummary/);
-      assert.match(runSource, /playwrightJsonEvidenceReporter/);
-      assert.match(runSource, /playwrightJourneyRunSummaryReporter/);
-      assert.match(runSource, /axeObserver/);
-      assert.match(runSource, /sourceScreenshots:\s*\{/);
-      assert.match(runSource, /states:\s*true/);
-      assert.match(runSource, /executionObservers:\s*\[axe\]/);
-      assert.doesNotMatch(runSource, /observers:\s*\[axe\]/);
-      assert.match(runSource, /const reporters = \[evidence,\s*axe,\s*summary\]/);
-      assert.doesNotMatch(runSource, /preflightErrors/);
-      assert.match(runSource, /await reportJourneyResult\(\{/);
-      assert.match(runSource, /reporters,\s*result/s);
-      assert.doesNotMatch(
-        runSource,
-        /profiles:\s*\[defaultProfile\(\),\s*keyboardOnlyProfile\(\)\],\s*reporters:/
-      );
-      assert.match(runSource, /expect\(reporting\.errors/);
-      assert.match(runSource, /nextcloud-filesharing\.axe-path/);
-      assert.match(runSource, /latestAccessibilitySummaryReportPath/);
-      assert.match(runSource, /accessibility/);
-      assert.doesNotMatch(runSource, /UJG journey \$\{result\.ok/);
-      assert.doesNotMatch(runSource, /console\.log\(`  evidence:/);
-
-      const reporterSource = await readFile(
-        new URL("../packages/journey-adapter-playwright/src/summary-reporter.ts", import.meta.url),
-        "utf8"
-      );
-      assert.match(reporterSource, /renderJourneyRunSummary/);
-      assert.match(reporterSource, /ujg-summary\.json/);
-      assert.match(reporterSource, /onEnd/);
-
-      const adapterSource = await readFile(
-        new URL("../packages/journey-adapter-playwright/src/reporters.ts", import.meta.url),
-        "utf8"
-      );
-      assert.match(adapterSource, /playwrightJsonEvidenceReporter/);
-      assert.match(adapterSource, /playwrightJourneyRunSummaryReporter/);
     }
   },
   {

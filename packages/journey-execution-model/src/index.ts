@@ -18,6 +18,7 @@ export type EntryBindingRef = LabeledRef & {
 
 export type AccessibleFeature = LabeledRef & {
   name: string;
+  /** '*' leaves this feature unconstrained in the execution model. */
   value: string;
 };
 

@@ -1,3 +1,6 @@
+import { mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
+import { axeArtifacts } from "../artifacts/artifact-target.js";
 import type { PlaywrightOperationObservation } from "@openuji/journey-adapter-playwright";
 import { errorToJourneyRunError } from "@openuji/journey-runner";
 
@@ -16,14 +19,16 @@ export async function captureStateSourceScreenshot(
   }
 
   const href = `${safeFileSegment(journeyItem.auditId)}.source.playwright-screenshot.png`;
-  const path = options.testInfo.outputPath(href);
+  const artifacts = axeArtifacts(options);
+  const path = artifacts.outputPath(href);
   try {
+    await mkdir(dirname(path), { recursive: true });
     await observation.page.screenshot({
       path,
       fullPage: options.sourceScreenshots.fullPage ?? true,
       timeout: options.sourceScreenshots.timeoutMs
     });
-    await options.testInfo.attach(`playwright-${safeFileSegment(journeyItem.auditId)}-source.png`, {
+    await artifacts.attach(`playwright-${safeFileSegment(journeyItem.auditId)}-source.png`, {
       path, contentType: "image/png"
     });
     return Object.freeze({ kind: "captured", href });

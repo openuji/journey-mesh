@@ -37,6 +37,7 @@ export type RunJourneyOptions = {
   observers?: readonly JourneyObserver[];
   progress?: readonly JourneyProgressSink[];
   runId?: string;
+  signal?: AbortSignal;
 };
 
 type ProfileExecutionOutcome = Readonly<{
@@ -81,7 +82,8 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
     runId,
     executionId: `${safeSegment(profile.id)}-${String(profileIndex + 1).padStart(2, "0")}`,
     profile,
-    plan: options.plan
+    plan: options.plan,
+    signal: options.signal
   })));
   const assessments = Object.freeze(candidates.map((candidate) => candidate.assessment));
   await progress.publish({ type: "profiles-assessed", runId, assessments });
@@ -167,6 +169,7 @@ async function runProfileBody(
   descriptor: JourneyExecutionDescriptor
 ): Promise<ExecutionBatch> {
   try {
+    input.context.signal?.throwIfAborted();
     await input.observerDispatcher.executionStarted(descriptor);
     // Routing is resolved before shared fixture setup can change service state.
     const adapters = new Map(input.context.plan.operations.map((operation) => [
@@ -185,7 +188,11 @@ async function withEnvironment(
   execute: () => Promise<ExecutionBatch>
 ): Promise<ExecutionBatch> {
   if (!environment) return attemptBatch(execute);
-  const setup = await attempt(() => environment.setup?.(context));
+  const setup = await attempt(async () => {
+    context.signal?.throwIfAborted();
+    await environment.setup?.(context);
+    context.signal?.throwIfAborted();
+  });
   const batch = setup.kind === "failed" ? emptyBatch(setup) : await attemptBatch(execute);
   const cleanup = await attempt(() => environment.teardown?.({
     context,
@@ -200,10 +207,16 @@ async function withAdapter(
 ): Promise<ExecutionBatch> {
   try {
     const execution = input.adapter.createExecution({ context: input.context });
-    const startup = await attempt(() => execution.start());
+    // Closing on cancellation also interrupts pending browser/device commands.
+    let closing: Promise<void> | undefined;
+    const close = (executionFailed: boolean) => closing ??= Promise.resolve().then(() => execution.close({ executionFailed }));
+    const onAbort = () => { void close(true).catch(() => {}); };
+    input.context.signal?.addEventListener("abort", onAbort, { once: true });
+    const startup = await attempt(() => abortable(() => execution.start(), input.context.signal));
     const batch = startup.kind === "failed" ? emptyBatch(startup) :
       await attemptBatch(() => runOperations(input, execution, adapters));
-    const cleanup = await attempt(() => execution.close({ executionFailed: batch.outcome.kind === "failed" }));
+    input.context.signal?.removeEventListener("abort", onAbort);
+    const cleanup = await attempt(() => close(batch.outcome.kind === "failed"));
     return Object.freeze({ ...batch, outcome: combineOutcomes(batch.outcome, cleanup, "cleanup") });
   } catch (error) {
     // createExecution failed before returning a handle that could be closed.
@@ -230,7 +243,7 @@ async function runOperations(
     await progress.publish({ type: "operation-started", ...operationProgress });
     const startedAt = performance.now();
     try {
-      const entries = await executeOperation(input, adapterExecution, previous.entries, operation);
+      const entries = await abortable(() => executeOperation(input, adapterExecution, previous.entries, operation), context.signal);
       await progress.publish({
         type: "operation-completed", ...operationProgress, durationMs: performance.now() - startedAt
       });
@@ -262,13 +275,17 @@ async function executeOperation(
   currentEntries: EntryMap,
   operation: JourneyPlanOperation
 ): Promise<EntryMap> {
+  input.context.signal?.throwIfAborted();
   const entries = await ensureEntryOpen(adapterExecution, currentEntries, operation);
+  input.context.signal?.throwIfAborted();
   if (operation.kind === "state") {
     await adapterExecution.assertState(operation);
   } else if (operation.kind === "transition") {
     const decision = await selectInputModality(operation, input.context);
     await adapterExecution.performTransition(operation, decision);
+    input.context.signal?.throwIfAborted();
     for (const effect of operation.effects) {
+      input.context.signal?.throwIfAborted();
       await input.environment?.verifyEffect?.({ context: input.context, operation, effect, decision });
     }
   } else {
@@ -294,7 +311,7 @@ async function ensureEntryOpen(
   operation: JourneyPlanOperation
 ): Promise<EntryMap> {
   if (!operation.entryBinding) return entries;
-  const sessionKey = JSON.stringify([operation.actorId, operation.touchpointId]);
+  const sessionKey = JSON.stringify([operation.source?.references?.journeyItemId, operation.actorId, operation.touchpointId]);
   const entryKey = `${operation.entry.id}\u0000${operation.entryBinding.id}\u0000${operation.entryBinding.value}`;
   if (entries.get(sessionKey) === entryKey) return entries;
   await execution.openEntry(operation);
@@ -339,8 +356,23 @@ function operationEvidence(
   return Object.freeze({
     operationId: operation.id,
     ...(typeof graphNodeId === "string" ? { graphNodeId } : {}),
+    ...(operation.source?.references ? { source: Object.freeze({ references: Object.freeze(Object.fromEntries(
+      Object.entries(operation.source.references).map(([key, value]) => [key, typeof value === "string" ? value : Object.freeze([...value])])
+    )) }) } : {}),
     operationKind: operation.kind,
     adapter,
     outcome
+  });
+}
+
+/** Observe cooperative cancellation without leaking abort listeners or unhandled work. */
+async function abortable<T>(work: () => Promise<T> | T, signal?: AbortSignal): Promise<T> {
+  signal?.throwIfAborted();
+  if (!signal) return work();
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason ?? new Error("Journey cancelled"));
+    signal.addEventListener("abort", abort, { once: true });
+    Promise.resolve().then(() => { signal.throwIfAborted(); return work(); }).then(resolve, reject)
+      .finally(() => signal.removeEventListener("abort", abort));
   });
 }
