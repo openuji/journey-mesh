@@ -1,5 +1,6 @@
 node_modules/
 dist/
+*.tsbuildinfo
 .tmp/
 examples/nextcloud-filesharing/playwright-report/
 examples/nextcloud-filesharing/test-results/
