@@ -5,18 +5,24 @@
   "license": "MIT",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./plugin": "./src/plugin.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
     "@axe-core/playwright": "^4.10.2",
     "@openuji/journey-adapter-playwright": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
-    "@playwright/test": "^1.62.0",
-    "playwright": "^1.61.1"
+    "playwright": "^1.61.1",
+    "@openuji/journey-runtime": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3"
   }
 }

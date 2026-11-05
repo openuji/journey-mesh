@@ -6,8 +6,15 @@
     "outDir": "dist",
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"],
+  "include": [
+    "src/**/*.ts"
+  ],
   "references": [
-    { "path": "../journey-execution-model/tsconfig.json" }
+    {
+      "path": "../journey-execution-model/tsconfig.json"
+    },
+    {
+      "path": "../journey-runtime/tsconfig.json"
+    }
   ]
 }

@@ -1,103 +1,71 @@
 import type {
-  ControlFlowPlanOperation,
   InputModalityDecision,
   JourneyPlan,
   JourneyPlanOperation,
-  StatePlanOperation,
   TransitionPlanOperation
 } from "@openuji/journey-execution-model";
 
-import {
-  errorToJourneyRunError,
-  type JourneyRunError
-} from "./errors.js";
-import {
-  componentDescriptor,
-  executionDescriptor,
-  profileDescriptor
-} from "./observers/contracts.js";
-import type { JourneyObserver } from "./observers/contracts.js";
+import type {
+  JourneyAdapter,
+  JourneyAdapterExecution,
+  JourneyExecutionContext,
+  JourneyProfile
+} from "./adapters/contracts.js";
+import type { JourneyEnvironment } from "./environment/contracts.js";
+import { errorToJourneyRunError } from "./errors.js";
+import { componentDescriptor, executionDescriptor, profileDescriptor } from "./observers/contracts.js";
+import type { JourneyComponentDescriptor, JourneyExecutionDescriptor, JourneyObserver } from "./observers/contracts.js";
 import { JourneyObserverDispatcher } from "./observers/journey-observer-dispatcher.js";
 import type { JourneyProgressSink } from "./progress/contracts.js";
 import { JourneyProgressDispatcher } from "./progress/progress-dispatcher.js";
-import { buildResult, resultOk } from "./results/build-result.js";
+import { assessProfiles } from "./profiles/assess-profiles.js";
+import { buildResult } from "./results/build-result.js";
 import type {
   ExecutionResult,
   JourneyExecutionEvidence,
   JourneyOperationEvidence,
+  JourneyOutcome,
   RunResult
 } from "./results/contracts.js";
-
-export type JourneyExecutionContext = {
-  readonly runId: string;
-  readonly executionId: string;
-  readonly profile: JourneyProfile;
-  readonly plan: JourneyPlan;
-};
-
-/**
- * @deprecated Use JourneyExecutionContext.
- */
-export type AdapterExecutionContext = JourneyExecutionContext;
-
-export type JourneyAdapterCloseInput = {
-  readonly executionFailed: boolean;
-};
-
-export type JourneyAdapter = {
-  readonly name: string;
-  readonly version?: string;
-  createExecution(input: JourneyAdapterExecutionInput): JourneyAdapterExecution;
-};
-
-export type JourneyAdapterExecutionInput = {
-  readonly context: JourneyExecutionContext;
-};
-
-export type JourneyAdapterExecution = {
-  start(): Promise<void> | void;
-  openEntry(operation: JourneyPlanOperation): Promise<void> | void;
-  assertState(operation: StatePlanOperation): Promise<void> | void;
-  performTransition(
-    operation: TransitionPlanOperation,
-    decision: InputModalityDecision
-  ): Promise<void> | void;
-  recordControlFlow(operation: ControlFlowPlanOperation): Promise<void> | void;
-  close(input: JourneyAdapterCloseInput): Promise<void> | void;
-};
-
-export type JourneyProfile = {
-  id: string;
-  label?: string;
-  selectInputModality(
-    operation: TransitionPlanOperation,
-    context: JourneyExecutionContext
-  ): Promise<InputModalityDecision> | InputModalityDecision;
-};
+import { combineOutcomes, failedOutcome, passedOutcome } from "./results/outcomes.js";
 
 export type RunJourneyOptions = {
   plan: JourneyPlan;
   adapter: JourneyAdapter;
-  profiles: JourneyProfile[];
-  observers?: JourneyObserver[];
+  profiles: readonly JourneyProfile[];
+  environment?: JourneyEnvironment;
+  observers?: readonly JourneyObserver[];
   progress?: readonly JourneyProgressSink[];
   runId?: string;
+  signal?: AbortSignal;
 };
 
-type ProfileExecutionOutcome = {
-  readonly execution: ExecutionResult;
-  readonly evidence: JourneyExecutionEvidence;
-};
+type ProfileExecutionOutcome = Readonly<{
+  execution: ExecutionResult;
+  evidence: JourneyExecutionEvidence;
+}>;
+
+type ExecutionBatch = Readonly<{
+  outcome: JourneyOutcome;
+  operations: readonly JourneyOperationEvidence[];
+}>;
+
+type EntryMap = ReadonlyMap<string, string>;
+
+type OperationFold = ExecutionBatch & Readonly<{ entries: EntryMap }>;
+
+type ProfileExecutionInput = Readonly<{
+  adapter: JourneyAdapter;
+  context: JourneyExecutionContext;
+  environment?: JourneyEnvironment;
+  observerDispatcher: JourneyObserverDispatcher;
+  progress: JourneyProgressDispatcher;
+}>;
 
 export async function runJourney(options: RunJourneyOptions): Promise<RunResult> {
-  if (options.profiles.length === 0) {
-    throw new Error("runJourney requires at least one profile");
-  }
+  if (options.profiles.length === 0) throw new Error("runJourney requires at least one profile");
 
   const runId = options.runId ?? `run-${new Date().toISOString()}`;
-  const executions: ExecutionResult[] = [];
-  const evidenceExecutions: JourneyExecutionEvidence[] = [];
-  const errors: JourneyRunError[] = [];
   const observerDispatcher = new JourneyObserverDispatcher(options.observers ?? []);
   const progress = new JourneyProgressDispatcher(options.progress ?? []);
 
@@ -110,64 +78,50 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
   });
   const runStartedAt = performance.now();
 
+  const candidates = await assessProfiles(options.profiles.map((profile, profileIndex) => Object.freeze({
+    runId,
+    executionId: `${safeSegment(profile.id)}-${String(profileIndex + 1).padStart(2, "0")}`,
+    profile,
+    plan: options.plan,
+    signal: options.signal
+  })));
+  const assessments = Object.freeze(candidates.map((candidate) => candidate.assessment));
+  await progress.publish({ type: "profiles-assessed", runId, assessments });
+
   const runStartError = await observerDispatcher.runStarted({
     adapter: componentDescriptor(options.adapter),
     plan: options.plan,
-    profiles: options.profiles.map(profileDescriptor),
+    profiles: Object.freeze(options.profiles.map(profileDescriptor)),
+    assessments,
     runId
   });
-  if (runStartError) {
-    errors.push(runStartError);
-  } else {
-    for (const [profileIndex, profile] of options.profiles.entries()) {
-      const executionId = `${safeSegment(profile.id)}-${String(profileIndex + 1).padStart(2, "0")}`;
-      const context: JourneyExecutionContext = {
-        runId,
-        executionId,
-        profile,
-        plan: options.plan
-      };
-      const descriptor = executionDescriptor(context);
-
+  const outcomes = runStartError ? Object.freeze([]) :
+    await candidates.reduce<Promise<readonly ProfileExecutionOutcome[]>>(async (pending, candidate) => {
+      const previous = await pending;
+      if (candidate.assessment.kind !== "applicable") return previous;
       const outcome = await runProfileExecution({
         adapter: options.adapter,
-        context,
-        descriptor,
+        context: candidate.context,
+        environment: options.environment,
         observerDispatcher,
-        plan: options.plan,
-        progress,
-        profile
+        progress
       });
+      return Object.freeze([...previous, outcome]);
+    }, Promise.resolve(Object.freeze([])));
 
-      executions.push(outcome.execution);
-      evidenceExecutions.push(outcome.evidence);
-      if (outcome.execution.error) errors.push(outcome.execution.error);
-    }
-  }
-
-  const resultBeforeRunCompletion = buildResult({
-    errors,
-    evidenceExecutions,
-    executions,
-    ok: resultOk(executions, errors),
+  const completed = {
+    assessments,
+    evidenceExecutions: outcomes.map((outcome) => outcome.evidence),
+    executions: outcomes.map((outcome) => outcome.execution),
     plan: options.plan,
-    runId
-  });
-
-  const completionError =
-    await observerDispatcher.runCompleted(resultBeforeRunCompletion);
-  if (completionError) {
-    errors.push(completionError);
-  }
-
-  const finalResult = buildResult({
-    errors,
-    evidenceExecutions,
-    executions,
-    ok: resultOk(executions, errors),
-    plan: options.plan,
-    runId
-  });
+    runId,
+    runErrors: runStartError ? [runStartError] : []
+  };
+  const resultBeforeRunCompletion = buildResult(completed);
+  const completionError = await observerDispatcher.runCompleted(resultBeforeRunCompletion);
+  const finalResult = completionError
+    ? buildResult({ ...completed, runErrors: [...completed.runErrors, completionError] })
+    : resultBeforeRunCompletion;
 
   await progress.publish({
     type: "run-completed",
@@ -175,195 +129,218 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
     ok: finalResult.ok,
     durationMs: performance.now() - runStartedAt
   });
-
   return finalResult;
 }
 
-async function runProfileExecution({
-  adapter,
-  context,
-  descriptor,
-  observerDispatcher,
-  plan,
-  progress,
-  profile
-}: {
-  adapter: JourneyAdapter;
-  context: JourneyExecutionContext;
-  descriptor: ReturnType<typeof executionDescriptor>;
-  observerDispatcher: JourneyObserverDispatcher;
-  plan: JourneyPlan;
-  progress: JourneyProgressDispatcher;
-  profile: JourneyProfile;
-}): Promise<ProfileExecutionOutcome> {
-  let ok = true;
-  let executionError: JourneyRunError | undefined;
-  const currentEntryByActor = new Map<string, string>();
-  let adapterExecution: JourneyAdapterExecution | undefined;
-  const operations: JourneyOperationEvidence[] = [];
-
+async function runProfileExecution(input: ProfileExecutionInput): Promise<ProfileExecutionOutcome> {
+  const { context, observerDispatcher, progress } = input;
+  const descriptor = executionDescriptor(context);
   await progress.publish({
     type: "execution-started",
     runId: context.runId,
     executionId: context.executionId,
-    profileId: profile.id
+    profileId: context.profile.id
   });
   const executionStartedAt = performance.now();
-
-  try {
-    await observerDispatcher.executionStarted(descriptor);
-
-    adapterExecution = adapter.createExecution({ context });
-    await adapterExecution.start();
-
-    for (const [operationIndex, operation] of plan.operations.entries()) {
-      const position = operationIndex + 1;
-      const operationProgress = {
-        executionId: context.executionId,
-        profileId: profile.id,
-        operation,
-        position,
-        total: plan.operations.length
-      };
-      await progress.publish({ type: "operation-started", ...operationProgress });
-      const operationStartedAt = performance.now();
-
-      try {
-        await executeOperation({
-          adapterExecution,
-          context,
-          currentEntryByActor,
-          operation,
-          profile
-        });
-        await progress.publish({
-          type: "operation-completed",
-          ...operationProgress,
-          durationMs: performance.now() - operationStartedAt
-        });
-        operations.push(operationEvidence(operation, true));
-      } catch (error) {
-        const operationError = errorToJourneyRunError(error);
-        await progress.publish({
-          type: "operation-failed",
-          ...operationProgress,
-          durationMs: performance.now() - operationStartedAt,
-          error: operationError
-        });
-        operations.push(operationEvidence(operation, false, operationError));
-        throw operationError;
-      }
-    }
-  } catch (error) {
-    ok = false;
-    executionError = errorToJourneyRunError(error);
-  } finally {
-    if (adapterExecution) {
-      try {
-        await adapterExecution.close({ executionFailed: !ok });
-      } catch (error) {
-        ok = false;
-        executionError = errorToJourneyRunError(error);
-      }
-    }
-  }
-
-  const executionBeforeObserver: ExecutionResult = {
-    executionId: context.executionId,
-    profileId: profile.id,
-    ok,
-    error: executionError
-  };
-  const observerCompletionError = await notifyExecutionCompleted({
-    descriptor,
-    execution: executionBeforeObserver,
-    observerDispatcher
-  });
-  if (observerCompletionError) {
-    ok = false;
-    executionError = observerCompletionError;
-  }
+  const batch = await runProfileBody(input, descriptor);
+  const beforeObserver = executionResult(context, batch.outcome);
+  const completionError = await observerDispatcher.executionCompleted(descriptor, beforeObserver);
+  const execution = completionError
+    ? executionResult(context, combineOutcomes(batch.outcome, failedOutcome(completionError), "execution observer"))
+    : beforeObserver;
 
   await progress.publish({
     type: "execution-completed",
-    executionId: context.executionId,
-    profileId: profile.id,
-    ok,
+    result: execution,
     durationMs: performance.now() - executionStartedAt
   });
-
-  return {
-    execution: {
+  return Object.freeze({
+    execution,
+    evidence: Object.freeze({
       executionId: context.executionId,
-      profileId: profile.id,
-      ok,
-      error: executionError
-    },
-    evidence: {
-      executionId: context.executionId,
-      profileId: profile.id,
-      operations
-    }
-  };
+      profileId: context.profile.id,
+      operations: batch.operations
+    })
+  });
 }
 
-async function executeOperation({
-  adapterExecution,
-  context,
-  currentEntryByActor,
-  operation,
-  profile
-}: {
-  adapterExecution: JourneyAdapterExecution;
-  context: JourneyExecutionContext;
-  currentEntryByActor: Map<string, string>;
-  operation: JourneyPlanOperation;
-  profile: JourneyProfile;
-}): Promise<void> {
-  await ensureEntryOpen({
-    adapterExecution,
-    currentEntryByActor,
-    operation
-  });
-
-  if (operation.kind === "state") {
-    await adapterExecution.assertState(operation);
-  } else if (operation.kind === "transition") {
-    const decision = await profile.selectInputModality(operation, context);
-    await adapterExecution.performTransition(operation, decision);
-  } else {
-    await adapterExecution.recordControlFlow(operation);
+async function runProfileBody(
+  input: ProfileExecutionInput,
+  descriptor: JourneyExecutionDescriptor
+): Promise<ExecutionBatch> {
+  try {
+    input.context.signal?.throwIfAborted();
+    await input.observerDispatcher.executionStarted(descriptor);
+    // Routing is resolved before shared fixture setup can change service state.
+    const adapters = new Map(input.context.plan.operations.map((operation) => [
+      operation,
+      Object.freeze(componentDescriptor(input.adapter.describeOperation?.(operation) ?? input.adapter))
+    ]));
+    return await withEnvironment(input.context, input.environment, () => withAdapter(input, adapters));
+  } catch (error) {
+    return emptyBatch(failedOutcome(error));
   }
 }
 
-async function ensureEntryOpen({
-  adapterExecution,
-  currentEntryByActor,
-  operation
-}: {
-  adapterExecution: JourneyAdapterExecution;
-  currentEntryByActor: Map<string, string>;
-  operation: JourneyPlanOperation;
-}): Promise<void> {
-  if (!operation.entryBinding) return;
-
-  const entryKey = `${operation.entry.id}\u0000${operation.entryBinding.id}\u0000${operation.entryBinding.value}`;
-  if (currentEntryByActor.get(operation.actorId) === entryKey) return;
-
-  await adapterExecution.openEntry(operation);
-  currentEntryByActor.set(operation.actorId, entryKey);
+async function withEnvironment(
+  context: JourneyExecutionContext,
+  environment: JourneyEnvironment | undefined,
+  execute: () => Promise<ExecutionBatch>
+): Promise<ExecutionBatch> {
+  if (!environment) return attemptBatch(execute);
+  const setup = await attempt(async () => {
+    context.signal?.throwIfAborted();
+    await environment.setup?.(context);
+    context.signal?.throwIfAborted();
+  });
+  const batch = setup.kind === "failed" ? emptyBatch(setup) : await attemptBatch(execute);
+  const cleanup = await attempt(() => environment.teardown?.({
+    context,
+    executionFailed: batch.outcome.kind === "failed"
+  }));
+  return Object.freeze({ ...batch, outcome: combineOutcomes(batch.outcome, cleanup, "cleanup") });
 }
 
-async function notifyExecutionCompleted({
-  descriptor,
-  execution,
-  observerDispatcher
-}: {
-  descriptor: ReturnType<typeof executionDescriptor>;
-  execution: ExecutionResult;
-  observerDispatcher: JourneyObserverDispatcher;
-}): Promise<JourneyRunError | undefined> {
-  return observerDispatcher.executionCompleted(descriptor, execution);
+async function withAdapter(
+  input: ProfileExecutionInput,
+  adapters: ReadonlyMap<JourneyPlanOperation, JourneyComponentDescriptor>
+): Promise<ExecutionBatch> {
+  try {
+    const execution = input.adapter.createExecution({ context: input.context });
+    // Closing on cancellation also interrupts pending browser/device commands.
+    let closing: Promise<void> | undefined;
+    const close = (executionFailed: boolean) => closing ??= Promise.resolve().then(() => execution.close({ executionFailed }));
+    const onAbort = () => { void close(true).catch(() => {}); };
+    input.context.signal?.addEventListener("abort", onAbort, { once: true });
+    const startup = await attempt(() => abortable(() => execution.start(), input.context.signal));
+    const batch = startup.kind === "failed" ? emptyBatch(startup) :
+      await attemptBatch(() => runOperations(input, execution, adapters));
+    input.context.signal?.removeEventListener("abort", onAbort);
+    const cleanup = await attempt(() => close(batch.outcome.kind === "failed"));
+    return Object.freeze({ ...batch, outcome: combineOutcomes(batch.outcome, cleanup, "cleanup") });
+  } catch (error) {
+    // createExecution failed before returning a handle that could be closed.
+    return emptyBatch(failedOutcome(error));
+  }
+}
+
+async function runOperations(
+  input: ProfileExecutionInput,
+  adapterExecution: JourneyAdapterExecution,
+  adapters: ReadonlyMap<JourneyPlanOperation, JourneyComponentDescriptor>
+): Promise<ExecutionBatch> {
+  const { context, progress } = input;
+  const completed = await context.plan.operations.reduce<Promise<OperationFold>>(async (pending, operation, index) => {
+    const previous = await pending;
+    if (previous.outcome.kind === "failed") return previous;
+    const operationProgress = {
+      executionId: context.executionId,
+      profileId: context.profile.id,
+      operation,
+      position: index + 1,
+      total: context.plan.operations.length
+    };
+    await progress.publish({ type: "operation-started", ...operationProgress });
+    const startedAt = performance.now();
+    try {
+      const entries = await abortable(() => executeOperation(input, adapterExecution, previous.entries, operation), context.signal);
+      await progress.publish({
+        type: "operation-completed", ...operationProgress, durationMs: performance.now() - startedAt
+      });
+      return Object.freeze({
+        entries,
+        outcome: passedOutcome,
+        operations: Object.freeze([...previous.operations, operationEvidence(operation, adapters.get(operation)!, passedOutcome)])
+      });
+    } catch (error) {
+      const outcome = failedOutcome(error);
+      await progress.publish({
+        type: "operation-failed", ...operationProgress,
+        durationMs: performance.now() - startedAt,
+        error: errorToJourneyRunError(error)
+      });
+      return Object.freeze({
+        entries: previous.entries,
+        outcome,
+        operations: Object.freeze([...previous.operations, operationEvidence(operation, adapters.get(operation)!, outcome)])
+      });
+    }
+  }, Promise.resolve(Object.freeze({ ...emptyBatch(passedOutcome), entries: new Map<string, string>() })));
+  return Object.freeze({ outcome: completed.outcome, operations: completed.operations });
+}
+
+async function executeOperation(
+  input: ProfileExecutionInput,
+  adapterExecution: JourneyAdapterExecution,
+  currentEntries: EntryMap,
+  operation: JourneyPlanOperation
+): Promise<EntryMap> {
+  input.context.signal?.throwIfAborted();
+  const entries = await ensureEntryOpen(adapterExecution, currentEntries, operation);
+  input.context.signal?.throwIfAborted();
+  if (operation.kind === "state") {
+    await adapterExecution.assertState(operation);
+  } else if (operation.kind === "transition") {
+    const decision = await selectInputModality(operation, input.context);
+    await adapterExecution.performTransition(operation, decision);
+    input.context.signal?.throwIfAborted();
+    for (const effect of operation.effects) {
+      input.context.signal?.throwIfAborted();
+      await input.environment?.verifyEffect?.({ context: input.context, operation, effect, decision });
+    }
+  } else {
+    await adapterExecution.recordControlFlow(operation);
+  }
+  return entries;
+}
+
+async function selectInputModality(
+  operation: TransitionPlanOperation,
+  context: JourneyExecutionContext
+): Promise<InputModalityDecision | undefined> {
+  if (operation.activation.requiredInputModalityProfiles.length === 0) return undefined;
+  if (!context.profile.selectInputModality) {
+    throw new Error(`Profile ${context.profile.id} has no input modality selector for transition ${operation.transition.id}`);
+  }
+  return context.profile.selectInputModality(operation, context);
+}
+
+async function ensureEntryOpen(
+  execution: JourneyAdapterExecution,
+  entries: EntryMap,
+  operation: JourneyPlanOperation
+): Promise<EntryMap> {
+  if (!operation.entryBinding) return entries;
+  const sessionKey = JSON.stringify([operation.source?.references?.journeyItemId, operation.actorId, operation.touchpointId]);
+  const entryKey = `${operation.entry.id}\u0000${operation.entryBinding.id}\u0000${operation.entryBinding.value}`;
+  if (entries.get(sessionKey) === entryKey) return entries;
+  await execution.openEntry(operation);
+  return new Map([...entries, [sessionKey, entryKey]]);
+}
+
+async function attempt(work: () => Promise<void> | void): Promise<JourneyOutcome> {
+  try {
+    await work();
+    return passedOutcome;
+  } catch (error) {
+    return failedOutcome(error);
+  }
+}
+
+async function attemptBatch(work: () => Promise<ExecutionBatch>): Promise<ExecutionBatch> {
+  try {
+    return await work();
+  } catch (error) {
+    return emptyBatch(failedOutcome(error));
+  }
+}
+
+function emptyBatch(outcome: JourneyOutcome): ExecutionBatch {
+  return Object.freeze({ outcome, operations: Object.freeze([]) });
+}
+
+function executionResult(context: JourneyExecutionContext, outcome: JourneyOutcome): ExecutionResult {
+  return Object.freeze({ executionId: context.executionId, profileId: context.profile.id, outcome });
 }
 
 function safeSegment(value: string): string {
@@ -372,15 +349,30 @@ function safeSegment(value: string): string {
 
 function operationEvidence(
   operation: JourneyPlanOperation,
-  ok: boolean,
-  error?: JourneyRunError
+  adapter: JourneyComponentDescriptor,
+  outcome: JourneyOutcome
 ): JourneyOperationEvidence {
   const graphNodeId = operation.source?.references?.graphNodeId;
-  return {
+  return Object.freeze({
     operationId: operation.id,
     ...(typeof graphNodeId === "string" ? { graphNodeId } : {}),
+    ...(operation.source?.references ? { source: Object.freeze({ references: Object.freeze(Object.fromEntries(
+      Object.entries(operation.source.references).map(([key, value]) => [key, typeof value === "string" ? value : Object.freeze([...value])])
+    )) }) } : {}),
     operationKind: operation.kind,
-    ok,
-    ...(error ? { error } : {})
-  };
+    adapter,
+    outcome
+  });
+}
+
+/** Observe cooperative cancellation without leaking abort listeners or unhandled work. */
+async function abortable<T>(work: () => Promise<T> | T, signal?: AbortSignal): Promise<T> {
+  signal?.throwIfAborted();
+  if (!signal) return work();
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason ?? new Error("Journey cancelled"));
+    signal.addEventListener("abort", abort, { once: true });
+    Promise.resolve().then(() => { signal.throwIfAborted(); return work(); }).then(resolve, reject)
+      .finally(() => signal.removeEventListener("abort", abort));
+  });
 }

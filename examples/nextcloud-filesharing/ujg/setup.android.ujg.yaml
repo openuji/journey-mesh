@@ -1,0 +1,21 @@
+# Compact authoring companion for setup.android.ujg.jsonld (UJG 1.0-rc1).
+ujgTarget: 1.0-rc1
+phase:
+  id: urn:phase:setup
+  label: Setup
+journey:
+  id: urn:journey:bob-android-setup
+  actor: urn:user:bob
+  touchpoint: urn:touchpoint:nextcloud-b
+  entryBinding: nextcloud.android.application
+  states:
+    - welcome
+    - server-form
+    - server-entered
+    - web-login-ready
+    - credentials-ready
+    - username-entered
+    - password-entered
+    - authorization-ready
+    - account-connected
+    - authenticated

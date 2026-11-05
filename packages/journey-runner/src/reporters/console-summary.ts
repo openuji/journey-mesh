@@ -1,6 +1,7 @@
 import { relative } from "node:path";
 
 import type { ExecutionResult, RunResult } from "../results/contracts.js";
+import { executionPassed } from "../results/outcomes.js";
 
 export type JourneyRunSummaryColorMode = "auto" | "always" | "never";
 
@@ -41,7 +42,7 @@ export function renderJourneyRunSummary(
 ): string {
   const colors = colorFns(options);
   const result = input.result;
-  const counts = executionCounts(result.executions);
+  const counts = executionCounts(result);
   const status = result.ok
     ? colors.green("PASS")
     : counts.passed > 0
@@ -61,13 +62,21 @@ export function renderJourneyRunSummary(
     `${colors.bold("UJG Journey")} ${status}`,
     `  ${colors.dim("run")}      ${result.runId}`,
     `  ${colors.dim("plan")}     ${result.plan.id}`,
-    `  ${colors.dim("profiles")} ${counts.passed}/${counts.total} passed`
+    `  ${colors.dim("profiles")} ${counts.passed}/${counts.total} passed${counts.skipped ? `; ${counts.skipped} not applicable` : ""}`
   );
 
-  if (result.executions.length > 0) {
+  if (result.executions.length > 0 || result.assessments.some((assessment) => assessment.kind !== "applicable")) {
     lines.push("", colors.bold("Profiles"));
     for (const execution of result.executions) {
       lines.push(formatExecution(execution, colors));
+    }
+    for (const assessment of result.assessments) {
+      if (assessment.kind === "not-applicable") {
+        lines.push(`  ${assessment.profile.id.padEnd(14)} ${colors.yellow("not applicable")} ${assessment.reason}`);
+      }
+      if (assessment.kind === "failed") {
+        lines.push(`  ${assessment.profile.id.padEnd(14)} ${colors.red("assessment failed")} ${assessment.error.message}`);
+      }
     }
   }
 
@@ -91,18 +100,20 @@ export function renderJourneyRunSummary(
 }
 
 function formatExecution(execution: ExecutionResult, colors: ColorFns): string {
-  const status = execution.ok ? colors.green("ok") : colors.red("failed");
-  const message = execution.error ? ` ${colors.dim(execution.error.message)}` : "";
+  const status = executionPassed(execution) ? colors.green("ok") : colors.red("failed");
+  const message = execution.outcome.kind === "failed" ? ` ${colors.dim(execution.outcome.error.message)}` : "";
   return `  ${execution.profileId.padEnd(14)} ${status}${message}`;
 }
 
-function executionCounts(executions: readonly ExecutionResult[]): {
+function executionCounts(result: RunResult): {
   total: number;
   passed: number;
+  skipped: number;
 } {
   return {
-    total: executions.length,
-    passed: executions.filter((execution) => execution.ok).length
+    total: result.executions.length,
+    passed: result.executions.filter(executionPassed).length,
+    skipped: result.assessments.filter((assessment) => assessment.kind === "not-applicable").length
   };
 }
 

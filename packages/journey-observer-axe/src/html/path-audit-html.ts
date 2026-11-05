@@ -85,7 +85,7 @@ function renderPathItem(item: AxePathAuditItem): string {
   ].join("\n");
 }
 
-function renderPathItemsByProfile(items: AxePathAuditItem[]): string {
+function renderPathItemsByProfile(items: readonly AxePathAuditItem[]): string {
   const profiles = groupPathItemsByProfile(items);
   return [
     "<section>",
@@ -102,17 +102,14 @@ function renderPathItemsByProfile(items: AxePathAuditItem[]): string {
 }
 
 function groupPathItemsByProfile(
-  items: AxePathAuditItem[]
+  items: readonly AxePathAuditItem[]
 ): Array<{ profileId: string; profileItems: AxePathAuditItem[] }> {
-  const groups = new Map<string, AxePathAuditItem[]>();
-  for (const item of items) {
+  return items.reduce<Array<{ profileId: string; profileItems: AxePathAuditItem[] }>>((groups, item) => {
     const profileId = profileIdForItem(item);
-    const profileItems = groups.get(profileId) ?? [];
-    profileItems.push(item);
-    groups.set(profileId, profileItems);
-  }
-
-  return [...groups.entries()].map(([profileId, profileItems]) => ({ profileId, profileItems }));
+    return groups.some((group) => group.profileId === profileId)
+      ? groups.map((group) => group.profileId === profileId ? { ...group, profileItems: [...group.profileItems, item] } : group)
+      : [...groups, { profileId, profileItems: [item] }];
+  }, []);
 }
 
 function renderSourceScreenshot(item: AxePathAuditItem): string {

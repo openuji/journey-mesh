@@ -3,8 +3,9 @@ import type {
   AxeNode,
   AxePathAuditItem
 } from "../types.js";
+import type { Immutable } from "./immutable.js";
 
-export function stringTargets(node: AxeNode): string[] {
+export function stringTargets(node: Immutable<AxeNode>): string[] {
   return node.target.map((target) => Array.isArray(target) ? target.join(" ") : String(target));
 }
 
@@ -21,7 +22,7 @@ export function profileIdForItem(item: AxePathAuditItem): string {
   return stringMetadataValue(item.metadata, "profileId") ?? item.groupId?.split(":")[0] ?? "unprofiled";
 }
 
-export function stringMetadataValue(metadata: AxeAuditMetadata, key: string): string | undefined {
+export function stringMetadataValue(metadata: Immutable<AxeAuditMetadata>, key: string): string | undefined {
   const value = metadata[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }

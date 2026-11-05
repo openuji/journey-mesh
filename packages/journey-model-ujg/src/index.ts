@@ -22,6 +22,7 @@ import type {
   StatePlanOperation,
   TransitionPlanOperation
 } from "@openuji/journey-execution-model";
+import { immutableJourneyPlan } from "@openuji/journey-execution-model";
 
 export type UjgNode = {
   "@id": string;
@@ -88,14 +89,17 @@ export async function loadUjgDocument(input: URL | string): Promise<UjgDocument>
   return parseUjgDocument(await readFile(input, "utf8"));
 }
 
+export type CompileUjgJourneyPlanOptions = { journeyId?: string };
+
 export async function compileUjgJourneyPlan(
-  input: UjgDocument | URL | string
+  input: UjgDocument | URL | string,
+  options: CompileUjgJourneyPlanOptions = {}
 ): Promise<JourneyPlan> {
   const document = isUjgDocument(input) ? input : await loadUjgDocument(input);
-  return compileDocument(document);
+  return compileDocument(document, options);
 }
 
-function compileDocument(document: UjgDocument): JourneyPlan {
+function compileDocument(document: UjgDocument, options: CompileUjgJourneyPlanOptions): JourneyPlan {
   const index = indexDocument(document);
   const assignmentByComposite = buildCompositeAssignments(index);
   const parentByComposite = buildParentCompositeMap(index);
@@ -103,8 +107,15 @@ function compileDocument(document: UjgDocument): JourneyPlan {
   const steps = nodesOfType(index, "Step");
   const phaseById = new Map(phases.map((phase) => [phase["@id"], phase]));
   const operations: JourneyPlanOperation[] = [];
+  const selectedComposites = options.journeyId ? journeyComposites(index, options.journeyId) : undefined;
+  const selectedSteps = selectedComposites
+    ? steps.filter((step) => selectedComposites.has(requiredString(step.compositeStateRef, `${step["@id"]}.compositeStateRef`)))
+    : steps;
+  if (selectedComposites && selectedSteps.length === 0) {
+    throw new Error(`Journey ${options.journeyId} has no executable steps`);
+  }
 
-  for (const step of sortedSteps(index, steps, phaseById)) {
+  for (const step of sortedSteps(index, selectedSteps, phaseById)) {
     const compositeStateId = requiredString(
       step.compositeStateRef,
       `${step["@id"]}.compositeStateRef`
@@ -117,7 +128,7 @@ function compileDocument(document: UjgDocument): JourneyPlan {
     const phaseId = requiredString(step.phaseRef, `${step["@id"]}.phaseRef`);
     requireNode(index, phaseId, "Phase");
     const compositeContext = compositeContextFor(index, compositeStateId);
-    const path = buildStepPath(index, compositeStateId, parentByComposite);
+    const path = buildStepPath(index, compositeStateId, parentByComposite, selectedComposites);
 
     for (const pathItem of path) {
       operations.push(
@@ -135,14 +146,15 @@ function compileDocument(document: UjgDocument): JourneyPlan {
     }
   }
 
-  return {
-    id: `${document["@id"]}:plan:v1`,
+  return immutableJourneyPlan({
+    id: `${document["@id"]}:plan:v1${options.journeyId ? `:${options.journeyId}` : ""}`,
     source: {
       model: "ujg",
-      documentId: document["@id"]
+      documentId: document["@id"],
+      ...(options.journeyId ? { references: { journeyId: options.journeyId } } : {})
     },
     operations
-  };
+  });
 }
 
 function operationForPathItem({
@@ -219,7 +231,8 @@ function operationForPathItem({
 function buildStepPath(
   index: NodeIndex,
   compositeStateId: string,
-  parentByComposite: Map<string, string>
+  parentByComposite: Map<string, string>,
+  selectedComposites?: ReadonlySet<string>
 ): PathItem[] {
   const context = compositeContextFor(index, compositeStateId);
   const transitionRefs = requiredStringArray(
@@ -266,7 +279,8 @@ function buildStepPath(
         childCompositeId: compositeStateId,
         exitId: toNode["@id"],
         index,
-        parentByComposite
+        parentByComposite,
+        selectedComposites
       });
 
       if (continuation) {
@@ -291,15 +305,17 @@ function parentContinuationForExit({
   childCompositeId,
   exitId,
   index,
-  parentByComposite
+  parentByComposite,
+  selectedComposites
 }: {
   childCompositeId: string;
   exitId: string;
   index: NodeIndex;
   parentByComposite: Map<string, string>;
+  selectedComposites?: ReadonlySet<string>;
 }): { transition: AnyNode; toEntry?: AnyNode } | undefined {
   const parentCompositeId = parentByComposite.get(childCompositeId);
-  if (!parentCompositeId) return undefined;
+  if (!parentCompositeId || (selectedComposites && !selectedComposites.has(parentCompositeId))) return undefined;
 
   const parentContext = compositeContextFor(index, parentCompositeId);
   const transitionRefs = optionalStringArray(parentContext.journey.transitionRefs);
@@ -600,6 +616,25 @@ function resolveMessageMeta(index: NodeIndex, meta: AnyNode): string {
   }
 
   return requiredString(messages[0].value, `${messages[0]["@id"]}.value`);
+}
+
+/** Select the owning composite and its descendants without compiling unrelated paths. */
+function journeyComposites(index: NodeIndex, journeyId: string): ReadonlySet<string> {
+  requireNode(index, journeyId, "Journey");
+  const owners = nodesOfType(index, "CompositeState").filter((node) => node.subjourneyId === journeyId);
+  if (owners.length !== 1) throw new Error(`Journey ${journeyId} must have exactly one owning CompositeState`);
+  const selected = new Set<string>();
+  const visit = (composite: AnyNode): void => {
+    if (selected.has(composite["@id"])) throw new Error(`Cycle or repeated composite in journey ${journeyId}`);
+    selected.add(composite["@id"]);
+    const { journey } = compositeContextFor(index, composite["@id"]);
+    for (const ref of requiredStringArray(journey.stateRefs, `${journey["@id"]}.stateRefs`)) {
+      const node = index.byId.get(ref);
+      if (node && hasType(node, "CompositeState")) visit(node);
+    }
+  };
+  visit(owners[0]);
+  return selected;
 }
 
 function buildCompositeAssignments(index: NodeIndex): Map<string, CompositeAssignment> {

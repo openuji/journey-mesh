@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import {
   renderJourneyRunSummary,
   type JourneyRunSummaryInput
-} from "@openuji/journey-runner";
+} from "@openuji/journey-runner/console";
 
 type PlaywrightAttachment = {
   name: string;

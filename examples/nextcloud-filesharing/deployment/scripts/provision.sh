@@ -41,6 +41,7 @@ configure_instance() {
 
 	occ "$service" app:enable federation >/dev/null 2>&1 || true
 	occ "$service" app:enable files_sharing >/dev/null 2>&1 || true
+	occ "$service" app:disable firstrunwizard >/dev/null 2>&1 || true
 	occ "$service" config:system:set trusted_domains 0 --value="$host"
 	occ "$service" config:system:set trusted_domains 1 --value="$host:$port"
 	occ "$service" config:system:set trusted_domains 2 --value="$service"

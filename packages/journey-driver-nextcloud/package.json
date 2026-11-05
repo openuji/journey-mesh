@@ -5,16 +5,31 @@
   "license": "MIT",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./service": "./src/service.ts",
+    "./web": "./src/web.ts",
+    "./web/plugin": "./src/web-plugin.ts",
+    "./android": "./src/android.ts",
+    "./android/plugin": "./src/android-plugin.ts",
+    "./federated-sharing": "./src/federated-sharing.ts",
+    "./federated-sharing/plugin": "./src/federated-sharing-plugin.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@openuji/journey-adapter-playwright": "workspace:*",
+    "@openuji/journey-driver-web": "workspace:*",
+    "@openuji/journey-driver-android": "workspace:*",
+    "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
-    "playwright": "^1.61.1"
+    "@openuji/journey-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
   }
 }

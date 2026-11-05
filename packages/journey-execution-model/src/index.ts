@@ -18,15 +18,17 @@ export type EntryBindingRef = LabeledRef & {
 
 export type AccessibleFeature = LabeledRef & {
   name: string;
+  /** '*' leaves this feature unconstrained in the execution model. */
   value: string;
 };
 
 export type ResolvedAccessibleLocator = LabeledRef & {
+  /** Model role identifier. Adapters map its vocabulary to their runtime or reject it. */
   role?: string;
   accessibleName?: string;
   accessibleDescription?: string;
-  features: AccessibleFeature[];
-  contexts: ResolvedAccessibleLocator[];
+  features: readonly AccessibleFeature[];
+  contexts: readonly ResolvedAccessibleLocator[];
 };
 
 export type ResolvedInputModality = LabeledRef;
@@ -36,6 +38,7 @@ export const keyboardSpaceInputModalityId = "observability:keyboard-space" as co
 export const keyboardEnterInputModalityId = "observability:keyboard-enter" as const;
 export const pointerInputModalityId = "observability:pointer" as const;
 
+/** Built-in conveniences, not an exhaustive list of executable modalities. */
 export const journeyInputModalityIds = [
   keyboardTextEntryInputModalityId,
   keyboardSpaceInputModalityId,
@@ -43,14 +46,14 @@ export const journeyInputModalityIds = [
   pointerInputModalityId
 ] as const;
 
-export type JourneyInputModalityId = (typeof journeyInputModalityIds)[number];
+/** @deprecated Use string; modality IDs are open model identifiers. */
+export type JourneyInputModalityId = string;
 
-export type ResolvedJourneyInputModality = ResolvedInputModality & {
-  id: JourneyInputModalityId;
-};
+/** @deprecated Use ResolvedInputModality; this alias does not restrict modality IDs. */
+export type ResolvedJourneyInputModality = ResolvedInputModality;
 
 export type ResolvedInputModalityProfile = LabeledRef & {
-  modalities: ResolvedInputModality[];
+  modalities: readonly ResolvedInputModality[];
 };
 
 export type ResolvedSurfaceInstanceResolver = LabeledRef & {
@@ -62,8 +65,8 @@ export type ResolvedObservationBinding = LabeledRef & {
   eventId: string;
   eventLabel?: string;
   expectedMatchCount?: number;
-  requiredInputModalityProfiles: ResolvedInputModalityProfile[];
-  locators: ResolvedAccessibleLocator[];
+  requiredInputModalityProfiles: readonly ResolvedInputModalityProfile[];
+  locators: readonly ResolvedAccessibleLocator[];
   surfaceInstanceResolver?: ResolvedSurfaceInstanceResolver;
 };
 
@@ -73,13 +76,13 @@ export type ResolvedStateObservation = {
   surfaceId: string;
   surfaceLabel?: string;
   expectedMatchCount: number;
-  bindings: ResolvedObservationBinding[];
+  bindings: readonly ResolvedObservationBinding[];
 };
 
 export type ResolvedStateObservationTarget = {
   observation: ResolvedStateObservation;
   expectedMatchCount: number;
-  bindings: ResolvedObservationBinding[];
+  bindings: readonly ResolvedObservationBinding[];
 };
 
 export type GraphVertexRef = LabeledRef & {
@@ -96,22 +99,22 @@ export type ResolvedTransitionActivation = {
   effectRef?: string;
   surfaceId: string;
   surfaceLabel?: string;
-  requiredInputModalityProfiles: ResolvedInputModalityProfile[];
-  bindings: ResolvedObservationBinding[];
+  requiredInputModalityProfiles: readonly ResolvedInputModalityProfile[];
+  bindings: readonly ResolvedObservationBinding[];
 };
 
 export type ResolvedArtifact = LabeledRef & {
   nameRef?: string;
   name?: string;
   sourceTouchpointRef?: string;
-  targetTouchpointRefs: string[];
+  targetTouchpointRefs: readonly string[];
 };
 
 export type ResolvedEffect = LabeledRef & {
-  producedRefs: string[];
-  consumedRefs: string[];
-  produced: ResolvedArtifact[];
-  consumed: ResolvedArtifact[];
+  producedRefs: readonly string[];
+  consumedRefs: readonly string[];
+  produced: readonly ResolvedArtifact[];
+  consumed: readonly ResolvedArtifact[];
 };
 
 export type JourneySourceReferenceValue = string | readonly string[];
@@ -154,7 +157,7 @@ export type TransitionPlanOperation = JourneyPlanOperationBase<"transition"> & {
   to: GraphVertexRef;
   surface: LabeledRef;
   activation: ResolvedTransitionActivation;
-  effects: ResolvedEffect[];
+  effects: readonly ResolvedEffect[];
 };
 
 export type ControlFlowPlanOperation = JourneyPlanOperationBase<"control-flow"> & {
@@ -177,15 +180,21 @@ export type JourneyPlan = CoreJourneyPlan<JourneyPlanOperation> & {
   readonly source?: JourneyPlanSource;
 };
 
-export type JourneyInteractionCommand =
-  | "pointer-click"
-  | "keyboard-enter"
-  | "keyboard-space"
-  | "keyboard-text-entry";
+/** Detach and deeply freeze a compiled plan before it crosses into execution. */
+export function immutableJourneyPlan<T extends JourneyPlan>(plan: T): T {
+  const copy = structuredClone(plan);
+  const freeze = (value: unknown): void => {
+    if (value !== null && typeof value === "object") {
+      Object.values(value).forEach(freeze);
+      Object.freeze(value);
+    }
+  };
+  freeze(copy);
+  return copy;
+}
 
 export type InputModalityDecision = {
   profileId: string;
   inputModalityProfile: ResolvedInputModalityProfile;
-  modality: ResolvedJourneyInputModality;
-  command: JourneyInteractionCommand;
+  modality: ResolvedInputModality;
 };

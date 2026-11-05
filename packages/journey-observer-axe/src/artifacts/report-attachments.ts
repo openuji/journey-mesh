@@ -1,4 +1,4 @@
-import type { TestInfo } from "@playwright/test";
+import type { AxeArtifactSink } from "./artifact-target.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 
@@ -18,12 +18,13 @@ import { renderAxeAuditHtml } from "../html/axe-audit-html.js";
 import { renderAxePathAuditHtml } from "../html/path-audit-html.js";
 
 export async function attachAxeAuditReport(
-  testInfo: TestInfo,
+  testInfo: AxeArtifactSink,
   report: AxeAuditReport
 ): Promise<void> {
   const jsonPath = testInfo.outputPath(auditJsonFileName(report.auditId));
   const htmlPath = testInfo.outputPath(auditHtmlFileName(report.auditId));
 
+  await mkdir(dirname(jsonPath), { recursive: true });
   await writeFile(jsonPath, JSON.stringify(report, null, 2));
   await writeFile(htmlPath, renderAxeAuditHtml(report));
 
@@ -38,7 +39,7 @@ export async function attachAxeAuditReport(
 }
 
 export async function attachAxePathAuditReport(
-  testInfo: TestInfo,
+  testInfo: AxeArtifactSink,
   report: AxePathAuditReport
 ): Promise<string> {
   const jsonPath = testInfo.outputPath(pathAuditJsonFileName(report.reportId));
@@ -48,6 +49,7 @@ export async function attachAxePathAuditReport(
     pathAuditHtmlFileName(report.reportId)
   );
 
+  await mkdir(dirname(jsonPath), { recursive: true });
   await writeFile(jsonPath, JSON.stringify(report, null, 2));
   await writeFile(htmlPath, renderAxePathAuditHtml(report));
   await mkdir(dirname(attachmentHtmlPath), { recursive: true });
@@ -66,11 +68,12 @@ export async function attachAxePathAuditReport(
 }
 
 export async function attachAxeAccessibilitySummaryReport(
-  testInfo: TestInfo,
+  testInfo: AxeArtifactSink,
   report: AxeAccessibilitySummaryReport
 ): Promise<string> {
   const jsonPath = testInfo.outputPath(accessibilitySummaryJsonFileName(report.source.reportId));
 
+  await mkdir(dirname(jsonPath), { recursive: true });
   await writeFile(jsonPath, JSON.stringify(report, null, 2));
   await testInfo.attach(`axe-accessibility-${report.source.reportId}.json`, {
     path: jsonPath,
@@ -80,6 +83,6 @@ export async function attachAxeAccessibilitySummaryReport(
   return jsonPath;
 }
 
-export function testResultDirectoryName(testInfo: TestInfo): string | undefined {
+export function testResultDirectoryName(testInfo: AxeArtifactSink): string | undefined {
   return testInfo.outputDir ? basename(testInfo.outputDir) : undefined;
 }

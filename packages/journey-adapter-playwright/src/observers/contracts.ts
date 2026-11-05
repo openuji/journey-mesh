@@ -30,6 +30,12 @@ export type PlaywrightOperationObservation =
       readonly decision: InputModalityDecision;
     }
   | {
+      /** A no-input transition completed without resolving a UI target. */
+      readonly stage: "transition-completed";
+      readonly execution: JourneyExecutionDescriptor;
+      readonly operation: TransitionPlanOperation;
+    }
+  | {
       readonly stage: "control-flow-recorded";
       readonly execution: JourneyExecutionDescriptor;
       readonly operation: ControlFlowPlanOperation;

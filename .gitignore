@@ -1,6 +1,10 @@
 node_modules/
 dist/
+*.tsbuildinfo
 .tmp/
 examples/nextcloud-filesharing/playwright-report/
 examples/nextcloud-filesharing/test-results/
+examples/nextcloud-filesharing/.android/
+examples/nextcloud-filesharing/playwright-report-android/
+examples/nextcloud-filesharing/test-results-android/
 apps/web/

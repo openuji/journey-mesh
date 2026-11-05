@@ -1,11 +1,11 @@
 import { writeFile } from "node:fs/promises";
 
+import type { JourneyReporter } from "@openuji/journey-runner";
 import type {
-  JourneyReporter,
   JourneyRunSummaryArtifact,
   JourneyRunSummaryCommand,
   JourneyRunSummaryInput
-} from "@openuji/journey-runner";
+} from "@openuji/journey-runner/console";
 
 export type PlaywrightTestAttachment = {
   path?: string;

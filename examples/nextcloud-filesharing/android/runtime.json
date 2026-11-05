@@ -1,0 +1,21 @@
+{
+  "application": {
+    "version": "35.0.2",
+    "package": "com.nextcloud.client",
+    "activity": "com.owncloud.android.ui.activity.FileDisplayActivity",
+    "apk": "nextcloud-350000290.apk",
+    "url": "https://github.com/nextcloud/android/releases/download/stable-35.0.2/nextcloud-350000290.apk",
+    "sha256": "eef8552fb198851d12e357bf590644b45d2923f36c76fe760027a10d9956db7a"
+  },
+  "automation": {
+    "appium": "3.9.0",
+    "uiautomator2": "8.7.3",
+    "webdriverio": "9.20.0"
+  },
+  "android": {
+    "api": 35,
+    "image": "system-images;android-35;google_apis;x86_64",
+    "profile": "pixel_6",
+    "locale": "en-US"
+  }
+}
