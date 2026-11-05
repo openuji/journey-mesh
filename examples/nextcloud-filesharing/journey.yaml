@@ -15,6 +15,14 @@ tests:
   browser-sharing:
     timeoutMs: '${UJG_EXAMPLE_TIMEOUT_MS:-600000}'
     journeys:
+      - id: alice-setup
+        source: ./ujg/setup.web.ujg.jsonld
+        select: urn:journey:alice-web-setup
+        adapter: web
+      - id: bob-setup
+        source: ./ujg/setup.web.ujg.jsonld
+        select: urn:journey:bob-web-setup
+        adapter: web
       - id: alice-offers
         source: ./ujg/filesharing.ujg.jsonld
         select: urn:journey:alice-federated-sharing
@@ -25,31 +33,43 @@ tests:
         adapter: web
     profiles:
       - id: default
-        journeys: { alice-offers: default, bob-accepts: default }
+        journeys: { alice-setup: default, bob-setup: default, alice-offers: default, bob-accepts: default }
       - id: keyboard-only
-        journeys: { alice-offers: keyboard, bob-accepts: keyboard }
+        journeys: { alice-setup: keyboard, bob-setup: keyboard, alice-offers: keyboard, bob-accepts: keyboard }
     environment: &environment
-      use: ./environment.ts
+      use: '@openuji/journey-driver-nextcloud/federated-sharing/plugin'
       options:
-        aliceTouchpoint: &aliceService
+        sharerTouchpoint: &aliceService
           baseURL: '${NEXTCLOUD_ALICE_URL}'
-        bobTouchpoint: &bobService
+        recipientTouchpoint: &bobService
           baseURL: '${NEXTCLOUD_BOB_URL}'
-        aliceUser: &aliceAccount
+        sharerUser: &aliceAccount
           label: Alice
           username: '${NEXTCLOUD_ALICE_USER}'
           password: '${NEXTCLOUD_ALICE_PASSWORD}'
-        bobUser: &bobAccount
+        recipientUser: &bobAccount
           label: Bob
           username: '${NEXTCLOUD_BOB_USER}'
           password: '${NEXTCLOUD_BOB_PASSWORD}'
         fixturePath: ./deployment/fixtures/report.pdf
+        fixtureFileName: report.pdf
+        effectIds:
+          shareCreated: urn:effect:alice-confirm-share
+          shareAccepted: urn:effect:bob-accept-share
         preserveFixtures: '${NEXTCLOUD_PRESERVE_FIXTURES:-false}'
 
   native-recipient-sharing:
     timeoutMs: '${UJG_EXAMPLE_TIMEOUT_MS:-600000}'
     environment: *environment
     journeys:
+      - id: alice-setup
+        source: ./ujg/setup.web.ujg.jsonld
+        select: urn:journey:alice-web-setup
+        adapter: web
+      - id: bob-setup
+        source: ./ujg/setup.android.ujg.jsonld
+        select: urn:journey:bob-android-setup
+        adapter: android
       - id: alice-offers
         source: ./ujg/filesharing.ujg.jsonld
         select: urn:journey:alice-federated-sharing
@@ -60,9 +80,9 @@ tests:
         adapter: android
     profiles:
       - id: default-web-touch-android
-        journeys: { alice-offers: default, bob-accepts: touch }
-      - id: keyboard-web-touch-android
-        journeys: { alice-offers: keyboard, bob-accepts: touch }
+        journeys: { alice-setup: default, bob-setup: touch, alice-offers: default, bob-accepts: touch }
+      - id: keyboard-only-web-touch-android
+        journeys: { alice-setup: keyboard, bob-setup: touch, alice-offers: keyboard, bob-accepts: touch }
 
 adapters:
   web:
@@ -73,7 +93,7 @@ adapters:
       actionTimeoutMs: 30000
       navigationTimeoutMs: 30000
     driver:
-      use: '@openuji/journey-driver-nextcloud/plugin'
+      use: '@openuji/journey-driver-nextcloud/web/plugin'
       options:
         touchpoints: &touchpoints
           urn:touchpoint:nextcloud-a: *aliceService
@@ -82,9 +102,18 @@ adapters:
           urn:user:alice: *aliceAccount
           urn:user:bob: *bobAccount
         entries:
+          nextcloud.login: /login
           nextcloud.files: /apps/files/
           nextcloud.pendingShares: /apps/files/pendingshares
         transitionValues:
+          urn:transition:alice-enters-username:
+            source: user.username
+          urn:transition:alice-enters-password:
+            source: user.password
+          urn:transition:bob-enters-username:
+            source: user.username
+          urn:transition:bob-enters-password:
+            source: user.password
           urn:transition:alice-enters-remote-bob: '${NEXTCLOUD_FEDERATED_RECIPIENT}'
     observers:
       - use: '@openuji/journey-observer-axe/plugin'
@@ -94,31 +123,42 @@ adapters:
           sourceScreenshots:
             states: true
             fullPage: true
+          excludedPhaseIds:
+            - urn:phase:setup
 
   android:
     use: '@openuji/journey-adapter-appium/plugin'
     options:
       endpoint: '${APPIUM_URL:-http://127.0.0.1:4723/}'
       assertionTimeoutMs: 60000
+      runtimeManifest: ./android/runtime.json
+      apkDirectory: ./.android
+      apk: '${NEXTCLOUD_ANDROID_APK:-}'
+      devices:
+        urn:touchpoint:nextcloud-b:
+          udid: '${ANDROID_UDID}'
     driver:
-      use: '@openuji/journey-driver-nextcloud-android/plugin'
+      use: '@openuji/journey-driver-nextcloud/android/plugin'
       options:
         touchpoints: *touchpoints
         users: *users
-        runtimeManifest: ./android/runtime.json
-        apkDirectory: ./.android
-        apk: '${NEXTCLOUD_ANDROID_APK:-}'
-        devices:
-          urn:touchpoint:nextcloud-b:
-            udid: '${ANDROID_UDID}'
         entries:
-          nextcloud.android.notifications: notifications
+          nextcloud.android.application: application
+        transitionValues:
+          urn:transition:android-enters-server:
+            source: touchpoint.baseURL
+          urn:transition:android-enters-username:
+            source: user.username
+          urn:transition:android-enters-password:
+            source: user.password
     observers:
       - use: '@openuji/journey-observer-android-accessibility/plugin'
         options:
           reportId: nextcloud-filesharing.android-accessibility
           screenshots: true
           strict: '${ANDROID_A11Y_STRICT:-false}'
+          excludedPhaseIds:
+            - urn:phase:setup
 
 profiles:
   default:
@@ -131,5 +171,5 @@ profiles:
     use: '@openuji/journey-profiles/plugin'
     options:
       id: touch
-      modalityPreference: ['urn:openuji:input:touch-tap']
+      modalityPreference: ['observability:keyboard-text-entry', 'urn:openuji:input:touch-tap']
 

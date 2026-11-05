@@ -1,5 +1,5 @@
 {
-  "nextcloud": {
+  "application": {
     "version": "35.0.2",
     "package": "com.nextcloud.client",
     "activity": "com.owncloud.android.ui.activity.FileDisplayActivity",

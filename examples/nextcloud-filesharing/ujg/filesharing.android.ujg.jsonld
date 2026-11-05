@@ -34,14 +34,14 @@
       "@id": "urn:entry-binding:bob-remote-share",
       "label": "Bob remote-share entry boot",
       "entryRef": "urn:entry:bob-remote-share",
-      "value": "nextcloud.android.notifications"
+      "value": "nextcloud.android.application"
     },
     {
       "@type": "EntryBinding",
       "@id": "urn:entry-binding:bob-remote-share-offer",
       "label": "Bob remote-share offer entry boot",
       "entryRef": "urn:entry:bob-remote-share-offer",
-      "value": "nextcloud.android.notifications"
+      "value": "nextcloud.android.application"
     },
     {
       "@type": "CompositeState",
@@ -228,9 +228,11 @@
         "urn:entry:bob-remote-share-offer"
       ],
       "stateRefs": [
+        "urn:state:bob-native-files-ready",
         "urn:state:bob-incoming-share-visible"
       ],
       "transitionRefs": [
+        "urn:transition:bob-opens-native-notifications",
         "urn:transition:bob-accepts-share"
       ],
       "exitRefs": [
@@ -241,7 +243,31 @@
       "@type": "JourneyEntry",
       "@id": "urn:entry:bob-remote-share-offer",
       "label": "Bob pending remote share entry",
-      "stateRef": "urn:state:bob-incoming-share-visible"
+      "stateRef": "urn:state:bob-native-files-ready"
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:bob-native-files-ready",
+      "label": "Bob native file screen is ready"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-native-files-ready",
+      "label": "Bob native file screen",
+      "graphNodeRef": "urn:state:bob-native-files-ready"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:bob-opens-native-notifications",
+      "label": "Bob opens native notifications",
+      "from": "urn:state:bob-native-files-ready",
+      "to": "urn:state:bob-incoming-share-visible"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-opens-native-notifications",
+      "label": "Bob notification navigation action",
+      "graphNodeRef": "urn:transition:bob-opens-native-notifications"
     },
     {
       "@type": "State",
@@ -809,6 +835,27 @@
     },
     {
       "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-native-files-ready-presence",
+      "label": "Observe Bob native files screen",
+      "observeSurfaceRef": "urn:surface:bob-native-files-ready",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:android-menu-button"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-opens-native-notifications-activation",
+      "label": "Open Bob native notifications",
+      "observeSurfaceRef": "urn:surface:bob-opens-native-notifications",
+      "observationEventRef": "urn:observation-event:touch-activation",
+      "locatorRefs": [
+        "urn:locator:android-notification-entry"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
       "@id": "urn:obs:bob-incoming-share-visible-presence",
       "label": "Observe Bob incoming share",
       "observeSurfaceRef": "urn:surface:bob-incoming-share-visible",
@@ -1004,6 +1051,20 @@
     },
     {
       "@type": "AccessibleFeature",
+      "@id": "urn:feature:android-notification-entry",
+      "label": "notification-entry",
+      "accessibleFeatureName": "resource-id",
+      "accessibleFeatureValue": "com.nextcloud.client:id/notification_button"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:feature:android-menu-button",
+      "label": "menu-button",
+      "accessibleFeatureName": "resource-id",
+      "accessibleFeatureValue": "com.nextcloud.client:id/menu_button"
+    },
+    {
+      "@type": "AccessibleFeature",
       "@id": "urn:feature:android-notification-subject",
       "label": "notification-subject",
       "accessibleFeatureName": "resource-id",
@@ -1029,6 +1090,22 @@
       "label": "shared-navigation",
       "accessibleFeatureName": "resource-id",
       "accessibleFeatureValue": "com.nextcloud.client:id/nav_shared"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:android-notification-entry",
+      "label": "Open native notifications",
+      "accessibleFeatureRefs": [
+        "urn:feature:android-notification-entry"
+      ]
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:android-menu-button",
+      "label": "Native file screen menu",
+      "accessibleFeatureRefs": [
+        "urn:feature:android-menu-button"
+      ]
     },
     {
       "@type": "AccessibleLocator",

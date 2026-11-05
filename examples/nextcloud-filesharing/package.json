@@ -13,7 +13,8 @@
     "@openuji/journey-profiles": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
     "@openuji/journey-adapter-appium": "workspace:*",
-    "@openuji/journey-driver-nextcloud-android": "workspace:*",
+    "@openuji/journey-driver-web": "workspace:*",
+    "@openuji/journey-driver-android": "workspace:*",
     "@openuji/journey-observer-android-accessibility": "workspace:*",
     "@openuji/journey-cli": "workspace:*",
     "@openuji/journey-runtime": "workspace:*"
@@ -21,7 +22,8 @@
   "devDependencies": {
     "appium": "3.9.0",
     "appium-uiautomator2-driver": "8.7.3",
-    "playwright": "^1.61.1"
+    "playwright": "^1.61.1",
+    "tsx": "^4.20.3"
   },
   "scripts": {
     "e2e": "journey-mesh test journey.yaml --test browser-sharing",
@@ -35,6 +37,9 @@
     "android:apk": "node android/download-apk.mjs",
     "android:check": "node android/check-runtime.mjs",
     "journey:test": "journey-mesh test journey.yaml",
-    "journey:validate": "journey-mesh validate journey.yaml"
+    "journey:validate": "journey-mesh validate journey.yaml",
+    "android:local": "node android/local.mjs",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "test": "node --test android/local.test.mjs && node --import tsx --test test/*.test.ts"
   }
 }
