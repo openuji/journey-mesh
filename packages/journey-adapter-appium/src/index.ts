@@ -148,7 +148,6 @@ class AppiumExecution implements JourneyAdapterExecution {
     if (this.state.status === "closed" || this.state.status === "closing") return;
     const snapshot = this.state.resources;
     this.state = reduceAppiumLifecycle(this.state, { type: "close" });
-    const priorFailures = this.state.failures;
     let cleanupFailures: readonly unknown[] = Object.freeze([]);
     for (const resource of [...snapshot].reverse()) {
       try { await resource.session.close(); }
@@ -158,8 +157,9 @@ class AppiumExecution implements JourneyAdapterExecution {
       }
     }
     this.state = reduceAppiumLifecycle(this.state, { type: "closed" });
-    const failures = [...priorFailures, ...cleanupFailures];
-    if (failures.length) throw new AggregateError(failures, `Appium cleanup failed: ${failures.map(message).join("; ")}`);
+    if (cleanupFailures.length) {
+      throw new AggregateError(cleanupFailures, `Appium cleanup failed: ${cleanupFailures.map(message).join("; ")}`);
+    }
   }
 
   private async sessionForOperation(operation: JourneyPlanOperation): Promise<AppiumSession> {
@@ -205,14 +205,16 @@ class AppiumExecution implements JourneyAdapterExecution {
   }
 
   private async registerAllocated(resource: AppiumResource): Promise<void> {
+    let registered = false;
     try {
       this.input.context.signal?.throwIfAborted();
       this.state = reduceAppiumLifecycle(this.state, { type: "register", resource });
+      registered = true;
       this.input.context.signal?.throwIfAborted();
     } catch (error) {
       try { await resource.session.close(); }
       catch (cleanupFailure) { this.state = reduceAppiumLifecycle(this.state, { type: "fail", error: cleanupFailure }); }
-      this.state = reduceAppiumLifecycle(this.state, { type: "release", id: resource.id });
+      if (registered) this.state = reduceAppiumLifecycle(this.state, { type: "release", id: resource.id });
       throw error;
     }
   }

@@ -64,6 +64,44 @@ test("a browser allocated after cancellation is transactionally closed", async (
   assert.equal(closed, 1);
 });
 
+test("a browser launch failure is reported once and not relabeled as cleanup failure", async () => {
+  const result = await runJourney({
+    plan,
+    profiles: [{ id: "launch-failure" }],
+    adapter: playwrightAdapter({
+      driver,
+      browserType: { async launch() { throw new Error("launch failed"); } }
+    })
+  });
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.errors.map((error) => error.message), ["launch failed"]);
+});
+
+test("duplicate allocation compensation keeps the original context tracked", async () => {
+  const contexts: Array<{ closeCalls: number }> = [];
+  const browser = {
+    async newContext() {
+      const contextRecord = { closeCalls: 0 };
+      contexts.push(contextRecord);
+      const page = { async goto() {}, async close() {} };
+      return {
+        async newPage() { return page; },
+        async close() { contextRecord.closeCalls++; }
+      };
+    }
+  };
+  const execution = playwrightAdapter({ driver, browser: browser as never }).createExecution({
+    context: { runId: "run", executionId: "duplicate-allocation", profile: { id: "profile" }, plan }
+  });
+  await execution.start();
+  const outcomes = await Promise.allSettled([execution.openEntry(operation), execution.openEntry(operation)]);
+  assert.deepEqual(outcomes.map((outcome) => outcome.status).sort(), ["fulfilled", "rejected"]);
+  assert.match((outcomes.find((outcome) => outcome.status === "rejected") as PromiseRejectedResult).reason.message, /Duplicate Playwright resource/);
+  await execution.close({ executionFailed: true });
+  assert.equal(contexts.length, 2);
+  assert.deepEqual(contexts.map((context) => context.closeCalls), [1, 1]);
+});
+
 test("unsupported Playwright bindings fail before browser allocation", async () => {
   let launches = 0;
   const invalid = structuredClone(plan);

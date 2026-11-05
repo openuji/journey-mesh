@@ -240,7 +240,6 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     if (this.state.status === "closed" || this.state.status === "closing") return;
     const snapshot = this.state.resources;
     this.state = reducePlaywrightLifecycle(this.state, { type: "close" });
-    const priorFailures = this.state.failures;
     let cleanupFailures: readonly unknown[] = Object.freeze([]);
     for (const resource of [...snapshot].reverse()) {
       if (!resource.close) continue;
@@ -251,8 +250,7 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
       }
     }
     this.state = reducePlaywrightLifecycle(this.state, { type: "closed" });
-    const failures = [...priorFailures, ...cleanupFailures];
-    if (failures.length) throw cleanupError("Playwright", failures);
+    if (cleanupFailures.length) throw cleanupError("Playwright", cleanupFailures);
   }
 
   private async sessionForOperation(operation: JourneyPlanOperation): Promise<PlaywrightSession> {
@@ -282,16 +280,18 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
   }
 
   private async registerAllocated(resource: PlaywrightResource): Promise<void> {
+    let registered = false;
     try {
       this.context.signal?.throwIfAborted();
       this.state = reducePlaywrightLifecycle(this.state, { type: "register", resource });
+      registered = true;
       this.context.signal?.throwIfAborted();
     } catch (error) {
       try { await resource.close?.(); }
       catch (cleanupFailure) {
         this.state = reducePlaywrightLifecycle(this.state, { type: "fail", error: cleanupFailure });
       }
-      this.state = reducePlaywrightLifecycle(this.state, { type: "release", id: resource.id });
+      if (registered) this.state = reducePlaywrightLifecycle(this.state, { type: "release", id: resource.id });
       throw error;
     }
   }

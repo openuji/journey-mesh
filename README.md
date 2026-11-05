@@ -46,8 +46,8 @@ graph TD
 ### Extension responsibilities
 
 - Model bindings own model parsing, validation, source references, and execution-plan generation.
-- Automation adapters own generic execution against an automation runtime such as Playwright.
-- Application drivers own service-specific navigation and session isolation; shared environments own fixture setup, effect verification, and cleanup.
+- Automation adapters own generic execution, resource isolation, and cleanup against an automation runtime such as Playwright or Appium.
+- Application drivers are pure service-specific resolvers for entry targets and transition values; shared environments own fixture setup, effect verification, and cleanup.
 - Interaction profiles own input-modality selection such as default pointer-first and keyboard-only operation.
 - Observers own evidence collection and redaction for functional, accessibility, reliability, and deployment signals.
 - Reporters own versioned output formats, human-readable summaries, and CI-compatible artifacts.
@@ -98,7 +98,7 @@ the test; adapters own browser and device resources. See the
 ## Limitations
 
 - Current execution compiles the checked-in UJG into a linear plan; ambiguous branches are rejected.
-- The only application driver in this repository is the Nextcloud reference driver.
+- The only application binding in this repository is the pure Nextcloud web/Android reference driver.
 - The example requires a Docker-based Nextcloud stack with canonical URLs reachable by its runtimes; Android mode also requires a dedicated emulator/device.
 - Accessibility evidence supports journey review, but it is not WCAG certification.
 - Extension APIs and report formats are prototype contracts.

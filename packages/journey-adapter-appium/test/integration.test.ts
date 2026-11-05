@@ -111,7 +111,7 @@ test("lifecycle reducer replaces frozen states and rejects late registration", (
   assert.throws(() => reduceAppiumLifecycle(closed, { type: "register", resource: {} as never }), /Cannot register/);
 });
 
-test("cleanup is idempotent and preserves earlier and close failures", async () => {
+test("cleanup is idempotent and reports its own close failures", async () => {
   const session = new Session();
   session.closeError = new Error("session close failed");
   const adapter = appiumAdapter(options(session));
@@ -121,6 +121,41 @@ test("cleanup is idempotent and preserves earlier and close failures", async () 
   await assert.rejects(async () => execution.close({ executionFailed: true }), /session close failed/);
   await execution.close({ executionFailed: true });
   assert.equal(session.calls.filter((call) => call === "close").length, 1);
+});
+
+test("an Appium startup failure is reported once and not relabeled as cleanup failure", async () => {
+  const result = await runJourney({
+    plan,
+    profiles: [{ id: "startup-failure" }],
+    adapter: appiumAdapter({
+      ...options(new Session()),
+      executionObservers: [{
+        name: "failing-start-observer",
+        onExecutionStarted() { throw new Error("Appium startup failed"); }
+      }]
+    })
+  });
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.errors.map((error) => error.message), ["Appium startup failed"]);
+});
+
+test("duplicate allocation compensation keeps the original session tracked", async () => {
+  const sessions: Session[] = [];
+  const execution = appiumAdapter({
+    ...options(new Session()),
+    sessionFactory: async () => {
+      const session = new Session();
+      sessions.push(session);
+      return session;
+    }
+  }).createExecution({ context: { runId: "run", executionId: "duplicate-allocation", profile: { id: "profile" }, plan } });
+  await execution.start();
+  const outcomes = await Promise.allSettled([execution.openEntry(state), execution.openEntry(state)]);
+  assert.deepEqual(outcomes.map((outcome) => outcome.status).sort(), ["fulfilled", "rejected"]);
+  assert.match((outcomes.find((outcome) => outcome.status === "rejected") as PromiseRejectedResult).reason.message, /Duplicate Appium resource/);
+  await execution.close({ executionFailed: true });
+  assert.equal(sessions.length, 2);
+  assert.deepEqual(sessions.map((session) => session.calls.filter((call) => call === "close").length), [1, 1]);
 });
 
 test("a session allocated after cancellation is transactionally closed", async () => {
