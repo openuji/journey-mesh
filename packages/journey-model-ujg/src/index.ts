@@ -22,6 +22,7 @@ import type {
   StatePlanOperation,
   TransitionPlanOperation
 } from "@openuji/journey-execution-model";
+import { immutableJourneyPlan } from "@openuji/journey-execution-model";
 
 export type UjgNode = {
   "@id": string;
@@ -145,7 +146,7 @@ function compileDocument(document: UjgDocument, options: CompileUjgJourneyPlanOp
     }
   }
 
-  return {
+  return immutableJourneyPlan({
     id: `${document["@id"]}:plan:v1${options.journeyId ? `:${options.journeyId}` : ""}`,
     source: {
       model: "ujg",
@@ -153,7 +154,7 @@ function compileDocument(document: UjgDocument, options: CompileUjgJourneyPlanOp
       ...(options.journeyId ? { references: { journeyId: options.journeyId } } : {})
     },
     operations
-  };
+  });
 }
 
 function operationForPathItem({

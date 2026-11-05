@@ -7,16 +7,17 @@
   "packageManager": "pnpm@10.14.0",
   "scripts": {
     "build": "tsc -b",
-    "typecheck": "tsc -b --pretty false",
+    "typecheck": "tsc -b --pretty false && pnpm -r --if-present run typecheck:test",
     "lint": "node scripts/lint.mjs",
-    "test": "node --import tsx tests/run-tests.ts && node --import tsx --test tests/android.test.ts && node --import tsx --test tests/runtime.test.ts"
+    "test": "pnpm -r --if-present run test"
   },
   "devDependencies": {
     "@openuji/journey-adapter-appium": "workspace:*",
     "@openuji/journey-adapter-playwright": "workspace:*",
     "@openuji/journey-core": "workspace:*",
     "@openuji/journey-driver-nextcloud": "workspace:*",
-    "@openuji/journey-driver-nextcloud-android": "workspace:*",
+    "@openuji/journey-driver-web": "workspace:*",
+    "@openuji/journey-driver-android": "workspace:*",
     "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-model-ujg": "workspace:*",
     "@openuji/journey-observer-android-accessibility": "workspace:*",

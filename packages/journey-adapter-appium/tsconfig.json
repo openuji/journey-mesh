@@ -11,6 +11,12 @@
   ],
   "references": [
     {
+      "path": "../journey-execution-model/tsconfig.json"
+    },
+    {
+      "path": "../journey-driver-android/tsconfig.json"
+    },
+    {
       "path": "../journey-runner/tsconfig.json"
     },
     {

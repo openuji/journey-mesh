@@ -24,6 +24,7 @@ export type AndroidOperationEvidence = Immutable<{
   hierarchy?: AndroidCapture<{ nodes: AndroidHierarchy; artifact: AndroidArtifact }>;
   metrics?: AndroidCapture<AndroidDeviceMetrics>;
   screenshot?: AndroidCapture<AndroidArtifact>;
+  notApplicable?: { phaseId: string; reason: string };
   checks: readonly AndroidHierarchyCheck[];
 }>;
 export type AndroidAccessibilityEvidence =

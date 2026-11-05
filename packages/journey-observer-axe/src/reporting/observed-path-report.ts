@@ -92,14 +92,20 @@ function projectPathItem(
   if (!observed && adapter && adapter.name !== playwrightAdapterName) {
     return unauditedAxePathItem(item, "not-applicable", `Operation was routed to adapter ${adapter.name}; no Playwright accessibility surface was observed.`);
   }
-  if (target.operation.kind === "control-flow" || observed?.stage === "control-flow-recorded") {
-    return unauditedAxePathItem(item, "not-applicable", "Control-flow items do not resolve to a page surface.");
-  }
   if (!observed) {
+    if (target.operation.kind === "control-flow") {
+      return unauditedAxePathItem(item, "not-applicable", "Control-flow items do not resolve to a page surface.");
+    }
     if (target.operation.kind === "state" && target.operation.target.expectedMatchCount !== 1) {
       return unauditedAxePathItem(item, "skipped", unmatchedSurfaceReason(target.operation.target.expectedMatchCount));
     }
     return unauditedAxePathItem(item, "skipped", "Plan item was not audited because the runner ended before this item could be scanned.");
+  }
+  if ("notApplicable" in observed) {
+    return unauditedAxePathItem(item, "not-applicable", observed.notApplicable.reason);
+  }
+  if (observed.stage === "control-flow-recorded") {
+    return unauditedAxePathItem(item, "not-applicable", "Control-flow items do not resolve to a page surface.");
   }
   if (observed.stage === "transition-completed") {
     return unauditedAxePathItem(item, "not-applicable", "No-input transition completed without a locator; no scoped accessibility audit was performed.");

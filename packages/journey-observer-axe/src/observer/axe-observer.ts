@@ -17,9 +17,13 @@ type PublishedReports = Readonly<{
 }>;
 
 export function axeObserver(options: AxeObserverOptions): AxeObserver {
-  const artifacts = axeArtifacts(options);
+  const configuredOptions = Object.freeze({
+    ...options,
+    excludedPhaseIds: Object.freeze([...(options.excludedPhaseIds ?? [])])
+  });
+  const artifacts = axeArtifacts(configuredOptions);
   const journal = new AxeEvidenceJournal();
-  const auditRunner = options.auditRunner ?? runAxeAudit;
+  const auditRunner = configuredOptions.auditRunner ?? runAxeAudit;
   // The artifact boundary publishes one completed bundle, never provisional path items.
   let published: PublishedReports | undefined;
 
@@ -37,7 +41,7 @@ export function axeObserver(options: AxeObserverOptions): AxeObserver {
     },
 
     async observeOperation(observation) {
-      const evidence = await collectAxeEvidence(observation, options, auditRunner);
+      const evidence = await collectAxeEvidence(observation, configuredOptions, auditRunner);
       journal.append({ kind: "operation-observed", evidence });
       if ("audit" in evidence && evidence.audit.kind === "failed") {
         throw Object.assign(new Error(evidence.audit.error.message), evidence.audit.error);
@@ -47,18 +51,18 @@ export function axeObserver(options: AxeObserverOptions): AxeObserver {
     async report({ result }) {
       const evidence = journal.snapshot();
       const pathReport = buildAxeObservedPathReport({
-        reportId: options.reportId,
+        reportId: configuredOptions.reportId,
         createdAt: new Date().toISOString(),
         result,
         evidence,
-        wcagTags: options.tags ?? wcag22Tags,
-        metadata: options.metadata
+        wcagTags: configuredOptions.tags ?? wcag22Tags,
+        metadata: configuredOptions.metadata
       });
       const accessibilitySummary = buildAxeAccessibilitySummaryReport({
         pathReport,
         generatedAt: pathReport.createdAt,
-        delivery: options.accessibilitySummary?.delivery,
-        artifactBaseHref: options.accessibilitySummary?.artifactBaseHref,
+        delivery: configuredOptions.accessibilitySummary?.delivery,
+        artifactBaseHref: configuredOptions.accessibilitySummary?.artifactBaseHref,
         testResultDirectoryName: testResultDirectoryName(artifacts)
       });
       const pathReportPath = await attachAxePathAuditReport(artifacts, pathReport);

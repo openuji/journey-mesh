@@ -1,12 +1,15 @@
 import type {
-  ControlFlowPlanOperation, InputModalityDecision, JourneyExecutionContext,
-  JourneyExecutionDescriptor, JourneyPlanOperation, StatePlanOperation, TransitionPlanOperation
+  ControlFlowPlanOperation,
+  InputModalityDecision,
+  JourneyExecutionDescriptor,
+  StatePlanOperation,
+  TransitionPlanOperation
 } from "@openuji/journey-runner";
 
 export type AppiumElement = Readonly<{ elementId: string }>;
 export type AndroidDeviceMetrics = Readonly<{ densityDpi?: number; platformVersion?: string }>;
 
-/** Runtime port. Handles never enter runner results or observer evidence. */
+/** Runtime port. Raw mobile command execution is intentionally not public. */
 export type AppiumSession = {
   readonly id: string;
   findElements(xpath: string): Promise<readonly AppiumElement[]>;
@@ -15,7 +18,10 @@ export type AppiumSession = {
   source(): Promise<string>;
   screenshot(): Promise<string>;
   deviceMetrics(): Promise<AndroidDeviceMetrics>;
-  execute(command: string, args: Readonly<Record<string, unknown>>): Promise<unknown>;
+  activateApplication(applicationId: string): Promise<void>;
+  terminateApplication(applicationId: string, timeoutMs?: number): Promise<void>;
+  clearApplication(applicationId: string): Promise<void>;
+  openDeepLink(url: string, applicationId: string): Promise<void>;
   close(): Promise<void>;
 };
 
@@ -25,29 +31,18 @@ export type AppiumConnection = Readonly<{
   path?: string;
   protocol?: "http" | "https";
 }>;
-export type AppiumSessionOptions = Readonly<{
-  capabilities: Readonly<Record<string, unknown>>;
-}>;
-export type AppiumSessionFactory = (
-  options: AppiumSessionOptions & AppiumConnection
-) => Promise<AppiumSession>;
+export type AppiumSessionOptions = Readonly<{ capabilities: Readonly<Record<string, unknown>> }>;
+export type AppiumSessionFactory = (options: AppiumSessionOptions & AppiumConnection) => Promise<AppiumSession>;
 
-export type AppiumDriverExecutionContext = JourneyExecutionContext & {
-  createSession(options: AppiumSessionOptions): Promise<AppiumSession>;
-};
-export type AppiumJourneyDriver = {
-  readonly name: string;
-  readonly version?: string;
-  createExecution(input: { readonly context: AppiumDriverExecutionContext }): AppiumJourneyDriverExecution;
-};
-export type AppiumJourneyDriverExecution = {
-  start(): Promise<void> | void;
-  openEntry(operation: JourneyPlanOperation): Promise<void> | void;
-  sessionForOperation(operation: JourneyPlanOperation): Promise<AppiumSession> | AppiumSession;
-  afterTransition(operation: TransitionPlanOperation, decision?: InputModalityDecision): Promise<void> | void;
-  recordControlFlow(operation: ControlFlowPlanOperation): Promise<void> | void;
-  close(input: { readonly executionFailed: boolean }): Promise<void> | void;
-};
+export type AppiumApplicationConfig = Readonly<{
+  apk: string;
+  package: string;
+  activity: string;
+}>;
+export type AppiumDeviceConfig = Readonly<{
+  udid: string;
+  capabilities?: Readonly<Record<string, unknown>>;
+}>;
 
 export type AppiumOperationObservation = Readonly<{ execution: JourneyExecutionDescriptor }> & (
   | Readonly<{

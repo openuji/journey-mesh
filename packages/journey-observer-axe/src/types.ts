@@ -215,6 +215,8 @@ export type AxeObserverOptions = {
   reportId: string;
   metadata?: Immutable<AxeAuditMetadata>;
   strict?: boolean;
+  /** Operations in these modeled phases journal not-applicable evidence without runtime capture. */
+  excludedPhaseIds?: readonly string[];
   tags?: readonly string[];
   evidenceTimeoutMs?: number;
   sourceScreenshots?: {

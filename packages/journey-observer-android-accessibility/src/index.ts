@@ -20,6 +20,7 @@ export type AndroidAccessibilityObserverOptions = Readonly<{
   readArtifact?: AndroidArtifactReader;
   screenshots?: boolean;
   strict?: boolean;
+  excludedPhaseIds?: readonly string[];
   now?: () => string;
 }>;
 export type AndroidAccessibilityObserver = AppiumExecutionObserver & JourneyReporter & {
@@ -31,6 +32,10 @@ export type AndroidAccessibilityObserver = AppiumExecutionObserver & JourneyRepo
 };
 
 export function androidAccessibilityObserver(options: AndroidAccessibilityObserverOptions): AndroidAccessibilityObserver {
+  const configuredOptions = Object.freeze({
+    ...options,
+    excludedPhaseIds: Object.freeze([...(options.excludedPhaseIds ?? [])])
+  });
   // The append boundary owns mutable storage. Every fact and published view is immutable.
   let facts: readonly AndroidAccessibilityEvidence[] = Object.freeze([]);
   let published: Readonly<{ report: AndroidAccessibilityReport; htmlPath: string; jsonPath: string; evidencePath: string }> | undefined;
@@ -44,23 +49,23 @@ export function androidAccessibilityObserver(options: AndroidAccessibilityObserv
     get latestEvidencePath() { return published?.evidencePath; },
     onExecutionStarted({ execution }) { append(immutableSnapshot({ kind: "execution-started", execution })); },
     async observeOperation(observation) {
-      const collected = await collectAndroidEvidence(observation, options, facts.length);
+      const collected = await collectAndroidEvidence(observation, configuredOptions, facts.length);
       append({ kind: "operation-observed", evidence: collected });
       const failures = [collected.hierarchy, collected.metrics, collected.screenshot].flatMap((capture) => capture?.kind === "failed" ? [capture.error] : []);
       if (failures.length) throw new Error(`Android evidence collection failed: ${failures.map((error) => error.message).join("; ")}`);
     },
     async report({ result }) {
       const evidence = facts.filter((fact) => fact.kind === "execution-started" ? fact.execution.runId === result.runId : fact.evidence.runId === result.runId);
-      const report = buildAndroidAccessibilityReport({ reportId: options.reportId, createdAt: (options.now ?? (() => new Date().toISOString()))(), result, evidence, strict: options.strict ?? false });
-      const resources = await loadAndroidReportResources(report, options.readArtifact);
+      const report = buildAndroidAccessibilityReport({ reportId: configuredOptions.reportId, createdAt: (configuredOptions.now ?? (() => new Date().toISOString()))(), result, evidence, strict: configuredOptions.strict ?? false });
+      const resources = await loadAndroidReportResources(report, configuredOptions.readArtifact);
       // Content-addressed bundles keep previously published files intact if a later write fails.
-      const name = `${safeName(options.reportId)}-${identityHash(JSON.stringify([report, evidence, resources]))}`;
-      const journal = await options.writeArtifact({ name: `${name}.evidence.json`, data: JSON.stringify(evidence, null, 2), contentType: "application/json" });
-      const json = await options.writeArtifact({ name: `${name}.json`, data: JSON.stringify(report, null, 2), contentType: "application/json" });
-      const html = await options.writeArtifact({ name: `${name}.html`, data: renderAndroidAccessibilityReport(report, resources), contentType: "text/html" });
+      const name = `${safeName(configuredOptions.reportId)}-${identityHash(JSON.stringify([report, evidence, resources]))}`;
+      const journal = await configuredOptions.writeArtifact({ name: `${name}.evidence.json`, data: JSON.stringify(evidence, null, 2), contentType: "application/json" });
+      const json = await configuredOptions.writeArtifact({ name: `${name}.json`, data: JSON.stringify(report, null, 2), contentType: "application/json" });
+      const html = await configuredOptions.writeArtifact({ name: `${name}.html`, data: renderAndroidAccessibilityReport(report, resources), contentType: "text/html" });
       published = Object.freeze({ report, htmlPath: html.path, jsonPath: json.path, evidencePath: journal.path });
       const findings = androidAccessibilityFindings(evidence, result.runId);
-      if (options.strict && findings.length) throw new Error(`Android hierarchy checks recorded ${findings.length} potential finding(s) across observed surfaces. See the native evidence reports.`);
+      if (configuredOptions.strict && findings.length) throw new Error(`Android hierarchy checks recorded ${findings.length} potential finding(s) across observed surfaces. See the native evidence reports.`);
     }
   };
 }
@@ -68,6 +73,14 @@ export function androidAccessibilityObserver(options: AndroidAccessibilityObserv
 async function collectAndroidEvidence(observation: AppiumOperationObservation, options: AndroidAccessibilityObserverOptions, index: number): Promise<AndroidOperationEvidence> {
   // Snapshot before reading a device, clock, or artifact writer.
   const target = immutableSnapshot({ runId: observation.execution.runId, executionId: observation.execution.executionId, profileId: observation.execution.profile.id, operation: observation.operation, stage: observation.stage });
+  const phaseId = operationPhaseId(observation.operation);
+  if (phaseId && options.excludedPhaseIds?.includes(phaseId)) {
+    return immutableSnapshot({
+      ...target,
+      notApplicable: { phaseId, reason: `Phase ${phaseId} is excluded from accessibility capture.` },
+      checks: []
+    });
+  }
   if (observation.stage === "transition-completed" || observation.stage === "control-flow-recorded") return immutableSnapshot({ ...target, checks: [] });
   const targets = Object.freeze(observation.targets.map((element) => element.elementId));
   const expectedMatchCount = observation.expectedMatchCount;
@@ -86,6 +99,11 @@ async function collectAndroidEvidence(observation: AppiumOperationObservation, o
   }) : { kind: "not-requested" as const };
   const checks = hierarchy.kind === "captured" ? checkAndroidHierarchy(hierarchy.value.nodes, metrics.kind === "captured" ? metrics.value : {}) : [];
   return immutableSnapshot({ ...target, expectedMatchCount, targets, hierarchy, metrics, screenshot, checks });
+}
+
+function operationPhaseId(operation: AppiumOperationObservation["operation"]): string | undefined {
+  const value = operation.source?.references?.phaseId;
+  return typeof value === "string" ? value : undefined;
 }
 
 async function capture<T>(read: () => Promise<T>): Promise<AndroidCapture<T>> {

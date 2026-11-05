@@ -27,6 +27,11 @@ type OperationIdentity = {
 };
 
 export type AxeOperationEvidence = Immutable<OperationIdentity & (
+  | {
+      stage: PlaywrightOperationObservation["stage"];
+      operation: StatePlanOperation | TransitionPlanOperation | ControlFlowPlanOperation;
+      notApplicable: { phaseId: string; reason: string };
+    }
   | { stage: "control-flow-recorded"; operation: ControlFlowPlanOperation }
   | { stage: "transition-completed"; operation: TransitionPlanOperation }
   | {

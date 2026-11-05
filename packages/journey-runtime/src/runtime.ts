@@ -7,6 +7,7 @@ import {
   type JourneyAdapter, type JourneyEnvironment, type JourneyPlan, type JourneyPlanOperation,
   type JourneyProfile, type JourneyReporter, type JourneyRunError, type JourneyProgressSink, type RunResult
 } from "@openuji/journey-runner";
+import { immutableJourneyPlan } from "@openuji/journey-execution-model";
 import { renderJourneyRunSummary } from "@openuji/journey-runner/console";
 import { fileArtifactStore, escapeHtml } from "./artifacts.js";
 import { interpolate, JourneyConfigError, loadJourneyTestConfig, type ComponentConfig } from "./config.js";
@@ -112,10 +113,10 @@ async function prepare(path: string, options: ConfiguredTestsOptions): Promise<{
           });
         }
       }
-      const plan: JourneyPlan = {
+      const plan: JourneyPlan = immutableJourneyPlan({
         id: `journey-test:${encodeURIComponent(testId)}`,
         source: { model: "journey-mesh-test", references: { testId, config: loaded.path } }, operations
-      };
+      });
       const reporters: JourneyReporter[] = [];
       const adapters = new Map<string, JourneyAdapter>();
       for (const name of adapterNames) {
@@ -198,7 +199,16 @@ async function prepare(path: string, options: ConfiguredTestsOptions): Promise<{
   }
 }
 function compatible(adapter: JourneyMeshPlugin, child: JourneyMeshPlugin, label: string): void {
-  if (child.runtime && child.runtime !== adapter.runtime) throw new Error(`${label} runtime ${child.runtime} is incompatible with adapter runtime ${adapter.runtime ?? "unspecified"}`);
+  if (child.kind === "driver") {
+    if (!adapter.driverContract) throw new Error(`${label} cannot be used because the adapter declares no driver contract`);
+    if (child.driverContract !== adapter.driverContract) {
+      throw new Error(`${label} driver contract ${child.driverContract ?? "unspecified"} is incompatible with ${adapter.driverContract}`);
+    }
+    return;
+  }
+  if (child.runtime && child.runtime !== adapter.runtime) {
+    throw new Error(`${label} runtime ${child.runtime} is incompatible with adapter runtime ${adapter.runtime ?? "unspecified"}`);
+  }
 }
 
 export async function validateConfiguredTests(path: string, options: ConfiguredTestsOptions = {}): Promise<{ tests: readonly string[] }> {

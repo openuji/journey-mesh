@@ -14,7 +14,13 @@
       "path": "../journey-runner/tsconfig.json"
     },
     {
-      "path": "../journey-adapter-playwright/tsconfig.json"
+      "path": "../journey-driver-web/tsconfig.json"
+    },
+    {
+      "path": "../journey-driver-android/tsconfig.json"
+    },
+    {
+      "path": "../journey-execution-model/tsconfig.json"
     },
     {
       "path": "../journey-runtime/tsconfig.json"

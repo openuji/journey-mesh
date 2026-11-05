@@ -20,15 +20,15 @@ export type InputModalityProfileOptions = JourneyProfileScope & {
 
 /** Select model-defined modalities without translating them into runtime commands. */
 export function inputModalityProfile(options: InputModalityProfileOptions): JourneyProfile {
-  const preference = [...options.modalityPreference];
-  return {
+  const preference = Object.freeze([...options.modalityPreference]);
+  return Object.freeze({
     id: options.id,
     ...(options.label ? { label: options.label } : {}),
     ...(options.appliesTo ? { appliesTo: options.appliesTo } : {}),
     selectInputModality(operation) {
       return selectDecision(options.id, operation, preference);
     }
-  };
+  });
 }
 
 export function defaultProfile(scope: JourneyProfileScope = {}): JourneyProfile {
@@ -64,26 +64,26 @@ export function touchpointProfile(options: {
   label?: string;
   profiles: Readonly<Record<string, JourneyProfile>>;
 }): JourneyProfile {
-  const profiles = new Map(Object.entries(options.profiles));
+  const profiles = Object.freeze({ ...options.profiles });
   const childContext = (context: JourneyExecutionContext, profile: JourneyProfile) => ({ ...context, profile });
-  return {
+  return Object.freeze({
     id: options.id,
     ...(options.label ? { label: options.label } : {}),
     async appliesTo(operation, context) {
-      const profile = profiles.get(operation.touchpointId);
+      const profile = profiles[operation.touchpointId];
       if (!profile) return false;
       return await profile.appliesTo?.(operation, childContext(context, profile)) ?? true;
     },
     async selectInputModality(operation, context) {
-      const profile = profiles.get(operation.touchpointId);
+      const profile = profiles[operation.touchpointId];
       if (!profile) throw new Error(`No profile for touchpoint ${operation.touchpointId}`);
       if (!profile.selectInputModality) {
         throw new Error(`Profile ${profile.id} has no input modality selector for transition ${operation.transition.id}`);
       }
       const decision = await profile.selectInputModality(operation, childContext(context, profile));
-      return { ...decision, profileId: options.id };
+      return Object.freeze({ ...decision, profileId: options.id });
     }
-  };
+  });
 }
 
 function selectDecision(
@@ -93,13 +93,13 @@ function selectDecision(
 ): InputModalityDecision {
   for (const modalityId of modalityPreference) {
     const match = findProfileWithSingleModality(operation.activation.requiredInputModalityProfiles, modalityId);
-    if (match) return { profileId, inputModalityProfile: match.profile, modality: match.modality };
+    if (match) return Object.freeze({ profileId, inputModalityProfile: match.profile, modality: match.modality });
   }
   throw new Error(`No supported input modality for ${operation.transition.id} in profile ${profileId}`);
 }
 
 function findProfileWithSingleModality(
-  profiles: ResolvedInputModalityProfile[],
+  profiles: readonly ResolvedInputModalityProfile[],
   modalityId: string
 ): { profile: ResolvedInputModalityProfile; modality: ResolvedInputModality } | undefined {
   for (const profile of profiles) {

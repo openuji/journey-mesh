@@ -1,3 +1,4 @@
+import { keyboardTextEntryInputModalityId } from "@openuji/journey-execution-model";
 import type { ResolvedAccessibleLocator, ResolvedObservationBinding } from "@openuji/journey-runner";
 
 /** These are model vocabulary identifiers explicitly supported by this adapter. */
@@ -11,12 +12,13 @@ const roles: Readonly<Record<string, readonly string[]>> = Object.freeze({
   "android.widget.TextView": ["android.widget.TextView"],
   "android.widget.Button": ["android.widget.Button"]
 });
-const features = new Set(["resource-id", "class", "text", "content-desc", "clickable", "enabled", "selected", "checked"]);
+const features: readonly string[] = Object.freeze(["resource-id", "class", "text", "content-desc", "hint", "clickable", "enabled", "selected", "checked"]);
 
 export const touchTapInputModalityId = "urn:openuji:input:touch-tap";
-export type AppiumInteractionCommand = "tap";
+export type AppiumInteractionCommand = "tap" | "type";
 export function appiumCommandForModality(id: string): AppiumInteractionCommand {
   if (id === touchTapInputModalityId) return "tap";
+  if (id === keyboardTextEntryInputModalityId) return "type";
   throw new Error(`Appium adapter does not support input modality ${id}`);
 }
 
@@ -37,7 +39,7 @@ function predicates(locator: ResolvedAccessibleLocator): readonly string[] {
   const attributes = locator.features.flatMap((feature) => {
     // The execution model uses '*' for an unbound constraint, not a literal match.
     if (feature.value === "*") return [];
-    if (!features.has(feature.name)) throw new Error(`Appium does not support AccessibleFeature ${feature.name}`);
+    if (!features.includes(feature.name)) throw new Error(`Appium does not support AccessibleFeature ${feature.name}`);
     if (["clickable", "enabled", "selected", "checked"].includes(feature.name) && !["true", "false"].includes(feature.value)) {
       throw new Error(`Appium requires a boolean value for ${feature.name}`);
     }

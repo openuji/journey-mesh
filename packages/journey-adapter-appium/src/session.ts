@@ -1,6 +1,6 @@
 import type { AppiumSessionFactory } from "./contracts.js";
 
-/** WebdriverIO is loaded only when allocating a real session. */
+/** WebdriverIO and raw protocol commands remain inside this imperative port. */
 export const createWebdriverIoSession: AppiumSessionFactory = async (options) => {
   const { remote } = await import("webdriverio");
   const client = await remote({
@@ -31,7 +31,12 @@ export const createWebdriverIoSession: AppiumSessionFactory = async (options) =>
         ...(typeof platformVersion === "string" ? { platformVersion } : {})
       });
     },
-    execute: (command, args) => client.execute(command, args),
+    async activateApplication(applicationId) { await client.execute("mobile: activateApp", { appId: applicationId }); },
+    async terminateApplication(applicationId, timeoutMs) {
+      await client.execute("mobile: terminateApp", { appId: applicationId, ...(timeoutMs === undefined ? {} : { timeout: timeoutMs }) });
+    },
+    async clearApplication(applicationId) { await client.execute("mobile: clearApp", { appId: applicationId }); },
+    async openDeepLink(url, applicationId) { await client.execute("mobile: deepLink", { url, package: applicationId }); },
     async close() { await client.deleteSession(); }
   };
 };

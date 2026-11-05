@@ -10,12 +10,22 @@
   },
   "types": "./src/index.ts",
   "dependencies": {
+    "@openuji/journey-execution-model": "workspace:*",
+    "@openuji/journey-driver-android": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
     "webdriverio": "9.20.0",
     "@openuji/journey-runtime": "workspace:*"
   },
+  "devDependencies": {
+    "@xmldom/xmldom": "0.9.12",
+    "tsx": "^4.20.3",
+    "xpath": "0.0.34",
+    "yaml": "2.9.1"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "test": "node --import tsx --test test/integration.test.ts"
   }
 }

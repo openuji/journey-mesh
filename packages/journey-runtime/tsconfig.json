@@ -11,6 +11,9 @@
   ],
   "references": [
     {
+      "path": "../journey-execution-model/tsconfig.json"
+    },
+    {
       "path": "../journey-runner/tsconfig.json"
     }
   ]

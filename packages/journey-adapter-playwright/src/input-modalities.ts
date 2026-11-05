@@ -11,15 +11,15 @@ export type PlaywrightInteractionCommand =
   | "keyboard-space"
   | "keyboard-text-entry";
 
-const commands = new Map<string, PlaywrightInteractionCommand>([
-  [pointerInputModalityId, "pointer-click"],
-  [keyboardEnterInputModalityId, "keyboard-enter"],
-  [keyboardSpaceInputModalityId, "keyboard-space"],
-  [keyboardTextEntryInputModalityId, "keyboard-text-entry"]
-]);
+const commands: Readonly<Record<string, PlaywrightInteractionCommand>> = Object.freeze({
+  [pointerInputModalityId]: "pointer-click",
+  [keyboardEnterInputModalityId]: "keyboard-enter",
+  [keyboardSpaceInputModalityId]: "keyboard-space",
+  [keyboardTextEntryInputModalityId]: "keyboard-text-entry"
+});
 
 export function playwrightCommandForModality(modalityId: string): PlaywrightInteractionCommand {
-  const command = commands.get(modalityId);
+  const command = commands[modalityId];
   if (!command) throw new Error(`Playwright adapter does not support input modality ${modalityId}`);
   return command;
 }

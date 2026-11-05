@@ -24,6 +24,8 @@ export type JourneyPluginKind = "model" | "adapter" | "driver" | "observer" | "p
 export type JourneyMeshPlugin<T = unknown> = {
   apiVersion: 1;
   kind: JourneyPluginKind;
+  /** Pure driver compatibility. Concrete runtimes belong only to adapters and observers. */
+  driverContract?: string;
   runtime?: string;
   validate(options: Record<string, unknown>, context: JourneyPluginContext): void | Promise<void>;
   create(options: Record<string, unknown>, context: JourneyPluginContext, dependencies: JourneyPluginDependencies): T | Promise<T>;

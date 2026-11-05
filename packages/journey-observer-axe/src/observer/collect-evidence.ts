@@ -18,6 +18,18 @@ export async function collectAxeEvidence(
     executionId: observation.execution.executionId,
     profileId: observation.execution.profile.id
   };
+  const phaseId = operationPhaseId(observation.operation);
+  if (phaseId && options.excludedPhaseIds?.includes(phaseId)) {
+    return immutableSnapshot({
+      ...identity,
+      stage: observation.stage,
+      operation: observation.operation,
+      notApplicable: {
+        phaseId,
+        reason: `Phase ${phaseId} is excluded from accessibility capture.`
+      }
+    });
+  }
   if (observation.stage === "control-flow-recorded") {
     return immutableSnapshot({ ...identity, stage: observation.stage, operation: observation.operation });
   }
@@ -56,6 +68,11 @@ export async function collectAxeEvidence(
     screenshot,
     audit
   });
+}
+
+function operationPhaseId(operation: PlaywrightOperationObservation["operation"]): string | undefined {
+  const value = operation.source?.references?.phaseId;
+  return typeof value === "string" ? value : undefined;
 }
 
 async function collectAudit(scan: () => ReturnType<AxeAuditRunner>): Promise<AxeAuditEvidence> {

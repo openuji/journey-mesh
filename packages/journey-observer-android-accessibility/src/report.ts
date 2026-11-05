@@ -36,6 +36,7 @@ export function buildAndroidAccessibilityReport(input: Readonly<{
     const operation = observation?.operation ?? target.operation;
     const graphNodeId = operation.kind === "state" ? operation.state.id : operation.transition.id;
     const base = { executionId: target.executionId, profileId: target.profileId, operationId: operation.id, graphNodeId, kind: operation.kind, ...(attempted ? { outcome: attempted.outcome } : {}), checks: observation?.checks ?? [], ...(observation ? { observation } : {}) };
+    if (observation?.notApplicable) return { ...base, status: "not-applicable", reason: observation.notApplicable.reason };
     if (!observation && attempted?.adapter && attempted.adapter.name !== appiumAdapterName) return { ...base, status: "not-applicable", reason: `Operation was routed to adapter ${attempted.adapter.name}; no native hierarchy was observed.` };
     if (operation.kind === "control-flow" || observation?.stage === "control-flow-recorded") return { ...base, status: "not-applicable", reason: "Control flow has no native surface." };
     if (observation?.stage === "transition-completed") return { ...base, status: "not-applicable", reason: "No-input transition completed without a native target." };
