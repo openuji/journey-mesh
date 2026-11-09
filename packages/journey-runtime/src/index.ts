@@ -1,4 +1,4 @@
-export { loadJourneyTestConfig, JourneyConfigError } from "./config.js";
+export { loadJourneyTestConfig, JourneyConfigError, interpolate } from "./config.js";
 export type { JourneyTestConfig, JourneyTestDefinition, JourneyItemConfig, ComponentConfig, AdapterConfig, RuntimeConfig, TestProfileConfig } from "./config.js";
 export { runConfiguredTests, validateConfiguredTests, runConfiguredRuntime } from "./runtime.js";
 export type { ConfiguredTestsOptions, ConfiguredTestsResult, ConfiguredTestResult, ConfiguredRuntimeOptions } from "./runtime.js";

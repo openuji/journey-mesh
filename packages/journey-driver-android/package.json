@@ -9,8 +9,12 @@
     "./runtime": "./src/runtime/plugin.ts"
   },
   "types": "./src/index.ts",
+  "bin": {
+    "journey-driver-android": "./bin/journey-driver-android.mjs"
+  },
   "dependencies": {
-    "@openuji/journey-execution-model": "workspace:*"
+    "@openuji/journey-execution-model": "workspace:*",
+    "@openuji/journey-runtime": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

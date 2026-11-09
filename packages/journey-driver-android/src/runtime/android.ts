@@ -9,19 +9,62 @@ import { promisify } from "node:util";
 
 const exec = promisify(execFile);
 
-/** The pins an example commits for its native journey's device. */
-export type AndroidRuntimeManifest = {
-  android: {
-    api: number;
-    avd: string;
-    image: string;
-    localImages?: Readonly<Record<string, string>>;
-    profile: string;
-    locale?: string;
-    /** Packages the booted image must already include (e.g. a companion browser). */
-    requiredPackages?: readonly string[];
-  };
+/** The device pins a caller supplies — directly, as YAML `runtimes.<key>.options`, not a separate file. */
+export type AndroidRuntimeTarget = {
+  api: number;
+  avd: string;
+  image: string;
+  localImages?: Readonly<Record<string, string>>;
+  profile: string;
+  locale?: string;
+  /** Packages the booted image must already include (e.g. a companion browser). */
+  requiredPackages?: readonly string[];
 };
+
+function requireString(value: unknown, label: string): string {
+  if (typeof value !== "string" || !value) throw new Error(`android target requires a nonempty ${label}`);
+  return value;
+}
+
+/** Validates presence/type only; see validateAndroidTarget for cross-field consistency. */
+export function parseAndroidTarget(options: Record<string, unknown>): AndroidRuntimeTarget {
+  const api = options.api;
+  if (typeof api !== "number" || !Number.isInteger(api) || api <= 0) throw new Error("android target requires a positive integer api");
+  const avd = requireString(options.avd, "avd");
+  const image = requireString(options.image, "image");
+  const profile = requireString(options.profile, "profile");
+  let localImages: Record<string, string> | undefined;
+  if (options.localImages !== undefined) {
+    if (!options.localImages || typeof options.localImages !== "object" || Array.isArray(options.localImages)) {
+      throw new Error("android target localImages must be an object");
+    }
+    localImages = Object.fromEntries(Object.entries(options.localImages).map(([key, value]) => [key, requireString(value, `localImages.${key}`)]));
+  }
+  let locale: string | undefined;
+  if (options.locale !== undefined) {
+    if (typeof options.locale !== "string") throw new Error("android target locale must be a string");
+    locale = options.locale;
+  }
+  let requiredPackages: readonly string[] | undefined;
+  if (options.requiredPackages !== undefined) {
+    if (!Array.isArray(options.requiredPackages)) throw new Error("android target requiredPackages must be an array");
+    requiredPackages = options.requiredPackages.map((value: unknown, index: number) => requireString(value, `requiredPackages[${index}]`));
+  }
+  return {
+    api, avd, image, ...(localImages ? { localImages } : {}), profile,
+    ...(locale !== undefined ? { locale } : {}), ...(requiredPackages ? { requiredPackages } : {})
+  };
+}
+
+/** Cross-field consistency only — generic to any Android target, not this example's own locale/binding choices. */
+export function validateAndroidTarget(target: AndroidRuntimeTarget): void {
+  for (const image of [target.image, ...Object.values(target.localImages ?? {})]) {
+    const [kind, imagePlatform, imageTarget, imageAbi, extra] = image.split(";");
+    if (kind !== "system-images" || imagePlatform !== `android-${target.api}` || !imageTarget || !imageAbi || extra !== undefined) {
+      throw new Error("Android target API level and system image disagree");
+    }
+  }
+}
 
 export type CaptureResult = { stdout: string; stderr: string; failed?: boolean };
 export type Capture = (command: string, args: readonly string[], options?: { optional?: boolean; timeout?: number }) => Promise<CaptureResult>;
@@ -33,10 +76,10 @@ export type Background = (
   options: { env: NodeJS.ProcessEnv; cwd: string; logPath: string }
 ) => Promise<BackgroundHandle>;
 
-export function selectSystemImage(runtime: AndroidRuntimeManifest, hostPlatform: string = platform(), hostArch: string = arch()): string {
+export function selectSystemImage(target: AndroidRuntimeTarget, hostPlatform: string = platform(), hostArch: string = arch()): string {
   const key = `${hostPlatform}-${hostArch}`;
-  const image = runtime.android.localImages?.[key];
-  if (!image) throw new Error(`Unsupported Android emulator host ${key}; supported hosts: ${Object.keys(runtime.android.localImages ?? {}).join(", ")}`);
+  const image = target.localImages?.[key];
+  if (!image) throw new Error(`Unsupported Android emulator host ${key}; supported hosts: ${Object.keys(target.localImages ?? {}).join(", ")}`);
   return image;
 }
 
@@ -125,8 +168,8 @@ function parseIni(source: string): Record<string, string> {
   }));
 }
 
-export async function validateAvd({ avd, avdHome, runtime, image }: {
-  avd: string; avdHome: string; runtime: AndroidRuntimeManifest; image: string;
+export async function validateAvd({ avd, avdHome, target, image }: {
+  avd: string; avdHome: string; target: AndroidRuntimeTarget; image: string;
 }): Promise<void> {
   const configPath = resolve(avdHome, `${avd}.avd/config.ini`);
   const config = parseIni(await readFile(configPath, "utf8"));
@@ -135,7 +178,7 @@ export async function validateAvd({ avd, avdHome, runtime, image }: {
   if (config.target !== expectedPlatform) mismatches.push(`target=${config.target || "missing"}`);
   if (config["tag.id"] !== expectedTarget) mismatches.push(`tag=${config["tag.id"] || "missing"}`);
   if (config["abi.type"] !== expectedAbi) mismatches.push(`abi=${config["abi.type"] || "missing"}`);
-  if (config["hw.device.name"] !== runtime.android.profile) mismatches.push(`device=${config["hw.device.name"] || "missing"}`);
+  if (config["hw.device.name"] !== target.profile) mismatches.push(`device=${config["hw.device.name"] || "missing"}`);
   if (mismatches.length) throw new Error(`AVD ${avd} is incompatible (${mismatches.join(", ")}); remove it explicitly or choose another name`);
 }
 
@@ -206,9 +249,8 @@ async function provisionSdk({ sdk, image, environment, hostPlatform, capture, fo
 
 export type AndroidUpOptions = {
   root?: string;
-  manifestPath?: string;
+  target: AndroidRuntimeTarget;
   environment?: NodeJS.ProcessEnv;
-  avd?: string;
   hostPlatform?: string;
   hostArch?: string;
   capture?: Capture;
@@ -222,9 +264,8 @@ export type AndroidUpOptions = {
 
 export async function androidUp({
   root = process.cwd(),
-  manifestPath = "android/runtime.json",
+  target,
   environment = process.env,
-  avd,
   hostPlatform = platform(),
   hostArch = arch(),
   capture: suppliedCapture,
@@ -234,11 +275,11 @@ export async function androidUp({
   pause = delay,
   log = console.log,
   avdHome: suppliedAvdHome
-}: AndroidUpOptions = {}): Promise<{ serial: string; avd: string; image: string }> {
+}: AndroidUpOptions): Promise<{ serial: string; avd: string; image: string }> {
   if (!["darwin", "linux"].includes(hostPlatform)) throw new Error("android:up supports macOS and Linux");
-  const runtime = JSON.parse(await readFile(resolve(root, manifestPath), "utf8")) as AndroidRuntimeManifest;
-  avd ||= environment.ANDROID_AVD_NAME || runtime.android.avd;
-  const image = selectSystemImage(runtime, hostPlatform, hostArch);
+  validateAndroidTarget(target);
+  const avd = target.avd;
+  const image = selectSystemImage(target, hostPlatform, hostArch);
   const sdk = await findSdk(environment);
   const env: NodeJS.ProcessEnv = { ...environment, ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk };
   const discoveredJava = javaHome(env, hostPlatform);
@@ -252,11 +293,11 @@ export async function androidUp({
   const adb = resolve(sdk, "platform-tools/adb");
   const configured = (await capture(emulator, ["-list-avds"])).stdout.split(/\r?\n/).filter(Boolean);
   const avdHome = suppliedAvdHome ?? androidAvdHome(env);
-  if (configured.includes(avd)) await validateAvd({ avd, avdHome, runtime, image });
+  if (configured.includes(avd)) await validateAvd({ avd, avdHome, target, image });
   else {
     log(`[android:up] Create ${avd}`);
-    await foreground(avdmanager, ["create", "avd", "--name", avd, "--package", image, "--device", runtime.android.profile], { input: "no\n" });
-    await validateAvd({ avd, avdHome, runtime, image });
+    await foreground(avdmanager, ["create", "avd", "--name", avd, "--package", image, "--device", target.profile], { input: "no\n" });
+    await validateAvd({ avd, avdHome, target, image });
   }
   await capture(emulator, ["-accel-check"]);
   await capture(adb, ["start-server"]);
@@ -289,8 +330,8 @@ export async function androidUp({
     }
     if (!booted) throw new Error(`Timed out waiting for ${serial} to boot${logPath ? `; see ${logPath}` : ""}`);
     const api = (await capture(adb, ["-s", serial, "shell", "getprop", "ro.build.version.sdk"])).stdout.trim();
-    if (api !== String(runtime.android.api)) throw new Error(`AVD ${avd} booted API ${api}; expected ${runtime.android.api}`);
-    for (const requiredPackage of runtime.android.requiredPackages ?? []) {
+    if (api !== String(target.api)) throw new Error(`AVD ${avd} booted API ${api}; expected ${target.api}`);
+    for (const requiredPackage of target.requiredPackages ?? []) {
       const found = await capture(adb, ["-s", serial, "shell", "pm", "path", requiredPackage]);
       if (!found.stdout.includes("package:")) throw new Error(`AVD ${avd} does not include ${requiredPackage}`);
     }
@@ -313,23 +354,19 @@ export async function androidUp({
 
 export type AndroidDownOptions = {
   root?: string;
-  manifestPath?: string;
+  avd: string;
   environment?: NodeJS.ProcessEnv;
-  avd?: string;
   capture?: Capture;
   log?: (message: string) => void;
 };
 
 export async function androidDown({
   root = process.cwd(),
-  manifestPath = "android/runtime.json",
-  environment = process.env,
   avd,
+  environment = process.env,
   capture: suppliedCapture,
   log = console.log
-}: AndroidDownOptions = {}): Promise<void> {
-  const runtime = JSON.parse(await readFile(resolve(root, manifestPath), "utf8")) as AndroidRuntimeManifest;
-  avd ||= environment.ANDROID_AVD_NAME || runtime.android.avd;
+}: AndroidDownOptions): Promise<void> {
   const statePath = resolve(root, ".runtime/android.env");
   try {
     const sdk = await findSdk(environment);

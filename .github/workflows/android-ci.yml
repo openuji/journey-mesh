@@ -47,7 +47,6 @@ jobs:
         run: |
           pnpm build
           pnpm --filter @openuji/journey-adapter-playwright exec playwright install --with-deps chromium
-          pnpm --filter @openuji/example-nextcloud-filesharing android:apk
           pnpm --filter @openuji/journey-adapter-appium exec journey-adapter-appium appium ensure-driver
       - name: Configure canonical service URLs
         run: |
@@ -74,7 +73,7 @@ jobs:
           emulator-boot-timeout: 300
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: bash examples/nextcloud-filesharing/android/run-ci.sh
+          script: bash .github/workflows/run-ci.sh
       - name: Reset services
         if: always()
         run: pnpm --filter @openuji/example-nextcloud-filesharing stack:reset

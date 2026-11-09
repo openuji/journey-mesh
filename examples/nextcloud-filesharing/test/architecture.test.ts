@@ -57,6 +57,22 @@ test("example delegates Android/Appium infrastructure lifecycle to the owning pa
   assert.ok(!("playwright" in allDependencies));
   assert.ok("@openuji/journey-driver-android" in packageJson.dependencies);
   assert.ok("@openuji/journey-adapter-appium" in packageJson.dependencies);
-  assert.ok(!(await readdir(new URL("android/", example))).includes("lifecycle.mjs"));
-  assert.ok(!(await readdir(new URL("android/", example))).includes("appium.mjs"));
+  assert.equal(packageJson.scripts["android:apk"], undefined);
+  // Every lifecycle script that used to live here moved into the packages
+  // that own it; nothing android-specific is left in the example itself.
+  await assert.rejects(readdir(new URL("android/", example)), /ENOENT/);
+});
+
+test("Android device pins and the Nextcloud application config live in mesh.yaml, not a separate manifest", async () => {
+  const config = new URL("../mesh.yaml", import.meta.url);
+  const loaded = await loadJourneyTestConfig(config.pathname, {});
+  const androidRuntime = loaded.config.runtimes?.android?.options as Record<string, unknown> | undefined;
+  assert.ok(androidRuntime);
+  assert.equal(androidRuntime?.api, 35);
+  assert.equal(androidRuntime?.profile, "pixel_6");
+  assert.ok(Array.isArray(androidRuntime?.requiredPackages));
+  const androidAdapterOptions = loaded.config.adapters.android?.options as Record<string, unknown> | undefined;
+  assert.ok(androidAdapterOptions?.application);
+  assert.equal((androidAdapterOptions?.application as Record<string, unknown>).package, "com.nextcloud.client");
+  assert.equal(androidAdapterOptions?.runtimeManifest, undefined);
 });

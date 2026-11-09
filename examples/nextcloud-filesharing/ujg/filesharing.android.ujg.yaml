@@ -1,4 +1,4 @@
-# Android variant bound to Nextcloud 35.0.2, en-US. See android/runtime.json.
+# Android variant bound to Nextcloud 35.0.2, en-US. See mesh.yaml's adapters.android.options.application and runtimes.android.options.
 ujgTarget: 1.0-rc1
 touchpoints:
   urn:touchpoint:nextcloud-a:

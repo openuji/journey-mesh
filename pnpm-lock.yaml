@@ -190,6 +190,9 @@ importers:
       '@openuji/journey-execution-model':
         specifier: workspace:*
         version: link:../journey-execution-model
+      '@openuji/journey-runtime':
+        specifier: workspace:*
+        version: link:../journey-runtime
     devDependencies:
       tsx:
         specifier: ^4.20.3

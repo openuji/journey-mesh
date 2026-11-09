@@ -85,30 +85,37 @@ pnpm appium:up
 `android:up` runs via `@openuji/journey-driver-android`'s runtime, installs
 missing platform tools, emulator, command-line tools, and the host-native
 Google APIs API 35 image. It creates or validates the dedicated Pixel 6 AVD
-`journey-mesh-api35`, downloads and verifies Nextcloud Android 35.0.2, boots
-headlessly, disables animations, and writes the active device ID to
-`.runtime/android.env`. The first run downloads several large components and
-may show Android SDK license prompts. An existing AVD with the same name is
-reused only when its API, image architecture, and device profile match the pins.
+`journey-mesh-api35`, boots headlessly, disables animations, and writes the
+active device ID to `.runtime/android.env`. The first run downloads several
+large components and may show Android SDK license prompts. An existing AVD
+with the same name is reused only when its API, image architecture, and
+device profile match the pins. These device pins — `api`, `avd`, `image`,
+`localImages`, `profile`, `locale`, `requiredPackages` — live directly in
+`mesh.yaml`'s `runtimes.android.options`; there is no separate manifest file.
 
 `appium:up` runs via `@openuji/journey-adapter-appium`'s runtime, verifies that
 device, installs the pinned UiAutomator2 driver into a versioned repository
 cache, starts Appium on port 4723, waits for readiness, and writes
-`.runtime/appium.env`. It neither starts Nextcloud nor runs a journey. Appium
-logs are stored under `.tmp/appium-runtime/`; emulator logs are under
-`.tmp/android-runtime/`.
+`.runtime/appium.env`. It neither starts Nextcloud nor runs a journey — nor
+does it download the Nextcloud APK; the adapter's own plugin does that
+automatically the first time a native test actually runs (same as Chromium
+for the web adapter — see "One-time prerequisites" above), from the `application`
+block already declared in `adapters.android.options`. Appium logs are stored
+under `.tmp/appium-runtime/`; emulator logs are under `.tmp/android-runtime/`.
 
-Both are the generic `journey-mesh runtime up mesh.yaml --runtime <key>`
-command underneath — `pnpm android:up`/`pnpm appium:up` are just this
-example's own thin script names for `--runtime android`/`--runtime appium`.
-Overrides go through `mesh.yaml`'s `runtimes.<key>.options` (interpolated the
-same way as every other option in this file), not CLI flags:
+Both `android:up` and `appium:up` are the generic
+`journey-mesh runtime up mesh.yaml --runtime <key>` command underneath —
+`pnpm android:up`/`pnpm appium:up` are just this example's own thin script
+names for `--runtime android`/`--runtime appium`. Overrides go through
+`mesh.yaml`'s `runtimes.<key>.options` (interpolated the same way as every
+other option in this file), not CLI flags:
 
 ```yaml
 runtimes:
   android:
     options:
-      avd: '${ANDROID_AVD_NAME:-}'
+      avd: '${ANDROID_AVD_NAME:-journey-mesh-api35}'
+      # api, image, localImages, profile, locale, requiredPackages also live here
   appium:
     options:
       port: '${APPIUM_PORT:-4723}'
@@ -164,8 +171,9 @@ pnpm stack:reset
 This is a destructive backend reset; reports and Android assets are retained.
 Detailed native bindings, evidence limits, and review status are in
 [Nextcloud Android](../../docs/nextcloud-android.md). The CI-only
-[`android/run-ci.sh`](android/run-ci.sh) helper continues to own its temporary
-Appium and logcat processes inside the Android workflow.
+[`run-ci.sh`](../../.github/workflows/run-ci.sh) helper, beside the Android
+workflow it belongs to, continues to own its temporary Appium and logcat
+processes.
 
 ## Configuration and lifecycle
 

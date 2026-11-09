@@ -1,15 +1,23 @@
-import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { androidDriverContract, type AndroidJourneyDriver } from "@openuji/journey-driver-android";
 import {
   knownOptions, optionsObject, positiveNumber, requiredString, type JourneyMeshPlugin
 } from "@openuji/journey-runtime/plugin";
 import type { JourneyAdapter } from "@openuji/journey-runner";
+import { ensureApk } from "./application.js";
 import { appiumAdapter, type AppiumDeviceConfig, type AppiumExecutionObserver } from "./index.js";
 
-type RuntimeManifest = Readonly<{
-  application: Readonly<{ apk: string; sha256: string; package: string; activity: string }>;
-}>;
+type ApplicationConfig = Readonly<{ apk: string; url: string; sha256: string; package: string; activity: string }>;
+
+function applicationConfig(options: Record<string, unknown>): ApplicationConfig {
+  const application = optionsObject(options.application, "application");
+  return Object.freeze({
+    apk: requiredString(application.apk, "application.apk"),
+    url: requiredString(application.url, "application.url"),
+    sha256: requiredString(application.sha256, "application.sha256"),
+    package: requiredString(application.package, "application.package"),
+    activity: requiredString(application.activity, "application.activity")
+  });
+}
 
 function endpoint(value: unknown): URL {
   if (typeof value !== "string") throw new Error("Appium endpoint must be an HTTP(S) URL");
@@ -22,14 +30,11 @@ function endpoint(value: unknown): URL {
 }
 
 async function configuration(options: Record<string, unknown>, resolvePath: (path: string) => string) {
-  const manifestPath = resolvePath(requiredString(options.runtimeManifest, "runtimeManifest"));
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as RuntimeManifest;
-  for (const key of ["apk", "sha256", "package", "activity"] as const) requiredString(manifest.application?.[key], `runtimeManifest.application.${key}`);
+  const application = applicationConfig(options);
   const apk = resolvePath(typeof options.apk === "string" && options.apk
     ? options.apk
-    : `${requiredString(options.apkDirectory, "apkDirectory")}/${manifest.application.apk}`);
-  const hash = createHash("sha256").update(await readFile(apk)).digest("hex");
-  if (hash !== manifest.application.sha256) throw new Error("Android APK does not match runtime manifest SHA-256");
+    : `${requiredString(options.apkDirectory, "apkDirectory")}/${application.apk}`);
+  await ensureApk({ path: apk, url: application.url, sha256: application.sha256 });
   const devices = Object.fromEntries(Object.entries(optionsObject(options.devices, "devices")).map(([id, raw]) => {
     const device = optionsObject(raw, `device ${id}`);
     return [id, Object.freeze({
@@ -37,7 +42,7 @@ async function configuration(options: Record<string, unknown>, resolvePath: (pat
       capabilities: optionsObject(device.capabilities ?? {}, `device ${id}.capabilities`)
     }) satisfies AppiumDeviceConfig];
   }));
-  return Object.freeze({ manifest, apk, devices: Object.freeze(devices) });
+  return Object.freeze({ application, apk, devices: Object.freeze(devices) });
 }
 
 export const journeyMeshPlugin: JourneyMeshPlugin<JourneyAdapter> = {
@@ -46,7 +51,7 @@ export const journeyMeshPlugin: JourneyMeshPlugin<JourneyAdapter> = {
   runtime: "appium",
   driverContract: androidDriverContract,
   async validate(options, context) {
-    knownOptions(options, ["endpoint", "assertionTimeoutMs", "pollIntervalMs", "runtimeManifest", "apkDirectory", "apk", "devices"]);
+    knownOptions(options, ["endpoint", "assertionTimeoutMs", "pollIntervalMs", "application", "apkDirectory", "apk", "devices"]);
     endpoint(options.endpoint ?? "http://127.0.0.1:4723/");
     positiveNumber(options.assertionTimeoutMs, 60_000);
     positiveNumber(options.pollIntervalMs, 200);
@@ -61,7 +66,7 @@ export const journeyMeshPlugin: JourneyMeshPlugin<JourneyAdapter> = {
     const configured = await configuration(options, context.resolvePath);
     return appiumAdapter({
       driver: dependencies.driver as AndroidJourneyDriver,
-      application: { apk: configured.apk, package: configured.manifest.application.package, activity: configured.manifest.application.activity },
+      application: { apk: configured.apk, package: configured.application.package, activity: configured.application.activity },
       devices: configured.devices,
       executionObservers: dependencies.observers as readonly AppiumExecutionObserver[],
       connection: { hostname: url.hostname, port: Number(url.port || (url.protocol === "https:" ? 443 : 80)), protocol: url.protocol === "https:" ? "https" : "http", path: url.pathname },
