@@ -52,7 +52,7 @@ jobs:
       - name: Configure canonical service URLs
         run: |
           stack_host=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
-          stack_env=$(node examples/nextcloud-filesharing/android/configure-stack.mjs "$stack_host")
+          stack_env=$(NEXTCLOUD_STACK_HOST="$stack_host" node examples/nextcloud-filesharing/deployment/configure-runtime.mjs --refresh)
           echo "NEXTCLOUD_STACK_ENV_FILE=$stack_env" >> "$GITHUB_ENV"
       - name: Start and provision services
         run: |

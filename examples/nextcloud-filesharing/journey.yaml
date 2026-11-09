@@ -5,7 +5,13 @@ envFiles:
   - ./deployment/.env.example
   - path: ./deployment/.env
     optional: true
+  - path: ./.runtime/stack.env
+    optional: true
   - env: NEXTCLOUD_STACK_ENV_FILE
+    optional: true
+  - path: ./.runtime/android.env
+    optional: true
+  - path: ./.runtime/appium.env
     optional: true
 
 model:

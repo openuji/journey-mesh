@@ -36,10 +36,13 @@
     "e2e:android": "node android/check-runtime.mjs && journey-mesh test journey.yaml --test native-recipient-sharing",
     "android:apk": "node android/download-apk.mjs",
     "android:check": "node android/check-runtime.mjs",
+    "android:up": "node android/lifecycle.mjs up",
+    "android:down": "node android/lifecycle.mjs down",
+    "appium:up": "node android/appium.mjs up",
+    "appium:down": "node android/appium.mjs down",
     "journey:test": "journey-mesh test journey.yaml",
     "journey:validate": "journey-mesh validate journey.yaml",
-    "android:local": "node android/local.mjs",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
-    "test": "node --test android/local.test.mjs && node --import tsx --test test/*.test.ts"
+    "test": "node --test android/*.test.mjs deployment/*.test.mjs && node --import tsx --test test/*.test.ts"
   }
 }

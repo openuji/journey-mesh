@@ -84,6 +84,7 @@ with the same command for any runtime combination:
 
 ```sh
 journey-mesh test journey.yaml --test browser-sharing
+journey-mesh test journey.yaml --test native-recipient-sharing
 journey-mesh test journey.yaml # all declared tests; prepare every configured runtime first
 journey-mesh validate journey.yaml --test browser-sharing
 journey-mesh report test-results
@@ -99,7 +100,7 @@ the test; adapters own browser and device resources. See the
 
 - Current execution compiles the checked-in UJG into a linear plan; ambiguous branches are rejected.
 - The only application binding in this repository is the pure Nextcloud web/Android reference driver.
-- The example requires a Docker-based Nextcloud stack with canonical URLs reachable by its runtimes; Android mode also requires a dedicated emulator/device.
+- The example requires Docker and canonical Nextcloud URLs reachable by its runtimes; the local lifecycle commands provision a dedicated Android emulator and Appium service when native execution is selected.
 - Accessibility evidence supports journey review, but it is not WCAG certification.
 - Extension APIs and report formats are prototype contracts.
 - Roadmap items are proposed work, not committed delivery.

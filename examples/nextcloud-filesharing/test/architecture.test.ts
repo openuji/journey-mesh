@@ -35,7 +35,16 @@ test("browser selection validates without Android device or APK configuration", 
   assert.deepEqual((await validateConfiguredTests(config.pathname, { test: "browser-sharing", env: {} })).tests, ["browser-sharing"]);
   const loaded = await loadJourneyTestConfig(config.pathname, {});
   assert.equal(Object.keys(loaded.config.tests).length, 2);
+  assert.deepEqual(loaded.config.envFiles?.filter((entry) => typeof entry === "object" && entry.path?.startsWith("./.runtime/")), [
+    { path: "./.runtime/stack.env", optional: true },
+    { path: "./.runtime/android.env", optional: true },
+    { path: "./.runtime/appium.env", optional: true }
+  ]);
   const legacy = await readdir(example);
   assert.ok(!legacy.includes("android.run.ts"));
   assert.ok(!legacy.includes("playwright.config.ts"));
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(packageJson.scripts["android:local"], undefined);
+  assert.match(packageJson.scripts["android:up"], /lifecycle\.mjs up/);
+  assert.match(packageJson.scripts["appium:up"], /appium\.mjs up/);
 });
