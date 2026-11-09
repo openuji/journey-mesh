@@ -111,15 +111,6 @@ importers:
         specifier: workspace:*
         version: link:../../packages/journey-runtime
     devDependencies:
-      appium:
-        specifier: 3.9.0
-        version: 3.9.0(@types/node@22.20.1)
-      appium-uiautomator2-driver:
-        specifier: 8.7.3
-        version: 8.7.3(@types/node@22.20.1)(appium@3.9.0(@types/node@22.20.1))
-      playwright:
-        specifier: ^1.61.1
-        version: 1.62.0
       tsx:
         specifier: ^4.20.3
         version: 4.23.1
@@ -138,6 +129,12 @@ importers:
       '@openuji/journey-runtime':
         specifier: workspace:*
         version: link:../journey-runtime
+      appium:
+        specifier: 3.9.0
+        version: 3.9.0(@types/node@22.20.1)
+      appium-uiautomator2-driver:
+        specifier: 8.7.3
+        version: 8.7.3(@types/node@22.20.1)(appium@3.9.0(@types/node@22.20.1))
       webdriverio:
         specifier: 9.20.0
         version: 9.20.0
@@ -3965,7 +3962,7 @@ snapshots:
   normalize-package-data@8.0.0:
     dependencies:
       hosted-git-info: 9.0.3
-      semver: 7.8.5
+      semver: 7.8.6
       validate-npm-package-license: 3.0.4
 
   normalize-path@3.0.0: {}

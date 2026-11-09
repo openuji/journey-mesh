@@ -5,9 +5,8 @@ log_dir="${ANDROID_LOG_DIR:-$PWD/.tmp/android-logs}"
 appium_port="${APPIUM_PORT:-4723}"
 export APPIUM_URL="http://127.0.0.1:$appium_port/"
 mkdir -p "$log_dir"
-node examples/nextcloud-filesharing/node_modules/appium/index.js \
-  --address 127.0.0.1 --port "$appium_port" --log-level warn \
-  --log "$log_dir/appium.log" &
+node_modules/.bin/journey-adapter-appium appium serve \
+  --address 127.0.0.1 --port "$appium_port" --log "$log_dir/appium.log" &
 appium_pid=$!
 adb -s "$ANDROID_UDID" logcat > "$log_dir/logcat.log" 2>&1 &
 logcat_pid=$!
@@ -37,7 +36,7 @@ if [ "$ready" != 1 ]; then
 fi
 adb -s "$ANDROID_UDID" shell getprop > "$log_dir/device-properties.txt"
 pnpm --filter @openuji/example-nextcloud-filesharing android:check
-journey_args=(test journey.yaml)
+journey_args=(test mesh.yaml)
 if [ -n "${JOURNEY_MESH_TEST-native-recipient-sharing}" ]; then
   journey_args+=(--test "${JOURNEY_MESH_TEST-native-recipient-sharing}")
 fi

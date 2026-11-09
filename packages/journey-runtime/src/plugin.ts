@@ -19,7 +19,7 @@ export type JourneyPluginContext = {
   resolvePath(path: string): string;
 };
 export type JourneyPluginDependencies = { driver?: unknown; observers?: readonly unknown[] };
-export type JourneyPluginKind = "model" | "adapter" | "driver" | "observer" | "profile" | "environment";
+export type JourneyPluginKind = "model" | "adapter" | "driver" | "observer" | "profile" | "environment" | "runtime";
 /** Imports, validation and construction must not allocate automation resources or mutate services. */
 export type JourneyMeshPlugin<T = unknown> = {
   apiVersion: 1;

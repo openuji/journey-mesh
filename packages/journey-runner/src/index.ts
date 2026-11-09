@@ -48,6 +48,7 @@ export type {
   JourneyAdapterCloseInput,
   JourneyAdapterExecution,
   JourneyAdapterExecutionInput,
+  JourneyAdapterRuntime,
   JourneyExecutionContext,
   JourneyProfile
 } from "./adapters/contracts.js";

@@ -2,7 +2,7 @@
 
 # Nextcloud file-sharing tests
 
-[`journey.yaml`](./journey.yaml) defines the tests, their selected journeys,
+[`mesh.yaml`](./mesh.yaml) defines the tests, their selected journeys,
 adapters, drivers, observers, interaction profiles, credentials, and output.
 The same Journey Mesh command executes any configured runtime combination.
 
@@ -27,10 +27,13 @@ pnpm, Docker with Compose, and the workspace dependencies:
 ```sh
 pnpm install --frozen-lockfile
 pnpm build
-pnpm exec playwright install chromium
 ```
 
-Linux users may need `pnpm exec playwright install --with-deps chromium`.
+The web adapter installs its own pinned Chromium build automatically, the
+first time any browser-based test launches one; there is no separate install
+step. On Linux, if that first launch fails because Chromium can't start,
+install its system dependencies once with
+`pnpm --filter @openuji/journey-adapter-playwright exec playwright install --with-deps chromium`.
 
 Native execution additionally requires a current Android Studio installation and
 an `ANDROID_HOME` (or `ANDROID_SDK_ROOT`) pointing at its SDK. The lifecycle
@@ -62,8 +65,8 @@ environment file. Later stack commands reuse the generated runtime environment.
 Execution stays entirely in the YAML test specification:
 
 ```sh
-pnpm exec journey-mesh validate journey.yaml --test browser-sharing
-pnpm exec journey-mesh test journey.yaml --test browser-sharing
+pnpm exec journey-mesh validate mesh.yaml --test browser-sharing
+pnpm exec journey-mesh test mesh.yaml --test browser-sharing
 ```
 
 The test runs both its default and keyboard-only profiles. Set `HEADLESS=false`
@@ -79,31 +82,43 @@ pnpm android:up
 pnpm appium:up
 ```
 
-`android:up` installs missing platform tools, emulator, command-line tools, and
-the host-native Google APIs API 35 image. It creates or validates the dedicated
-Pixel 6 AVD `journey-mesh-api35`, downloads and verifies Nextcloud Android
-35.0.2, boots headlessly, disables animations, and writes the active device ID
-to `.runtime/android.env`. The first run downloads several large components and
+`android:up` runs via `@openuji/journey-driver-android`'s runtime, installs
+missing platform tools, emulator, command-line tools, and the host-native
+Google APIs API 35 image. It creates or validates the dedicated Pixel 6 AVD
+`journey-mesh-api35`, downloads and verifies Nextcloud Android 35.0.2, boots
+headlessly, disables animations, and writes the active device ID to
+`.runtime/android.env`. The first run downloads several large components and
 may show Android SDK license prompts. An existing AVD with the same name is
 reused only when its API, image architecture, and device profile match the pins.
 
-`appium:up` verifies that device, installs the pinned UiAutomator2 driver into a
-versioned repository cache, starts Appium on port 4723, waits for readiness, and
-writes `.runtime/appium.env`. It neither starts Nextcloud nor runs a journey.
-Appium logs are stored under `.tmp/appium-runtime/`; emulator logs are under
+`appium:up` runs via `@openuji/journey-adapter-appium`'s runtime, verifies that
+device, installs the pinned UiAutomator2 driver into a versioned repository
+cache, starts Appium on port 4723, waits for readiness, and writes
+`.runtime/appium.env`. It neither starts Nextcloud nor runs a journey. Appium
+logs are stored under `.tmp/appium-runtime/`; emulator logs are under
 `.tmp/android-runtime/`.
 
-Optional lifecycle overrides are:
+Both are the generic `journey-mesh runtime up mesh.yaml --runtime <key>`
+command underneath — `pnpm android:up`/`pnpm appium:up` are just this
+example's own thin script names for `--runtime android`/`--runtime appium`.
+Overrides go through `mesh.yaml`'s `runtimes.<key>.options` (interpolated the
+same way as every other option in this file), not CLI flags:
 
-```sh
-pnpm android:up --avd another-dedicated-avd
-pnpm appium:up --port 4725
+```yaml
+runtimes:
+  android:
+    options:
+      avd: '${ANDROID_AVD_NAME:-}'
+  appium:
+    options:
+      port: '${APPIUM_PORT:-4723}'
 ```
 
-The matching `--avd` must also be passed to `android:down`. The selected Appium
-port is recorded automatically for the YAML runner. `ANDROID_AVD_NAME`,
-`ANDROID_CLI`, `ANDROID_STUDIO_HOME`, and `APPIUM_HOME` provide environment-level
-overrides. Global Appium installations are never modified.
+So `ANDROID_AVD_NAME=another-dedicated-avd pnpm android:up` and
+`APPIUM_PORT=4725 pnpm appium:up` override without editing the YAML.
+`ANDROID_CLI`, `ANDROID_STUDIO_HOME`, and `APPIUM_HOME` provide further
+environment-level overrides read directly by the runtime, same as before.
+Global Appium installations are never modified.
 
 ## Run the native-recipient test
 
@@ -111,8 +126,8 @@ With the stack, Android, and Appium ready, the execution command still selects
 only the YAML test:
 
 ```sh
-pnpm exec journey-mesh validate journey.yaml --test native-recipient-sharing
-pnpm exec journey-mesh test journey.yaml --test native-recipient-sharing
+pnpm exec journey-mesh validate mesh.yaml --test native-recipient-sharing
+pnpm exec journey-mesh test mesh.yaml --test native-recipient-sharing
 ```
 
 This runs `default-web-touch-android` and
@@ -123,8 +138,8 @@ selects both configured tests and therefore requires both runtime lifecycles.
 From the repository root, the same selections are:
 
 ```sh
-pnpm exec journey-mesh test examples/nextcloud-filesharing/journey.yaml --test browser-sharing
-pnpm exec journey-mesh test examples/nextcloud-filesharing/journey.yaml --test native-recipient-sharing
+pnpm exec journey-mesh test examples/nextcloud-filesharing/mesh.yaml --test browser-sharing
+pnpm exec journey-mesh test examples/nextcloud-filesharing/mesh.yaml --test native-recipient-sharing
 ```
 
 ## Stop local services
@@ -138,7 +153,7 @@ pnpm android:down
 
 These commands stop only the processes recorded for this example. They retain
 the AVD, Android SDK packages, APK, Appium cache, reports, and Nextcloud data.
-`android:down --avd another-dedicated-avd` stops a named override.
+`ANDROID_AVD_NAME=another-dedicated-avd pnpm android:down` stops a named override.
 
 To delete the Nextcloud containers and their service volumes, run:
 

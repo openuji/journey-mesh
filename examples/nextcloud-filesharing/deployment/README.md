@@ -36,10 +36,10 @@ runtime file so later YAML commands need no shell export.
 ## Run
 
 ```sh
-pnpm exec journey-mesh test examples/nextcloud-filesharing/journey.yaml --test browser-sharing
+pnpm exec journey-mesh test examples/nextcloud-filesharing/mesh.yaml --test browser-sharing
 ```
 
-The Journey Mesh HTML index links the functional evidence, axe path reports, and source screenshots under `test-results/<test-id>/`. Tests and their adapters are declared in [`journey.yaml`](../journey.yaml).
+The Journey Mesh HTML index links the functional evidence, axe path reports, and source screenshots under `test-results/<test-id>/`. Tests and their adapters are declared in [`mesh.yaml`](../mesh.yaml).
 
 ## Reset
 

@@ -46,9 +46,9 @@ jobs:
       - name: Build and prepare tooling
         run: |
           pnpm build
-          pnpm --filter @openuji/example-nextcloud-filesharing exec playwright install --with-deps chromium
+          pnpm --filter @openuji/journey-adapter-playwright exec playwright install --with-deps chromium
           pnpm --filter @openuji/example-nextcloud-filesharing android:apk
-          pnpm --filter @openuji/example-nextcloud-filesharing exec appium driver install --source=local "$GITHUB_WORKSPACE/examples/nextcloud-filesharing/node_modules/appium-uiautomator2-driver"
+          pnpm --filter @openuji/journey-adapter-appium exec journey-adapter-appium appium ensure-driver
       - name: Configure canonical service URLs
         run: |
           stack_host=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')

@@ -5,6 +5,8 @@ import { optionsObject, requiredString } from "./plugin.js";
 
 export type ComponentConfig = { use: string; options?: Record<string, unknown> };
 export type AdapterConfig = ComponentConfig & { driver?: ComponentConfig; observers?: ComponentConfig[] };
+/** An infrastructure-lifecycle component (see JourneyAdapterRuntime); dependsOn orders whole-config up/down. */
+export type RuntimeConfig = ComponentConfig & { dependsOn?: readonly string[] };
 export type JourneyItemConfig = { id: string; source: string; select: string; adapter: string };
 export type TestProfileConfig = { id: string; journeys: Record<string, string> };
 export type JourneyTestDefinition = {
@@ -21,6 +23,7 @@ export type JourneyTestConfig = {
   profiles: Record<string, ComponentConfig>;
   tests: Record<string, JourneyTestDefinition>;
   outputDir?: string;
+  runtimes?: Record<string, RuntimeConfig>;
 };
 export class JourneyConfigError extends Error {
   override name = "JourneyConfigError";
@@ -50,6 +53,7 @@ export async function loadJourneyTestConfig(path: string, environment: Record<st
     optionsObject(raw.model, "model");
     optionsObject(raw.adapters, "adapters");
     optionsObject(raw.profiles, "profiles");
+    if (raw.runtimes !== undefined) optionsObject(raw.runtimes, "runtimes");
     const tests = optionsObject(raw.tests, "tests");
     if (!Object.keys(tests).length) throw new Error("At least one test is required");
     const testMap = document.get("tests", true);

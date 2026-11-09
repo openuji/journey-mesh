@@ -6,13 +6,19 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./plugin": "./src/plugin.ts"
+    "./plugin": "./src/plugin.ts",
+    "./runtime": "./src/runtime/plugin.ts"
   },
   "types": "./src/index.ts",
+  "bin": {
+    "journey-adapter-appium": "./bin/journey-adapter-appium.mjs"
+  },
   "dependencies": {
     "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-driver-android": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
+    "appium": "3.9.0",
+    "appium-uiautomator2-driver": "8.7.3",
     "webdriverio": "9.20.0",
     "@openuji/journey-runtime": "workspace:*"
   },
@@ -26,6 +32,6 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
-    "test": "node --import tsx --test test/integration.test.ts"
+    "test": "node --import tsx --test test/*.test.ts"
   }
 }

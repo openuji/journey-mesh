@@ -83,14 +83,14 @@ Declare selected journeys and their adapters in one YAML file, then execute them
 with the same command for any runtime combination:
 
 ```sh
-journey-mesh test journey.yaml --test browser-sharing
-journey-mesh test journey.yaml --test native-recipient-sharing
-journey-mesh test journey.yaml # all declared tests; prepare every configured runtime first
-journey-mesh validate journey.yaml --test browser-sharing
+journey-mesh test mesh.yaml --test browser-sharing
+journey-mesh test mesh.yaml --test native-recipient-sharing
+journey-mesh test mesh.yaml # all declared tests; prepare every configured runtime first
+journey-mesh validate mesh.yaml --test browser-sharing
 journey-mesh report test-results
 ```
 
-The [Nextcloud configuration](examples/nextcloud-filesharing/journey.yaml) contains
+The [Nextcloud configuration](examples/nextcloud-filesharing/mesh.yaml) contains
 both browser-only and native-recipient tests. Fixtures and reporting belong to
 the test; adapters own browser and device resources. See the
 [configuration and plugin contract](docs/yaml-tests.md) and

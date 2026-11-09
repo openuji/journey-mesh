@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 import { mkdir, writeFile } from "node:fs/promises";
 import {
   errorToJourneyRunError, reportJourneyResult, routedAdapter, runJourney,
-  type JourneyAdapter, type JourneyEnvironment, type JourneyPlan, type JourneyPlanOperation,
+  type JourneyAdapter, type JourneyAdapterRuntime, type JourneyEnvironment, type JourneyPlan, type JourneyPlanOperation,
   type JourneyProfile, type JourneyReporter, type JourneyRunError, type JourneyProgressSink, type RunResult
 } from "@openuji/journey-runner";
 import { immutableJourneyPlan } from "@openuji/journey-execution-model";
@@ -39,7 +39,7 @@ async function prepare(path: string, options: ConfiguredTestsOptions): Promise<{
   const { config } = loaded;
   let preparingTestId: string | undefined;
   try {
-    checkKeys(config as unknown as Record<string, unknown>, ["version", "envFiles", "model", "adapters", "profiles", "tests", "outputDir"], "configuration");
+    checkKeys(config as unknown as Record<string, unknown>, ["version", "envFiles", "model", "adapters", "profiles", "tests", "outputDir", "runtimes"], "configuration");
     const outputDir = resolve(dirname(loaded.path), interpolate(config.outputDir ?? "test-results", loaded.env, "outputDir"));
     const selected = loaded.testOrder.map((id) => [id, config.tests[id]] as const).filter(([id]) => options.test === undefined || id === options.test);
     if (!selected.length) throw new Error(`Unknown test ${options.test}`);
@@ -209,6 +209,105 @@ function compatible(adapter: JourneyMeshPlugin, child: JourneyMeshPlugin, label:
   if (child.runtime && child.runtime !== adapter.runtime) {
     throw new Error(`${label} runtime ${child.runtime} is incompatible with adapter runtime ${adapter.runtime ?? "unspecified"}`);
   }
+}
+
+export type ConfiguredRuntimeOptions = { runtime?: string; env?: Record<string, string | undefined> };
+
+/** Dependencies first (for `up`); the caller reverses the order itself for `down`. */
+function orderRuntimes(runtimes: Record<string, unknown>): string[] {
+  const order: string[] = [];
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (key: string): void => {
+    if (visited.has(key)) return;
+    if (visiting.has(key)) throw new Error(`Circular runtimes.dependsOn involving ${key}`);
+    visiting.add(key);
+    const component = optionsObject(runtimes[key], `runtimes.${key}`);
+    const dependsOn = component.dependsOn;
+    if (dependsOn !== undefined) {
+      if (!Array.isArray(dependsOn)) throw new Error(`runtimes.${key}.dependsOn must be an array`);
+      for (const dependency of dependsOn) {
+        const name = requiredString(dependency, `runtimes.${key}.dependsOn`);
+        if (!Object.hasOwn(runtimes, name)) throw new Error(`runtimes.${key}.dependsOn references unknown runtime ${name}`);
+        visit(name);
+      }
+    }
+    visiting.delete(key);
+    visited.add(key);
+    order.push(key);
+  };
+  for (const key of Object.keys(runtimes)) visit(key);
+  return order;
+}
+
+async function loadConfiguredRuntimes(path: string, options: ConfiguredRuntimeOptions): Promise<{ key: string; runtime: JourneyAdapterRuntime }[]> {
+  const loaded = await loadJourneyTestConfig(path, options.env);
+  const { config } = loaded;
+  checkKeys(config as unknown as Record<string, unknown>, ["version", "envFiles", "model", "adapters", "profiles", "tests", "outputDir", "runtimes"], "configuration");
+  const runtimes = optionsObject(config.runtimes ?? {}, "runtimes");
+  if (options.runtime !== undefined && !Object.hasOwn(runtimes, options.runtime)) throw new Error(`Unknown runtime ${options.runtime}`);
+  const keys = options.runtime !== undefined ? [options.runtime] : orderRuntimes(runtimes);
+  const outputDir = resolve(dirname(loaded.path), interpolate(config.outputDir ?? "test-results", loaded.env, "outputDir"));
+  const artifacts = fileArtifactStore(resolve(outputDir, ".runtimes"));
+  const context: JourneyPluginContext = {
+    artifacts, configPath: loaded.path, testId: "runtime", operations: [], env: loaded.env,
+    resolvePath: (value) => resolve(dirname(loaded.path), value)
+  };
+  const modules = new Map<string, Promise<JourneyMeshPlugin>>();
+  const result: { key: string; runtime: JourneyAdapterRuntime }[] = [];
+  for (const key of keys) {
+    const label = `runtimes.${key}`;
+    const component = optionsObject(runtimes[key], label);
+    checkKeys(component, ["use", "options", "dependsOn"], label);
+    const reference = interpolate(requiredString(component.use, `${label}.use`), loaded.env, `${label}.use`);
+    const modulePath = reference.startsWith(".") || reference.startsWith("/")
+      ? context.resolvePath(reference)
+      : createRequire(loaded.path).resolve(reference);
+    let pending = modules.get(modulePath);
+    if (!pending) {
+      pending = import(pathToFileURL(modulePath).href).then((module: { journeyMeshPlugin?: JourneyMeshPlugin }) => {
+        const plugin = module.journeyMeshPlugin;
+        if (!plugin || plugin.apiVersion !== 1 || typeof plugin.validate !== "function" || typeof plugin.create !== "function") {
+          throw new Error(`Plugin ${reference} must export journeyMeshPlugin with apiVersion 1, validate and create`);
+        }
+        if (plugin.kind !== "runtime") throw new Error(`${label} requires a runtime plugin, received ${plugin.kind}`);
+        return plugin;
+      });
+      modules.set(modulePath, pending);
+    }
+    const plugin = await pending;
+    const settings = interpolate(optionsObject(component.options ?? {}, `${label}.options`), loaded.env, `${label}.options`);
+    try { await plugin.validate(settings, context); }
+    catch (error) { throw new Error(`${label}: ${error instanceof Error ? error.message : "invalid options"}`); }
+    const runtime = await plugin.create(settings, context, {}) as JourneyAdapterRuntime;
+    if (!runtime || typeof runtime.up !== "function") throw new Error(`${label} must create a JourneyAdapterRuntime`);
+    result.push({ key, runtime });
+  }
+  return result;
+}
+
+/**
+ * `options.runtime` selects exactly that one entry — no cascading into its
+ * `dependsOn` (a runtime that needs another already up fails fast, same as
+ * today). Omitted, every entry runs in `dependsOn` order (reversed for `down`).
+ * `up` stops at the first failure; `down` is best-effort across every entry.
+ */
+export async function runConfiguredRuntime(path: string, action: "up" | "down", options: ConfiguredRuntimeOptions = {}): Promise<void> {
+  const plugins = await loadConfiguredRuntimes(path, options);
+  if (action === "up") {
+    for (const { key, runtime } of plugins) {
+      try { await runtime.up(); }
+      catch (error) { throw new Error(`runtimes.${key}: ${error instanceof Error ? error.message : "failed to start"}`); }
+    }
+    return;
+  }
+  const errors: string[] = [];
+  for (const { key, runtime } of [...plugins].reverse()) {
+    if (!runtime.down) continue;
+    try { await runtime.down(); }
+    catch (error) { errors.push(`runtimes.${key}: ${error instanceof Error ? error.message : "failed to stop"}`); }
+  }
+  if (errors.length) throw new Error(errors.join("\n"));
 }
 
 export async function validateConfiguredTests(path: string, options: ConfiguredTestsOptions = {}): Promise<{ tests: readonly string[] }> {

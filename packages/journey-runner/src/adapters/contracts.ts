@@ -73,3 +73,14 @@ export type JourneyProfile = {
     context: JourneyExecutionContext
   ): Promise<InputModalityDecision> | InputModalityDecision;
 };
+
+/**
+ * Infrastructure lifecycle for an adapter's automation runtime (emulators,
+ * local servers, browser binaries). Prepared once per session, independent of
+ * any single execution; distinct from JourneyAdapter's per-run contract.
+ */
+export type JourneyAdapterRuntime = {
+  readonly name: string;
+  up(): Promise<void>;
+  down?(): Promise<void>;
+};

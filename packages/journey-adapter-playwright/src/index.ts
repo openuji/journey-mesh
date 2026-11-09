@@ -25,6 +25,7 @@ import {
   type StatePlanOperation,
   type TransitionPlanOperation
 } from "@openuji/journey-runner";
+import { ensureChromiumInstalled } from "./browser-binary.js";
 import type { PlaywrightExecutionObserver } from "./observers/contracts.js";
 import { PlaywrightObserverDispatcher } from "./observers/playwright-observer-dispatcher.js";
 import { playwrightCommandForModality, type PlaywrightInteractionCommand } from "./input-modalities.js";
@@ -311,6 +312,10 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
 }
 
 async function launchBrowser(options: PlaywrightAdapterOptions): Promise<Browser> {
+  // Only the default chromium target is known here; a caller-supplied
+  // browserType may point at a browser whose binary this package can't
+  // install on its behalf.
+  if (!options.browserType) await ensureChromiumInstalled();
   return (options.browserType ?? chromium).launch({ headless: options.headless ?? true, ...options.launchOptions });
 }
 

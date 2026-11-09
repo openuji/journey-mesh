@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { test } from "node:test";
 import { stringify } from "yaml";
-import { runConfiguredTests, validateConfiguredTests, loadJourneyTestConfig, fileArtifactStore } from "@openuji/journey-runtime";
+import { runConfiguredTests, validateConfiguredTests, loadJourneyTestConfig, fileArtifactStore, runConfiguredRuntime } from "@openuji/journey-runtime";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/${name}.mjs`, import.meta.url));
@@ -34,7 +34,7 @@ async function setup() {
       }
     }
   };
-  const path = join(directory, "journey.yaml");
+  const path = join(directory, "mesh.yaml");
   await writeFile(join(directory, "model.json"), JSON.stringify({ journeys: ["alice", "bob"] }));
   const save = () => writeFile(path, stringify(config));
   const events = async () => (await readFile(join(directory, "events.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as { event: string; name?: string; item?: string });
@@ -240,4 +240,53 @@ test("missing device configuration identifies its test and suggests explicit sel
   await assert.rejects(access(join(suite.directory, "events.jsonl")));
   const validation = await exec(process.execPath, [cli, "validate", suite.path, "--test", "sharing"], { env });
   assert.match(validation.stdout, /Valid tests: sharing/);
+});
+
+function runtimeEntry(name: string, options: Record<string, unknown> = {}, dependsOn?: readonly string[]) {
+  return { use: fixture("runtime"), options: { name, log: "runtime-events.jsonl", ...options }, ...(dependsOn ? { dependsOn } : {}) };
+}
+
+async function runtimeEvents(directory: string) {
+  return (await readFile(join(directory, "runtime-events.jsonl"), "utf8")).trim().split("\n").filter(Boolean)
+    .map((line) => JSON.parse(line) as { event: string; name: string });
+}
+
+test("runtimes run in dependsOn order for up, reverse for down, and a single selection does not cascade", async () => {
+  const suite = await setup();
+  const config = { ...suite.config, runtimes: { a: runtimeEntry("a"), b: runtimeEntry("b", {}, ["a"]) } };
+  await writeFile(suite.path, stringify(config));
+  await runConfiguredRuntime(suite.path, "up");
+  assert.deepEqual((await runtimeEvents(suite.directory)).map((event) => `${event.name}:${event.event}`), ["a:up", "b:up"]);
+  await runConfiguredRuntime(suite.path, "down");
+  assert.deepEqual((await runtimeEvents(suite.directory)).slice(2).map((event) => `${event.name}:${event.event}`), ["b:down", "a:down"]);
+  await writeFile(join(suite.directory, "runtime-events.jsonl"), "");
+  await runConfiguredRuntime(suite.path, "up", { runtime: "b" });
+  assert.deepEqual((await runtimeEvents(suite.directory)).map((event) => `${event.name}:${event.event}`), ["b:up"]);
+});
+
+test("runtime up stops at the first failure; down is best-effort across every entry", async () => {
+  const suite = await setup();
+  await writeFile(suite.path, stringify({
+    ...suite.config,
+    runtimes: { a: runtimeEntry("a", { failUp: true }), b: runtimeEntry("b", {}, ["a"]) }
+  }));
+  await assert.rejects(runConfiguredRuntime(suite.path, "up"), /runtimes\.a:.*up failure/);
+  assert.deepEqual((await runtimeEvents(suite.directory)).map((event) => `${event.name}:${event.event}`), ["a:up"]);
+  await writeFile(join(suite.directory, "runtime-events.jsonl"), "");
+  await writeFile(suite.path, stringify({
+    ...suite.config,
+    runtimes: { a: runtimeEntry("a", { failDown: true }), b: runtimeEntry("b", { failDown: true }, ["a"]) }
+  }));
+  await assert.rejects(runConfiguredRuntime(suite.path, "down"), (error: unknown) => {
+    assert.match((error as Error).message, /runtimes\.b:.*down failure/s);
+    assert.match((error as Error).message, /runtimes\.a:.*down failure/s);
+    return true;
+  });
+  assert.deepEqual((await runtimeEvents(suite.directory)).map((event) => `${event.name}:${event.event}`), ["b:down", "a:down"]);
+});
+
+test("an unknown runtime selection is rejected", async () => {
+  const suite = await setup();
+  await writeFile(suite.path, stringify({ ...suite.config, runtimes: { a: runtimeEntry("a") } }));
+  await assert.rejects(runConfiguredRuntime(suite.path, "up", { runtime: "missing" }), /Unknown runtime missing/);
 });

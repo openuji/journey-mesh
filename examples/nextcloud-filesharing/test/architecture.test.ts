@@ -7,7 +7,7 @@ import { loadJourneyTestConfig, validateConfiguredTests } from "@openuji/journey
 const example = new URL("../", import.meta.url);
 
 test("example delegates Nextcloud mechanics and retains only scenario configuration", async () => {
-  const config = await readFile(new URL("journey.yaml", example), "utf8");
+  const config = await readFile(new URL("mesh.yaml", example), "utf8");
   assert.match(config, /@openuji\/journey-driver-nextcloud\/federated-sharing\/plugin/);
   assert.match(config, /shareCreated: urn:effect:alice-confirm-share/);
   assert.match(config, /shareAccepted: urn:effect:bob-accept-share/);
@@ -31,7 +31,7 @@ test("native scenario enters the application and models notification navigation"
 });
 
 test("browser selection validates without Android device or APK configuration", async () => {
-  const config = new URL("../journey.yaml", import.meta.url);
+  const config = new URL("../mesh.yaml", import.meta.url);
   assert.deepEqual((await validateConfiguredTests(config.pathname, { test: "browser-sharing", env: {} })).tests, ["browser-sharing"]);
   const loaded = await loadJourneyTestConfig(config.pathname, {});
   assert.equal(Object.keys(loaded.config.tests).length, 2);
@@ -45,6 +45,18 @@ test("browser selection validates without Android device or APK configuration", 
   assert.ok(!legacy.includes("playwright.config.ts"));
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   assert.equal(packageJson.scripts["android:local"], undefined);
-  assert.match(packageJson.scripts["android:up"], /lifecycle\.mjs up/);
-  assert.match(packageJson.scripts["appium:up"], /appium\.mjs up/);
+  assert.match(packageJson.scripts["android:up"], /journey-mesh runtime up mesh\.yaml --runtime android/);
+  assert.match(packageJson.scripts["appium:up"], /journey-mesh runtime up mesh\.yaml --runtime appium/);
+});
+
+test("example delegates Android/Appium infrastructure lifecycle to the owning packages", async () => {
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  const allDependencies = { ...packageJson.dependencies, ...packageJson.devDependencies };
+  assert.ok(!("appium" in allDependencies));
+  assert.ok(!("appium-uiautomator2-driver" in allDependencies));
+  assert.ok(!("playwright" in allDependencies));
+  assert.ok("@openuji/journey-driver-android" in packageJson.dependencies);
+  assert.ok("@openuji/journey-adapter-appium" in packageJson.dependencies);
+  assert.ok(!(await readdir(new URL("android/", example))).includes("lifecycle.mjs"));
+  assert.ok(!(await readdir(new URL("android/", example))).includes("appium.mjs"));
 });

@@ -1,6 +1,17 @@
 version: 1
 outputDir: ./test-results
 
+runtimes:
+  android:
+    use: '@openuji/journey-driver-android/runtime'
+    options:
+      avd: '${ANDROID_AVD_NAME:-}'
+  appium:
+    use: '@openuji/journey-adapter-appium/runtime'
+    dependsOn: [android]
+    options:
+      port: '${APPIUM_PORT:-4723}'
+
 envFiles:
   - ./deployment/.env.example
   - path: ./deployment/.env
