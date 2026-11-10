@@ -176,6 +176,9 @@ importers:
 
   packages/journey-cli:
     dependencies:
+      '@openuji/journey-runner':
+        specifier: workspace:*
+        version: link:../journey-runner
       '@openuji/journey-runtime':
         specifier: workspace:*
         version: link:../journey-runtime

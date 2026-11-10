@@ -2,6 +2,7 @@ import { createServer, type Server } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { JourneyConfigError, runConfiguredRuntime, runConfiguredTests, validateConfiguredTests } from "@openuji/journey-runtime";
+import { consoleJourneyProgress } from "@openuji/journey-runner/console";
 
 const help = `Usage:
   journey-mesh test <config.yaml> [--test <id>]
@@ -59,9 +60,12 @@ export async function main(args: string[]): Promise<number> {
       const result = await validateConfiguredTests(path, { test, signal: controller.signal });
       console.log(`Valid tests: ${result.tests.join(", ")}`); return 0;
     }
-    const result = await runConfiguredTests(path, { test, signal: controller.signal, progress: [{ publish(event) {
-      if (event.type === "execution-completed") console.log(`  ${event.result.profileId}: ${event.result.outcome.kind}`);
-    } }] });
+    const result = await runConfiguredTests(path, { test, signal: controller.signal, progress: [
+      consoleJourneyProgress(),
+      { publish(event) {
+        if (event.type === "execution-completed") console.log(`  ${event.result.profileId}: ${event.result.outcome.kind}`);
+      } }
+    ] });
     for (const test of result.tests) {
       console.log(`${test.result.ok && !test.reportingErrors.length ? "PASS" : "FAIL"} ${test.id}`);
       for (const error of [...test.result.errors, ...test.reportingErrors]) console.error(`  ${error.name}: ${error.message}`);

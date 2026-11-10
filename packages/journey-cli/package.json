@@ -9,6 +9,7 @@
   },
   "types": "./src/index.ts",
   "dependencies": {
+    "@openuji/journey-runner": "workspace:*",
     "@openuji/journey-runtime": "workspace:*",
     "tsx": "^4.20.3"
   },
