@@ -1,12 +1,12 @@
 {
   "@context": [
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/core.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/graph.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/surface.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/phase.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/l10n.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/observability.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/entry-binding.context.jsonld"
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/core.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/graph.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/surface.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/phase.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/l10n.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/observability.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/entry-binding.context.jsonld"
   ],
   "@id": "urn:ujg:document:nextcloud-web-setup",
   "@type": "UJGDocument",
@@ -20,7 +20,7 @@
       "@type": "CompositeState",
       "@id": "urn:composite:alice-web-setup",
       "label": "Alice web login setup",
-      "subjourneyId": "urn:journey:alice-web-setup"
+      "subjourneyRefs": ["urn:journey:alice-web-setup"]
     },
     {
       "@type": "Journey",
@@ -60,7 +60,7 @@
       "@type": "CompositeState",
       "@id": "urn:composite:bob-web-setup",
       "label": "Bob web login setup",
-      "subjourneyId": "urn:journey:bob-web-setup"
+      "subjourneyRefs": ["urn:journey:bob-web-setup"]
     },
     {
       "@type": "Journey",
@@ -96,10 +96,10 @@
     { "@type": "Transition", "@id": "urn:transition:bob-submits-login", "from": "urn:state:bob-password-entered", "to": "urn:state:bob-authenticated" },
     { "@type": "Surface", "@id": "urn:surface:bob-submits-login", "graphNodeRef": "urn:transition:bob-submits-login" },
 
-    { "@type": "Touchpoint", "@id": "urn:touchpoint:nextcloud-a", "compositeStateRefs": ["urn:composite:alice-web-setup"] },
-    { "@type": "Touchpoint", "@id": "urn:touchpoint:nextcloud-b", "compositeStateRefs": ["urn:composite:bob-web-setup"] },
-    { "@type": "User", "@id": "urn:user:alice", "touchpointRefs": ["urn:touchpoint:nextcloud-a"] },
-    { "@type": "User", "@id": "urn:user:bob", "touchpointRefs": ["urn:touchpoint:nextcloud-b"] },
+    { "@type": "Touchpoint", "@id": "urn:touchpoint:nextcloud-a", "journeyRefs": ["urn:journey:alice-web-setup"] },
+    { "@type": "Touchpoint", "@id": "urn:touchpoint:nextcloud-b", "journeyRefs": ["urn:journey:bob-web-setup"] },
+    { "@type": "Persona", "@id": "urn:user:alice", "touchpointRefs": ["urn:touchpoint:nextcloud-a"] },
+    { "@type": "Persona", "@id": "urn:user:bob", "touchpointRefs": ["urn:touchpoint:nextcloud-b"] },
     { "@type": "Locale", "@id": "urn:locale:en", "localeCode": "en" },
     { "@type": "MessageMeta", "@id": "urn:message:login-account", "defaultLocaleRef": "urn:locale:en" },
     { "@type": "Message", "@id": "urn:message-value:login-account:en", "messageMetaRef": "urn:message:login-account", "localeRef": "urn:locale:en", "value": "Account name or email" },

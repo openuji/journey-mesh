@@ -45,7 +45,7 @@ type NodeIndex = {
 };
 
 type CompositeAssignment = {
-  userId: string;
+  personaId: string;
   touchpointId: string;
 };
 
@@ -122,7 +122,7 @@ function compileDocument(document: UjgDocument, options: CompileUjgJourneyPlanOp
     );
     const assignment = assignmentByComposite.get(compositeStateId);
     if (!assignment) {
-      throw new Error(`No user/touchpoint assignment for ${compositeStateId}`);
+      throw new Error(`No persona/touchpoint assignment for ${compositeStateId}`);
     }
 
     const phaseId = requiredString(step.phaseRef, `${step["@id"]}.phaseRef`);
@@ -179,7 +179,7 @@ function operationForPathItem({
   const base = {
     id: operationId(document["@id"], sequence, pathItem.node["@id"]),
     sequence,
-    actorId: assignment.userId,
+    actorId: assignment.personaId,
     touchpointId: assignment.touchpointId,
     entry: entryRef(compositeContext.entry),
     source: {
@@ -621,8 +621,7 @@ function resolveMessageMeta(index: NodeIndex, meta: AnyNode): string {
 /** Select the owning composite and its descendants without compiling unrelated paths. */
 function journeyComposites(index: NodeIndex, journeyId: string): ReadonlySet<string> {
   requireNode(index, journeyId, "Journey");
-  const owners = nodesOfType(index, "CompositeState").filter((node) => node.subjourneyId === journeyId);
-  if (owners.length !== 1) throw new Error(`Journey ${journeyId} must have exactly one owning CompositeState`);
+  const owner = requireOwningCompositeState(index, journeyId);
   const selected = new Set<string>();
   const visit = (composite: AnyNode): void => {
     if (selected.has(composite["@id"])) throw new Error(`Cycle or repeated composite in journey ${journeyId}`);
@@ -633,22 +632,32 @@ function journeyComposites(index: NodeIndex, journeyId: string): ReadonlySet<str
       if (node && hasType(node, "CompositeState")) visit(node);
     }
   };
-  visit(owners[0]);
+  visit(owner);
   return selected;
+}
+
+/** UJG 1.0-rc3 allows a CompositeState to list multiple subjourneyRefs; this compiler only supports exactly one. */
+function requireOwningCompositeState(index: NodeIndex, journeyId: string): AnyNode {
+  const owners = nodesOfType(index, "CompositeState").filter((node) =>
+    optionalStringArray(node.subjourneyRefs).includes(journeyId)
+  );
+  if (owners.length !== 1) throw new Error(`Journey ${journeyId} must have exactly one owning CompositeState`);
+  return owners[0];
 }
 
 function buildCompositeAssignments(index: NodeIndex): Map<string, CompositeAssignment> {
   const assignments = new Map<string, CompositeAssignment>();
-  const users = nodesOfType(index, "User");
+  const personas = nodesOfType(index, "Persona");
 
-  for (const user of users) {
-    const touchpointRefs = requiredStringArray(user.touchpointRefs, `${user["@id"]}.touchpointRefs`);
+  for (const persona of personas) {
+    const touchpointRefs = requiredStringArray(persona.touchpointRefs, `${persona["@id"]}.touchpointRefs`);
     for (const touchpointRef of touchpointRefs) {
       const touchpoint = requireNode(index, touchpointRef, "Touchpoint");
-      const compositeRefs = optionalStringArray(touchpoint.compositeStateRefs);
-      for (const compositeRef of compositeRefs) {
-        assignCompositeAndChildren(index, assignments, compositeRef, {
-          userId: user["@id"],
+      const journeyRefs = optionalStringArray(touchpoint.journeyRefs);
+      for (const journeyRef of journeyRefs) {
+        const compositeId = requireOwningCompositeState(index, journeyRef)["@id"];
+        assignCompositeAndChildren(index, assignments, compositeId, {
+          personaId: persona["@id"],
           touchpointId: touchpoint["@id"]
         });
       }
@@ -671,8 +680,8 @@ function assignCompositeAndChildren(
 
   const existing = assignments.get(compositeStateId);
   if (existing) {
-    if (existing.userId !== assignment.userId || existing.touchpointId !== assignment.touchpointId) {
-      throw new Error(`Conflicting user/touchpoint assignment for ${compositeStateId}`);
+    if (existing.personaId !== assignment.personaId || existing.touchpointId !== assignment.touchpointId) {
+      throw new Error(`Conflicting persona/touchpoint assignment for ${compositeStateId}`);
     }
     return;
   }
@@ -716,7 +725,13 @@ function buildParentCompositeMap(index: NodeIndex): Map<string, string> {
 
 function compositeContextFor(index: NodeIndex, compositeStateId: string): CompositeContext {
   const composite = requireNode(index, compositeStateId, "CompositeState");
-  const journeyId = requiredString(composite.subjourneyId, `${compositeStateId}.subjourneyId`);
+  const subjourneyRefs = requiredStringArray(composite.subjourneyRefs, `${compositeStateId}.subjourneyRefs`);
+  if (subjourneyRefs.length !== 1) {
+    throw new Error(
+      `CompositeState ${compositeStateId} declares ${subjourneyRefs.length} subjourneyRefs; this compiler requires exactly 1`
+    );
+  }
+  const journeyId = subjourneyRefs[0];
   const journey = requireNode(index, journeyId, "Journey");
   const defaultEntryRef = requiredString(journey.defaultEntryRef, `${journeyId}.defaultEntryRef`);
   const entryRefs = requiredStringArray(journey.entryRefs, `${journeyId}.entryRefs`);

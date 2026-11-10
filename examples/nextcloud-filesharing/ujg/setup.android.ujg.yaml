@@ -1,5 +1,5 @@
-# Compact authoring companion for setup.android.ujg.jsonld (UJG 1.0-rc1).
-ujgTarget: 1.0-rc1
+# Compact authoring companion for setup.android.ujg.jsonld (UJG 1.0-rc3).
+ujgTarget: 1.0-rc3
 phase:
   id: urn:phase:setup
   label: Setup

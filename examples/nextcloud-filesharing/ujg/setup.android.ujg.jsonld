@@ -1,18 +1,18 @@
 {
   "@context": [
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/core.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/graph.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/surface.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/phase.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/l10n.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/observability.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/entry-binding.context.jsonld"
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/core.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/graph.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/surface.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/phase.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/l10n.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/observability.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/entry-binding.context.jsonld"
   ],
   "@id": "urn:ujg:document:nextcloud-android-setup",
   "@type": "UJGDocument",
   "nodes": [
     { "@type": "JourneyEntryIndex", "@id": "urn:index:nextcloud-android-setup", "entryRefs": ["urn:entry:bob-android-setup"] },
-    { "@type": "CompositeState", "@id": "urn:composite:bob-android-setup", "label": "Bob Android login setup", "subjourneyId": "urn:journey:bob-android-setup" },
+    { "@type": "CompositeState", "@id": "urn:composite:bob-android-setup", "label": "Bob Android login setup", "subjourneyRefs": ["urn:journey:bob-android-setup"] },
     {
       "@type": "Journey",
       "@id": "urn:journey:bob-android-setup",
@@ -82,8 +82,8 @@
     { "@type": "Surface", "@id": "urn:surface:android-grants-access", "graphNodeRef": "urn:transition:android-grants-access" },
     { "@type": "Transition", "@id": "urn:transition:android-closes-browser-login", "from": "urn:state:android-account-connected", "to": "urn:state:android-authenticated" },
     { "@type": "Surface", "@id": "urn:surface:android-closes-browser-login", "graphNodeRef": "urn:transition:android-closes-browser-login" },
-    { "@type": "Touchpoint", "@id": "urn:touchpoint:nextcloud-b", "compositeStateRefs": ["urn:composite:bob-android-setup"] },
-    { "@type": "User", "@id": "urn:user:bob", "touchpointRefs": ["urn:touchpoint:nextcloud-b"] },
+    { "@type": "Touchpoint", "@id": "urn:touchpoint:nextcloud-b", "journeyRefs": ["urn:journey:bob-android-setup"] },
+    { "@type": "Persona", "@id": "urn:user:bob", "touchpointRefs": ["urn:touchpoint:nextcloud-b"] },
 
     { "@type": "AccessibleFeature", "@id": "urn:feature:android-login", "accessibleFeatureName": "resource-id", "accessibleFeatureValue": "com.nextcloud.client:id/login" },
     { "@type": "AccessibleFeature", "@id": "urn:feature:android-host", "accessibleFeatureName": "resource-id", "accessibleFeatureValue": "com.nextcloud.client:id/host_url_input" },

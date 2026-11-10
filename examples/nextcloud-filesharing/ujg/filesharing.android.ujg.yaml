@@ -1,15 +1,15 @@
 # Android variant bound to Nextcloud 35.0.2, en-US. See mesh.yaml's adapters.android.options.application and runtimes.android.options.
-ujgTarget: 1.0-rc1
+ujgTarget: 1.0-rc3
 touchpoints:
   urn:touchpoint:nextcloud-a:
     label: Nextcloud A
-    compositeStateRefs:
-      - urn:composite:alice-federated-sharing
+    journeyRefs:
+      - urn:journey:alice-federated-sharing
   urn:touchpoint:nextcloud-b:
     label: Nextcloud B Android
-    compositeStateRefs:
-      - urn:composite:bob-remote-share
-users:
+    journeyRefs:
+      - urn:journey:bob-remote-share
+personas:
   urn:user:alice:
     label: Alice
     touchpointRefs:

@@ -1,14 +1,14 @@
 {
   "@context": [
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/core.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/graph.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/surface.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/phase.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/l10n.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/observability.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/entry-binding.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/effect.context.jsonld",
-    "https://ujg.specs.openuji.org/1.0-rc1/ns/artifact.context.jsonld"
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/core.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/graph.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/surface.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/phase.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/l10n.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/observability.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/entry-binding.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/effect.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/artifact.context.jsonld"
   ],
   "@id": "urn:ujg:document:nextcloud-federated-sharing-android",
   "@type": "UJGDocument",
@@ -47,7 +47,7 @@
       "@type": "CompositeState",
       "@id": "urn:composite:alice-federated-sharing",
       "label": "Alice federated sharing entry",
-      "subjourneyId": "urn:journey:alice-federated-sharing"
+      "subjourneyRefs": ["urn:journey:alice-federated-sharing"]
     },
     {
       "@type": "Journey",
@@ -189,7 +189,7 @@
       "@type": "CompositeState",
       "@id": "urn:composite:bob-remote-share",
       "label": "Bob remote-share entry",
-      "subjourneyId": "urn:journey:bob-remote-share"
+      "subjourneyRefs": ["urn:journey:bob-remote-share"]
     },
     {
       "@type": "Journey",
@@ -217,7 +217,7 @@
       "@type": "CompositeState",
       "@id": "urn:composite:bob-remote-share-offer",
       "label": "Bob remote-share offer",
-      "subjourneyId": "urn:journey:bob-remote-share-offer"
+      "subjourneyRefs": ["urn:journey:bob-remote-share-offer"]
     },
     {
       "@type": "Journey",
@@ -303,7 +303,7 @@
       "@type": "CompositeState",
       "@id": "urn:composite:bob-pending-share-offer-cleared",
       "label": "Bob pending share offer cleared",
-      "subjourneyId": "urn:journey:bob-pending-share-offer-cleared"
+      "subjourneyRefs": ["urn:journey:bob-pending-share-offer-cleared"]
     },
     {
       "@type": "Journey",
@@ -379,20 +379,20 @@
       "@type": "Touchpoint",
       "@id": "urn:touchpoint:nextcloud-a",
       "label": "Nextcloud A",
-      "compositeStateRefs": [
-        "urn:composite:alice-federated-sharing"
+      "journeyRefs": [
+        "urn:journey:alice-federated-sharing"
       ]
     },
     {
       "@type": "Touchpoint",
       "@id": "urn:touchpoint:nextcloud-b",
       "label": "Nextcloud B Android",
-      "compositeStateRefs": [
-        "urn:composite:bob-remote-share"
+      "journeyRefs": [
+        "urn:journey:bob-remote-share"
       ]
     },
     {
-      "@type": "User",
+      "@type": "Persona",
       "@id": "urn:user:alice",
       "label": "Alice",
       "touchpointRefs": [
@@ -400,7 +400,7 @@
       ]
     },
     {
-      "@type": "User",
+      "@type": "Persona",
       "@id": "urn:user:bob",
       "label": "Bob",
       "touchpointRefs": [

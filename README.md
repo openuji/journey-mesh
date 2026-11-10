@@ -107,7 +107,7 @@ the test; adapters own browser and device resources. See the
 
 ## UJG Citation
 
-The checked-in authoring model declares `ujgTarget: "1.0-rc1"` and the compiled JSON-LD model uses the UJG `1.0-rc1` context set. For the public community snapshot, cite the [UJG 1.0 Release Candidate 1](https://ujg.specs.openuji.org/tr/1.0-rc1), published 2026-07-27 by the [W3C User Journey Graph Community Group](https://www.w3.org/groups/cg/ujg/).
+The checked-in authoring model declares `ujgTarget: "1.0-rc3"` and the compiled JSON-LD model uses the UJG `1.0-rc3` context set. For the public community snapshot, cite the [UJG 1.0 Release Candidate 3](https://ujg.specs.openuji.org/tr/1.0-rc3), published 2026-11-09 by the [W3C User Journey Graph Community Group](https://www.w3.org/groups/cg/ujg/).
 
 ## Maintainers / Contact
 
