@@ -4,16 +4,13 @@ export {
   profileDescriptor
 } from "./observers/contracts.js";
 export {
-  consoleJourneyProgress
-} from "./progress/console-progress.js";
-export {
   reportJourneyResult
 } from "./reporting/report-journey-result.js";
-export {
-  renderJourneyRunSummary
-} from "./reporters/console-summary.js";
 export { errorToJourneyRunError } from "./errors.js";
 export { runJourney } from "./run-journey.js";
+export { routedAdapter } from "./adapters/routed-adapter.js";
+export { touchpointAdapter } from "./adapters/touchpoint-adapter.js";
+export { executionPassed } from "./results/outcomes.js";
 
 export type {
   AccessibleFeature,
@@ -22,7 +19,6 @@ export type {
   GraphVertexRef,
   InputModalityDecision,
   JourneyEntryRef,
-  JourneyInteractionCommand,
   JourneyOperationSource,
   JourneyPlan,
   JourneyPlanOperation,
@@ -52,10 +48,12 @@ export type {
   JourneyAdapterCloseInput,
   JourneyAdapterExecution,
   JourneyAdapterExecutionInput,
+  JourneyAdapterRuntime,
   JourneyExecutionContext,
-  JourneyProfile,
-  RunJourneyOptions
-} from "./run-journey.js";
+  JourneyProfile
+} from "./adapters/contracts.js";
+export type { JourneyTouchpointAdapters } from "./adapters/touchpoint-adapter.js";
+export type { RunJourneyOptions } from "./run-journey.js";
 export type {
   JourneyComponentDescriptor,
   JourneyExecutionDescriptor,
@@ -77,16 +75,16 @@ export type {
   ReportJourneyResultOutcome
 } from "./reporting/contracts.js";
 export type {
-  JourneyRunSummaryArtifact,
-  JourneyRunSummaryColorMode,
-  JourneyRunSummaryCommand,
-  JourneyRunSummaryInput,
-  JourneyRunSummaryOptions
-} from "./reporters/console-summary.js";
+  JourneyEffectVerificationInput,
+  JourneyEnvironment,
+  JourneyEnvironmentTeardownInput
+} from "./environment/contracts.js";
 export type {
   ExecutionResult,
   JourneyExecutionEvidence,
   JourneyOperationEvidence,
+  JourneyOutcome,
+  JourneyProfileAssessment,
   RunResult
 } from "./results/contracts.js";
 

@@ -1,17 +1,17 @@
-# Nested UJG authoring document aligned with the UJG 1.0-rc1 context set.
+# Nested UJG authoring document aligned with the UJG 1.0-rc3 context set.
 # Keeps the compact authoring structure; a compiler may expand it to normative JSON-LD nodes.
-ujgTarget: "1.0-rc1"
+ujgTarget: "1.0-rc3"
 touchpoints:
   "urn:touchpoint:nextcloud-a":
     label: "Nextcloud A"
-    compositeStateRefs:
-      - "urn:composite:alice-federated-sharing"
+    journeyRefs:
+      - "urn:journey:alice-federated-sharing"
   "urn:touchpoint:nextcloud-b":
     label: "Nextcloud B"
-    compositeStateRefs:
-      - "urn:composite:bob-remote-share"
+    journeyRefs:
+      - "urn:journey:bob-remote-share"
 
-users:
+personas:
   "urn:user:alice":
     label: "Alice"
     touchpointRefs:

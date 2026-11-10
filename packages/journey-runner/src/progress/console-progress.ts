@@ -30,6 +30,17 @@ export function consoleJourneyProgress(
         stream.write(`       ✗ failed after ${formatDuration(event.durationMs)}\n`);
         stream.write(`         ${event.error.message}\n\n`);
       }
+
+      if (event.type === "profiles-assessed") {
+        for (const assessment of event.assessments) {
+          if (assessment.kind === "not-applicable") {
+            stream.write(`Profile: ${assessment.profile.id}\n  Not applicable: ${assessment.reason}\n\n`);
+          }
+          if (assessment.kind === "failed") {
+            stream.write(`Profile: ${assessment.profile.id}\n  Assessment failed: ${assessment.error.message}\n\n`);
+          }
+        }
+      }
     }
   };
 }

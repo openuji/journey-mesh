@@ -7,10 +7,8 @@ COMPOSE_FILE="$STACK_DIR/compose.yaml"
 
 if [ -n "${NEXTCLOUD_STACK_ENV_FILE:-}" ]; then
 	ENV_FILE="$NEXTCLOUD_STACK_ENV_FILE"
-elif [ -f "$STACK_DIR/.env" ]; then
-	ENV_FILE="$STACK_DIR/.env"
 else
-	ENV_FILE="$STACK_DIR/.env.example"
+	ENV_FILE="$(node "$STACK_DIR/configure-runtime.mjs")"
 fi
 
 export NEXTCLOUD_STACK_ENV_FILE="$ENV_FILE"

@@ -1,0 +1,143 @@
+{
+  "@context": [
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/core.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/graph.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/surface.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/phase.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/l10n.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/observability.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/entry-binding.context.jsonld"
+  ],
+  "@id": "urn:ujg:document:nextcloud-web-setup",
+  "@type": "UJGDocument",
+  "nodes": [
+    {
+      "@type": "JourneyEntryIndex",
+      "@id": "urn:index:nextcloud-web-setup",
+      "entryRefs": ["urn:entry:alice-web-setup", "urn:entry:bob-web-setup"]
+    },
+    {
+      "@type": "CompositeState",
+      "@id": "urn:composite:alice-web-setup",
+      "label": "Alice web login setup",
+      "subjourneyRefs": ["urn:journey:alice-web-setup"]
+    },
+    {
+      "@type": "Journey",
+      "@id": "urn:journey:alice-web-setup",
+      "defaultEntryRef": "urn:entry:alice-web-setup",
+      "entryRefs": ["urn:entry:alice-web-setup"],
+      "stateRefs": [
+        "urn:state:alice-login-ready",
+        "urn:state:alice-username-entered",
+        "urn:state:alice-password-entered",
+        "urn:state:alice-authenticated"
+      ],
+      "transitionRefs": [
+        "urn:transition:alice-enters-username",
+        "urn:transition:alice-enters-password",
+        "urn:transition:alice-submits-login"
+      ]
+    },
+    { "@type": "JourneyEntry", "@id": "urn:entry:alice-web-setup", "stateRef": "urn:state:alice-login-ready" },
+    { "@type": "EntryBinding", "@id": "urn:entry-binding:alice-web-setup", "entryRef": "urn:entry:alice-web-setup", "value": "nextcloud.login" },
+    { "@type": "State", "@id": "urn:state:alice-login-ready", "label": "Alice login form is ready" },
+    { "@type": "Surface", "@id": "urn:surface:alice-login-ready", "graphNodeRef": "urn:state:alice-login-ready" },
+    { "@type": "State", "@id": "urn:state:alice-username-entered", "label": "Alice username is entered" },
+    { "@type": "Surface", "@id": "urn:surface:alice-username-entered", "graphNodeRef": "urn:state:alice-username-entered" },
+    { "@type": "State", "@id": "urn:state:alice-password-entered", "label": "Alice password is entered" },
+    { "@type": "Surface", "@id": "urn:surface:alice-password-entered", "graphNodeRef": "urn:state:alice-password-entered" },
+    { "@type": "State", "@id": "urn:state:alice-authenticated", "label": "Alice is authenticated" },
+    { "@type": "Surface", "@id": "urn:surface:alice-authenticated", "graphNodeRef": "urn:state:alice-authenticated" },
+    { "@type": "Transition", "@id": "urn:transition:alice-enters-username", "from": "urn:state:alice-login-ready", "to": "urn:state:alice-username-entered" },
+    { "@type": "Surface", "@id": "urn:surface:alice-enters-username", "graphNodeRef": "urn:transition:alice-enters-username" },
+    { "@type": "Transition", "@id": "urn:transition:alice-enters-password", "from": "urn:state:alice-username-entered", "to": "urn:state:alice-password-entered" },
+    { "@type": "Surface", "@id": "urn:surface:alice-enters-password", "graphNodeRef": "urn:transition:alice-enters-password" },
+    { "@type": "Transition", "@id": "urn:transition:alice-submits-login", "from": "urn:state:alice-password-entered", "to": "urn:state:alice-authenticated" },
+    { "@type": "Surface", "@id": "urn:surface:alice-submits-login", "graphNodeRef": "urn:transition:alice-submits-login" },
+
+    {
+      "@type": "CompositeState",
+      "@id": "urn:composite:bob-web-setup",
+      "label": "Bob web login setup",
+      "subjourneyRefs": ["urn:journey:bob-web-setup"]
+    },
+    {
+      "@type": "Journey",
+      "@id": "urn:journey:bob-web-setup",
+      "defaultEntryRef": "urn:entry:bob-web-setup",
+      "entryRefs": ["urn:entry:bob-web-setup"],
+      "stateRefs": [
+        "urn:state:bob-login-ready",
+        "urn:state:bob-username-entered",
+        "urn:state:bob-password-entered",
+        "urn:state:bob-authenticated"
+      ],
+      "transitionRefs": [
+        "urn:transition:bob-enters-username",
+        "urn:transition:bob-enters-password",
+        "urn:transition:bob-submits-login"
+      ]
+    },
+    { "@type": "JourneyEntry", "@id": "urn:entry:bob-web-setup", "stateRef": "urn:state:bob-login-ready" },
+    { "@type": "EntryBinding", "@id": "urn:entry-binding:bob-web-setup", "entryRef": "urn:entry:bob-web-setup", "value": "nextcloud.login" },
+    { "@type": "State", "@id": "urn:state:bob-login-ready", "label": "Bob login form is ready" },
+    { "@type": "Surface", "@id": "urn:surface:bob-login-ready", "graphNodeRef": "urn:state:bob-login-ready" },
+    { "@type": "State", "@id": "urn:state:bob-username-entered", "label": "Bob username is entered" },
+    { "@type": "Surface", "@id": "urn:surface:bob-username-entered", "graphNodeRef": "urn:state:bob-username-entered" },
+    { "@type": "State", "@id": "urn:state:bob-password-entered", "label": "Bob password is entered" },
+    { "@type": "Surface", "@id": "urn:surface:bob-password-entered", "graphNodeRef": "urn:state:bob-password-entered" },
+    { "@type": "State", "@id": "urn:state:bob-authenticated", "label": "Bob is authenticated" },
+    { "@type": "Surface", "@id": "urn:surface:bob-authenticated", "graphNodeRef": "urn:state:bob-authenticated" },
+    { "@type": "Transition", "@id": "urn:transition:bob-enters-username", "from": "urn:state:bob-login-ready", "to": "urn:state:bob-username-entered" },
+    { "@type": "Surface", "@id": "urn:surface:bob-enters-username", "graphNodeRef": "urn:transition:bob-enters-username" },
+    { "@type": "Transition", "@id": "urn:transition:bob-enters-password", "from": "urn:state:bob-username-entered", "to": "urn:state:bob-password-entered" },
+    { "@type": "Surface", "@id": "urn:surface:bob-enters-password", "graphNodeRef": "urn:transition:bob-enters-password" },
+    { "@type": "Transition", "@id": "urn:transition:bob-submits-login", "from": "urn:state:bob-password-entered", "to": "urn:state:bob-authenticated" },
+    { "@type": "Surface", "@id": "urn:surface:bob-submits-login", "graphNodeRef": "urn:transition:bob-submits-login" },
+
+    { "@type": "Touchpoint", "@id": "urn:touchpoint:nextcloud-a", "journeyRefs": ["urn:journey:alice-web-setup"] },
+    { "@type": "Touchpoint", "@id": "urn:touchpoint:nextcloud-b", "journeyRefs": ["urn:journey:bob-web-setup"] },
+    { "@type": "Persona", "@id": "urn:user:alice", "touchpointRefs": ["urn:touchpoint:nextcloud-a"] },
+    { "@type": "Persona", "@id": "urn:user:bob", "touchpointRefs": ["urn:touchpoint:nextcloud-b"] },
+    { "@type": "Locale", "@id": "urn:locale:en", "localeCode": "en" },
+    { "@type": "MessageMeta", "@id": "urn:message:login-account", "defaultLocaleRef": "urn:locale:en" },
+    { "@type": "Message", "@id": "urn:message-value:login-account:en", "messageMetaRef": "urn:message:login-account", "localeRef": "urn:locale:en", "value": "Account name or email" },
+    { "@type": "MessageMeta", "@id": "urn:message:login-password", "defaultLocaleRef": "urn:locale:en" },
+    { "@type": "Message", "@id": "urn:message-value:login-password:en", "messageMetaRef": "urn:message:login-password", "localeRef": "urn:locale:en", "value": "Password" },
+    { "@type": "MessageMeta", "@id": "urn:message:login-submit", "defaultLocaleRef": "urn:locale:en" },
+    { "@type": "Message", "@id": "urn:message-value:login-submit:en", "messageMetaRef": "urn:message:login-submit", "localeRef": "urn:locale:en", "value": "Log in" },
+    { "@type": "AccessibleLocator", "@id": "urn:locator:login-account", "role": "textbox", "accessibleNameRef": "urn:message:login-account" },
+    { "@type": "AccessibleLocator", "@id": "urn:locator:login-password", "role": "textbox", "accessibleNameRef": "urn:message:login-password" },
+    { "@type": "AccessibleFeature", "@id": "urn:feature:web-login-submit-exact-name", "accessibleFeatureName": "accessible-name-exact", "accessibleFeatureValue": "true" },
+    { "@type": "AccessibleLocator", "@id": "urn:locator:login-submit", "role": "button", "accessibleNameRef": "urn:message:login-submit", "accessibleFeatureRefs": ["urn:feature:web-login-submit-exact-name"] },
+    { "@type": "AccessibleLocator", "@id": "urn:locator:authenticated-main", "role": "main" },
+    { "@type": "InputModality", "@id": "observability:keyboard-text-entry" },
+    { "@type": "InputModality", "@id": "observability:keyboard-enter" },
+    { "@type": "InputModality", "@id": "observability:pointer" },
+    { "@type": "InputModalityProfile", "@id": "urn:input-profile:text-entry", "inputModalityRefs": ["observability:keyboard-text-entry"] },
+    { "@type": "InputModalityProfile", "@id": "urn:input-profile:enter", "inputModalityRefs": ["observability:keyboard-enter"] },
+    { "@type": "InputModalityProfile", "@id": "urn:input-profile:pointer", "inputModalityRefs": ["observability:pointer"] },
+    { "@type": "ObservationEvent", "@id": "urn:observation-event:presence" },
+    { "@type": "ObservationEvent", "@id": "urn:observation-event:text-entry", "requiredInputModalityProfileRefs": ["urn:input-profile:text-entry"] },
+    { "@type": "ObservationEvent", "@id": "urn:observation-event:submit", "requiredInputModalityProfileRefs": ["urn:input-profile:enter", "urn:input-profile:pointer"] },
+
+    { "@type": "ObservationBinding", "@id": "urn:obs:alice-login-ready", "observeSurfaceRef": "urn:surface:alice-login-ready", "observationEventRef": "urn:observation-event:presence", "expectedMatchCount": 1, "locatorRefs": ["urn:locator:login-account"] },
+    { "@type": "ObservationBinding", "@id": "urn:obs:alice-username-entered", "observeSurfaceRef": "urn:surface:alice-username-entered", "observationEventRef": "urn:observation-event:presence", "expectedMatchCount": 1, "locatorRefs": ["urn:locator:login-password"] },
+    { "@type": "ObservationBinding", "@id": "urn:obs:alice-password-entered", "observeSurfaceRef": "urn:surface:alice-password-entered", "observationEventRef": "urn:observation-event:presence", "expectedMatchCount": 1, "locatorRefs": ["urn:locator:login-submit"] },
+    { "@type": "ObservationBinding", "@id": "urn:obs:alice-authenticated", "observeSurfaceRef": "urn:surface:alice-authenticated", "observationEventRef": "urn:observation-event:presence", "expectedMatchCount": 1, "locatorRefs": ["urn:locator:authenticated-main"] },
+    { "@type": "ObservationBinding", "@id": "urn:obs:alice-enters-username", "observeSurfaceRef": "urn:surface:alice-enters-username", "observationEventRef": "urn:observation-event:text-entry", "locatorRefs": ["urn:locator:login-account"] },
+    { "@type": "ObservationBinding", "@id": "urn:obs:alice-enters-password", "observeSurfaceRef": "urn:surface:alice-enters-password", "observationEventRef": "urn:observation-event:text-entry", "locatorRefs": ["urn:locator:login-password"] },
+    { "@type": "ObservationBinding", "@id": "urn:obs:alice-submits-login", "observeSurfaceRef": "urn:surface:alice-submits-login", "observationEventRef": "urn:observation-event:submit", "locatorRefs": ["urn:locator:login-submit"] },
+    { "@type": "ObservationBinding", "@id": "urn:obs:bob-login-ready", "observeSurfaceRef": "urn:surface:bob-login-ready", "observationEventRef": "urn:observation-event:presence", "expectedMatchCount": 1, "locatorRefs": ["urn:locator:login-account"] },
+    { "@type": "ObservationBinding", "@id": "urn:obs:bob-username-entered", "observeSurfaceRef": "urn:surface:bob-username-entered", "observationEventRef": "urn:observation-event:presence", "expectedMatchCount": 1, "locatorRefs": ["urn:locator:login-password"] },
+    { "@type": "ObservationBinding", "@id": "urn:obs:bob-password-entered", "observeSurfaceRef": "urn:surface:bob-password-entered", "observationEventRef": "urn:observation-event:presence", "expectedMatchCount": 1, "locatorRefs": ["urn:locator:login-submit"] },
+    { "@type": "ObservationBinding", "@id": "urn:obs:bob-authenticated", "observeSurfaceRef": "urn:surface:bob-authenticated", "observationEventRef": "urn:observation-event:presence", "expectedMatchCount": 1, "locatorRefs": ["urn:locator:authenticated-main"] },
+    { "@type": "ObservationBinding", "@id": "urn:obs:bob-enters-username", "observeSurfaceRef": "urn:surface:bob-enters-username", "observationEventRef": "urn:observation-event:text-entry", "locatorRefs": ["urn:locator:login-account"] },
+    { "@type": "ObservationBinding", "@id": "urn:obs:bob-enters-password", "observeSurfaceRef": "urn:surface:bob-enters-password", "observationEventRef": "urn:observation-event:text-entry", "locatorRefs": ["urn:locator:login-password"] },
+    { "@type": "ObservationBinding", "@id": "urn:obs:bob-submits-login", "observeSurfaceRef": "urn:surface:bob-submits-login", "observationEventRef": "urn:observation-event:submit", "locatorRefs": ["urn:locator:login-submit"] },
+    { "@type": "Phase", "@id": "urn:phase:setup", "label": "Setup", "order": 0 },
+    { "@type": "Step", "@id": "urn:step:alice-web-setup", "order": 0, "compositeStateRef": "urn:composite:alice-web-setup", "phaseRef": "urn:phase:setup" },
+    { "@type": "Step", "@id": "urn:step:bob-web-setup", "order": 1, "compositeStateRef": "urn:composite:bob-web-setup", "phaseRef": "urn:phase:setup" }
+  ]
+}

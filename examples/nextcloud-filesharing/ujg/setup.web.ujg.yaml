@@ -1,0 +1,16 @@
+# Compact authoring companion for setup.web.ujg.jsonld (UJG 1.0-rc3).
+ujgTarget: 1.0-rc3
+phase:
+  id: urn:phase:setup
+  label: Setup
+journeys:
+  urn:journey:alice-web-setup:
+    actor: urn:user:alice
+    touchpoint: urn:touchpoint:nextcloud-a
+    entryBinding: nextcloud.login
+    states: [login-ready, username-entered, password-entered, authenticated]
+  urn:journey:bob-web-setup:
+    actor: urn:user:bob
+    touchpoint: urn:touchpoint:nextcloud-b
+    entryBinding: nextcloud.login
+    states: [login-ready, username-entered, password-entered, authenticated]

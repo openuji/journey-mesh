@@ -5,8 +5,9 @@ import type {
   AxePathAuditSummary,
   AxeResults
 } from "../types.js";
+import type { Immutable } from "../shared/immutable.js";
 
-export function summarizePathItems(items: AxePathAuditItem[]): AxePathAuditSummary {
+export function summarizePathItems(items: readonly AxePathAuditItem[]): AxePathAuditSummary {
   return items.reduce(
     (summary, item) => ({
       items: summary.items + 1,
@@ -33,7 +34,7 @@ export function summarizePathItems(items: AxePathAuditItem[]): AxePathAuditSumma
   );
 }
 
-export function summarizeResults(results: AxeResults): AxeAuditSummary {
+export function summarizeResults(results: Immutable<AxeResults>): AxeAuditSummary {
   return {
     violations: results.violations.length,
     incomplete: results.incomplete.length,

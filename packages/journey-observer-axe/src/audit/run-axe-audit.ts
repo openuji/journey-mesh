@@ -1,3 +1,4 @@
+import { axeArtifacts } from "../artifacts/artifact-target.js";
 import { AxeBuilder } from "@axe-core/playwright";
 import type { Page } from "playwright";
 
@@ -10,19 +11,27 @@ import type {
 import { attachAxeAuditReport } from "../artifacts/report-attachments.js";
 import { buildAxeAuditReport } from "./audit-report.js";
 import { withScopedLocator } from "./scoped-locator.js";
+import { isAxeStrict } from "./strict-mode.js";
 
 export async function runAxeAudit(input: AxeAuditRunnerInput): Promise<AxeAuditReport> {
   const tags = [...(input.tags ?? wcag22Tags)];
+  const strict = input.strict ?? isAxeStrict();
   const pageState = await scanPage(input.page, tags);
   const matchedSurface = await withScopedLocator(input.resolvedLocator, input.auditId, (selector) =>
     scanSelector(input.page, selector, tags)
   );
-  const report = buildAxeAuditReport(input, tags, {
+  const report = buildAxeAuditReport({
+    auditId: input.auditId,
+    metadata: input.metadata,
+    createdAt: new Date().toISOString(),
+    url: input.page.url(),
+    strict
+  }, tags, {
     pageState,
     matchedSurface
   });
 
-  await attachAxeAuditReport(input.testInfo, report);
+  await attachAxeAuditReport(axeArtifacts(input), report);
   return report;
 }
 

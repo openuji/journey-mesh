@@ -18,24 +18,25 @@ import {
 } from "../artifacts/report-file-names.js";
 import { summarizePathItems, summarizeResults } from "./report-summary.js";
 import { stringTargets } from "../shared/strings.js";
+import { immutableSnapshot, type Immutable } from "../shared/immutable.js";
 
 export function buildAxePathAuditReport(input: {
   reportId: string;
-  createdAt?: string;
+  createdAt: string;
   wcagTags?: readonly string[];
-  metadata?: AxeAuditMetadata;
-  items: AxePathAuditItemInput[];
+  metadata?: Immutable<AxeAuditMetadata>;
+  items: readonly AxePathAuditItemInput[];
 }): AxePathAuditReport {
   const items = input.items.map(buildAxePathItem);
-  return {
+  return immutableSnapshot({
     schemaVersion: "ujg-fed-a11y.axe-path.v1",
     reportId: input.reportId,
-    createdAt: input.createdAt ?? new Date().toISOString(),
+    createdAt: input.createdAt,
     wcagTags: [...(input.wcagTags ?? [])],
     metadata: input.metadata ?? {},
     summary: summarizePathItems(items),
     items
-  };
+  });
 }
 
 function buildAxePathItem(input: AxePathAuditItemInput): AxePathAuditItem {
@@ -98,7 +99,7 @@ function scanFindings(
   report: AxeAuditReport,
   scanId: AxeAuditScanId,
   resultType: AxeRuleResultType,
-  results: AxeResults
+  results: Immutable<AxeResults>
 ): AxePathAuditFinding[] {
   const ruleResults = resultType === "violation" ? results.violations : results.incomplete;
   return ruleResults.map((result) => ({

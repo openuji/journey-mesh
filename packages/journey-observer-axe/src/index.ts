@@ -1,6 +1,7 @@
 export { wcag22Tags } from "./constants.js";
 export { axeObserver } from "./observer/axe-observer.js";
 export { runAxeAudit } from "./audit/run-axe-audit.js";
+export { buildAxeAuditReport } from "./audit/audit-report.js";
 export {
   axeFailureMessage,
   isAxeStrict,
@@ -8,6 +9,8 @@ export {
 } from "./audit/strict-mode.js";
 export { buildAxePathAuditReport } from "./reporting/path-audit-report.js";
 export { buildAxeAccessibilitySummaryReport } from "./reporting/accessibility-summary-report.js";
+export { buildAxeObservedPathReport, buildAxePathItems } from "./reporting/observed-path-report.js";
+export type { AxeEvidence, AxeOperationEvidence, AxeAuditEvidence, AxeScreenshotEvidence } from "./observer/evidence.js";
 
 export type {
   AxeAccessibilitySummaryEntry,

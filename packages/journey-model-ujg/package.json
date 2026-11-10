@@ -5,14 +5,21 @@
   "license": "MIT",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./plugin": "./src/plugin.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@openuji/journey-execution-model": "workspace:*"
+    "@openuji/journey-execution-model": "workspace:*",
+    "@openuji/journey-runtime": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3"
   }
 }

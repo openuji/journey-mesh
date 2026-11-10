@@ -1,6 +1,6 @@
 import type { JourneyPlan } from "@openuji/journey-execution-model";
 
-import type { ExecutionResult, RunResult } from "../results/contracts.js";
+import type { ExecutionResult, JourneyProfileAssessment, RunResult } from "../results/contracts.js";
 
 export type JourneyComponentDescriptor = {
   readonly name: string;
@@ -32,6 +32,7 @@ export type JourneyObserverRunStartedInput = {
   readonly runId: string;
   readonly plan: JourneyPlan;
   readonly profiles: readonly JourneyProfileDescriptor[];
+  readonly assessments: readonly JourneyProfileAssessment[];
   readonly adapter: JourneyComponentDescriptor;
 };
 
@@ -54,10 +55,10 @@ export function componentDescriptor(
     readonly version?: string;
   }
 ): JourneyComponentDescriptor {
-  return {
+  return Object.freeze({
     name: component.name,
     ...(component.version ? { version: component.version } : {})
-  };
+  });
 }
 
 export function profileDescriptor(
@@ -66,10 +67,10 @@ export function profileDescriptor(
     readonly label?: string;
   }
 ): JourneyProfileDescriptor {
-  return {
+  return Object.freeze({
     id: profile.id,
     ...(profile.label ? { label: profile.label } : {})
-  };
+  });
 }
 
 export function executionDescriptor(
@@ -83,10 +84,10 @@ export function executionDescriptor(
     readonly plan: JourneyPlan;
   }
 ): JourneyExecutionDescriptor {
-  return {
+  return Object.freeze({
     runId: context.runId,
     executionId: context.executionId,
     profile: profileDescriptor(context.profile),
     plan: context.plan
-  };
+  });
 }

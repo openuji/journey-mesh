@@ -6,22 +6,31 @@
   "type": "module",
   "packageManager": "pnpm@10.14.0",
   "scripts": {
-    "build": "tsc -b packages/journey-core packages/journey-execution-model packages/journey-runner packages/journey-model-ujg packages/journey-profiles packages/journey-adapter-playwright packages/journey-driver-nextcloud packages/journey-observer-axe examples/nextcloud-filesharing",
-    "typecheck": "tsc -b --pretty false",
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false && pnpm -r --if-present run typecheck:test",
     "lint": "node scripts/lint.mjs",
-    "test": "node --import tsx tests/run-tests.ts"
+    "test": "pnpm -r --if-present run test"
   },
   "devDependencies": {
+    "@openuji/journey-adapter-appium": "workspace:*",
     "@openuji/journey-adapter-playwright": "workspace:*",
     "@openuji/journey-core": "workspace:*",
     "@openuji/journey-driver-nextcloud": "workspace:*",
+    "@openuji/journey-driver-web": "workspace:*",
+    "@openuji/journey-driver-android": "workspace:*",
     "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-model-ujg": "workspace:*",
+    "@openuji/journey-observer-android-accessibility": "workspace:*",
     "@openuji/journey-observer-axe": "workspace:*",
     "@openuji/journey-profiles": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
     "@types/node": "^22.13.14",
+    "@xmldom/xmldom": "0.9.12",
     "tsx": "^4.20.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "xpath": "0.0.34",
+    "yaml": "2.9.1",
+    "@openuji/journey-runtime": "workspace:*",
+    "@openuji/journey-cli": "workspace:*"
   }
 }
