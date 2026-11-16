@@ -2,21 +2,27 @@
 
 # Nextcloud file-sharing tests
 
+Two compositions of the [Journey Mesh architecture](../../README.md#architecture)
+exercise the same federated file-sharing scenario. The tools and prerequisites
+below belong to this example's selected components.
+
 [`mesh.yaml`](./mesh.yaml) defines the tests, their selected journeys,
 adapters, drivers, observers, interaction profiles, credentials, and output.
 The same Journey Mesh command executes any configured runtime combination.
 
-- `browser-sharing`: Alice and Bob use the web adapter, with default and
-  keyboard-only profile combinations.
-- `native-recipient-sharing`: Alice uses the web adapter and Bob uses Appium,
-  with default-web/touch-Android and keyboard-web/touch-Android combinations.
+- [`browser-sharing`](#run-the-browser-test): Alice and Bob use the web adapter,
+  with default and keyboard-only profile combinations.
+- [`native-recipient-sharing`](#run-the-native-recipient-test): Alice uses the
+  web adapter and Bob uses Appium, with default-web/touch-Android and
+  keyboard-web/touch-Android combinations.
 
 Each test first executes explicit Alice and Bob login setup journeys, whose
 operations use `urn:phase:setup`, followed by Alice's offer and Bob's acceptance
 journeys. Accessibility observers journal setup operations as not applicable
 without taking screenshots or auditing them.
-It has one shared fixture lifecycle per profile and one report. Native bindings
-come from the checked-in Android model; runtime selection does not rewrite them.
+Each test has one shared fixture lifecycle per profile and one report. Native
+bindings come from the checked-in Android model; runtime selection does not
+rewrite them.
 
 ## One-time prerequisites
 
@@ -62,6 +68,25 @@ environment file. Later stack commands reuse the generated runtime environment.
 
 ## Run the browser test
 
+Both participants use one configured Playwright adapter. For each profile, the
+runner executes the combined plan using a new adapter execution, with isolated
+browser contexts and pages per actor/touchpoint. The Nextcloud web driver
+resolves entry URLs and text values. The axe observer collects evidence through
+Playwright's observation contract.
+
+```mermaid
+flowchart TB
+  plan["Combined JourneyPlan<br/>login, offer, accept"] --> runner["Runner<br/>default / keyboard-only"]
+  runner --> web["Playwright adapter"]
+  driver["Nextcloud web driver"] --> web
+  web --> alice["Alice browser context"]
+  web --> bob["Bob browser context"]
+  alice --> aliceService["Alice Nextcloud instance"]
+  bob --> bobService["Bob Nextcloud instance"]
+  aliceService <-->|federated sharing| bobService
+  web -.->|observations| axe["Axe observer"]
+```
+
 Execution stays entirely in the YAML test specification:
 
 ```sh
@@ -103,6 +128,22 @@ for the web adapter — see "One-time prerequisites" above), from the `applicati
 block already declared in `adapters.android.options`. Appium logs are stored
 under `.tmp/appium-runtime/`; emulator logs are under `.tmp/android-runtime/`.
 
+The native infrastructure is prepared separately from per-profile execution:
+
+```mermaid
+flowchart TB
+  androidUp["android:up"] --> emulator["Dedicated Android emulator"]
+  emulator --> appiumUp["appium:up<br/>verify device, start server"]
+  appiumUp --> server["Appium + UiAutomator2"]
+  server -.->|serves| session["Per-profile Appium session"]
+  test["journey-mesh test"] --> session
+```
+
+The runtime commands own the emulator and server processes. The adapter owns
+the test session, application state, and its cleanup; ending a profile does not
+stop the infrastructure. During test validation, the adapter plugin may populate
+its checksum-pinned APK cache without opening a device session.
+
 Both `android:up` and `appium:up` are the generic
 `journey-mesh runtime up mesh.yaml --runtime <key>` command underneath —
 `pnpm android:up`/`pnpm appium:up` are just this example's own thin script
@@ -128,6 +169,34 @@ environment-level overrides read directly by the runtime, same as before.
 Global Appium installations are never modified.
 
 ## Run the native-recipient test
+
+Alice's setup and offer journeys route to Playwright; Bob's setup and acceptance
+journeys route to Appium. Routing follows each journey item's configured
+`adapterId`, so one combined plan retains the order and source references across
+both adapters. Profiles combine Alice's default or keyboard-only interaction
+with Bob's touch interaction.
+
+```mermaid
+flowchart TB
+  runner["Runner + adapter routing<br/>one combined plan"] --> web["Playwright adapter"]
+  runner --> native["Appium adapter"]
+  webDriver["Nextcloud web driver"] --> web
+  androidDriver["Nextcloud Android driver"] --> native
+  web --> alice["Alice browser context"]
+  native --> bob["Bob device session<br/>exclusive device UDID"]
+  alice --> aliceService["Alice Nextcloud instance"]
+  bob --> app["Nextcloud Android app"]
+  app --> bobService["Bob Nextcloud instance"]
+  aliceService <-->|federated sharing| bobService
+  web -.->|observations| axe["Axe observer"]
+  native -.->|observations| accessibility["Android accessibility observer"]
+```
+
+Both drivers are deterministic entry/value resolvers; browser and device
+resources belong to their adapters. The Android model supplies native locators
+and application entry bindings. Selecting an adapter does not translate web
+locators into native ones. See the [native journey model](ujg/filesharing.android.ujg.jsonld)
+and [Android driver](../../packages/journey-driver-nextcloud/src/android.ts).
 
 With the stack, Android, and Appium ready, the execution command still selects
 only the YAML test:
@@ -169,17 +238,23 @@ pnpm stack:reset
 ```
 
 This is a destructive backend reset; reports and Android assets are retained.
-Detailed native bindings, evidence limits, and review status are in
-[Nextcloud Android](../../docs/nextcloud-android.md). The CI-only
+See [native execution](#run-the-native-recipient-test) for the bindings and
+[evidence and reports](#evidence-and-reports) for evidence limits and review
+status. The CI-only
 [`run-ci.sh`](../../.github/workflows/run-ci.sh) helper, beside the Android
 workflow it belongs to, continues to own its temporary Appium and logcat
 processes.
 
 ## Configuration and lifecycle
 
-Read [YAML test configuration](../../docs/yaml-tests.md) for the complete contract.
-Changing the selected journey and adapter in YAML changes where execution runs;
-there are no platform-specific runner files.
+The [configuration types](../../packages/journey-runtime/src/config.ts) and
+[plugin contract](../../packages/journey-runtime/src/plugin.ts) define the YAML
+host's interfaces. In this example, `model` selects the UJG compiler, `adapters`
+declare drivers and observers, and each test declares ordered journey items,
+profile assignments, and a shared environment. `envFiles` supply configuration
+values, `outputDir` selects the report root, and `runtimes` declare optional
+infrastructure lifecycles. Changing journey and adapter selections changes where
+execution runs; there are no platform-specific runner files.
 
 `@openuji/journey-driver-nextcloud/federated-sharing/plugin` owns fixture cleanup,
 fixture creation, and OCS/WebDAV effect checks. This example supplies only the
@@ -187,11 +262,69 @@ service/account values, fixture path/name, and journey effect IDs in YAML. UI
 entry routes and transition values are likewise YAML data interpreted by driver
 plugins.
 
-All selected tests preflight before fixtures are modified. Each profile sets up
-shared services once, executes its configured journeys in order, closes runtime
-resources, and tears down fixtures. Failures retain evidence and cleanup errors.
+All selected tests preflight before fixtures are modified: model compilation,
+plugin compatibility, adapter support, and profile applicability/input selection
+are checked first. Only referenced adapters and their dependencies are loaded,
+so selecting the browser test does not require the Android configuration.
+
+```mermaid
+sequenceDiagram
+  participant Host as YAML host
+  participant Runner as Journey runner
+  participant Env as Nextcloud environment
+  participant Adapters as Selected adapters
+  Host->>Host: Preflight all selected tests
+  Host->>Runner: Plan, profiles, adapters, environment
+  loop Each applicable profile, sequentially
+    Runner->>Env: Set up shared fixtures
+    Runner->>Adapters: Create and start executions
+    loop Operations in plan order, stop on failure
+      Runner->>Adapters: Open entry and execute operation
+      opt Successful transition with effects
+        Runner->>Env: Verify effects through OCS/WebDAV
+      end
+    end
+    Runner->>Adapters: Close executions in reverse order
+    Runner->>Env: Tear down fixtures
+  end
+  Runner-->>Host: Immutable RunResult
+  Host->>Host: Run reporters and publish indexes
+```
+
+Each applicable profile sets up shared fixtures once and executes its configured
+journeys in order. The first operation failure stops that profile; partial
+adapter startup still triggers cleanup. Cleanup failures are retained alongside
+the original failure, and fixture teardown also runs after a failed setup.
+Cancellation closes active automation resources and is propagated to environment
+requests.
 
 ## Evidence and reports
+
+The web observer captures axe scans and optional source screenshots. The native
+observer captures a redacted UI hierarchy, device metrics, optional screenshots,
+and heuristic accessibility checks. Observers collect evidence at adapter stages
+such as state assertion and transition readiness, retain detached evidence, and
+also act as reporters after execution.
+
+```mermaid
+flowchart TB
+  web["Playwright observations"] --> axe["Axe scans + optional screenshots"]
+  native["Appium observations"] --> android["Hierarchy + metrics<br/>optional screenshots + heuristic checks"]
+  axe --> journals["Detached observer evidence"]
+  android --> journals
+  journals --> reporting["Observer reporters"]
+  result["Immutable RunResult"] --> reporting
+  result --> base["Functional evidence + summary"]
+  reporting --> artifacts["Per-test artifact store"]
+  base --> artifacts
+  artifacts --> indexes["Test and suite indexes"]
+```
+
+The host writes functional evidence and invokes observer reporters sequentially.
+Reporting errors do not rewrite `RunResult`; the configured suite succeeds only
+when execution passes and reporting has no errors. Accessibility strict modes
+apply their finding policies during reporting. Evidence-collection errors during
+execution can fail the operation itself.
 
 From the repository root:
 
@@ -212,5 +345,9 @@ subdirectory, such as `test-results/browser-sharing/`, containing:
 
 Reports are standalone files and do not require Playwright Test. Accessibility
 findings support review; they do not establish WCAG or TalkBack conformance.
+Native checks use the captured hierarchy and metrics; they do not exercise
+TalkBack navigation or prove what a screen reader announces. Setup operations
+are explicitly excluded from accessibility capture, so evidence covers the
+selected sharing operations rather than every screen encountered during login.
 Both native-recipient profiles have passed locally on API 35 arm64.
 The API 35 x86_64 CI target requires its own successful workflow run.

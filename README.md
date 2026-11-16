@@ -1,109 +1,195 @@
 # journey-mesh
 
 [![CI](https://github.com/openuji/journey-mesh/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/openuji/journey-mesh/actions/workflows/ci.yml)
-[![Nextcloud Filesharing CI](https://github.com/openuji/journey-mesh/actions/workflows/example-ci.yml/badge.svg?event=pull_request)](https://github.com/openuji/journey-mesh/actions/workflows/example-ci.yml)
 
-Model-driven execution and validation of cross-service user journeys, with pluggable model bindings, automation adapters, application drivers, interaction profiles, and evidence observers.
-
-Links: [live demo](https://journey-mesh.openuji.org/#demo) · [roadmap](docs/roadmap.md) · [known-good accessibility report](https://journey-mesh.openuji.org/accessibility/filesharing/artifacts/nextcloud-filesharing.axe-path)
+Composable, model-driven execution and checking of user journeys. Choose how a
+journey is described, how its steps are executed, and which evidence is collected
+by plugging compatible components together.
 
 ## Problem
 
-Federated and multi-service systems can report that every service is healthy while the user journey is still broken at a boundary: account mapping, remote discovery, delayed delivery, upgrade compatibility, or evidence review. Journey Mesh makes the intended journey executable, then records evidence against the states and transitions in the model.
-
-
+Healthy components do not guarantee that a user can complete a journey. The
+journey can fail within an application or across service boundaries, through
+interaction, account mapping, discovery, or delivery. Journey Mesh makes the
+intended journey executable and records what happened against its model.
 
 ## Architecture
 
-```mermaid
-graph TD
-  graphmodel["Graph Model <br/> (UJG JSON LD)"]
-  binding[Compiler]
-  plan[JourneyPlan]
-  runner[runJourney]
-  profiles["Profiles <br /> (default, keyboard only)"]
-  adapter["Adapter <br/> (Playwright)"]
-  driver["Driver <br/> (Nextcloud)"]
-  observer["Observer <br /> (axe)"]
-  result[RunResult]
-  reporting[reportJourneyResult]
-  reports[Evidence JSON and reports]
+Journey Mesh separates the journey's intent from the mechanisms used to run and
+check it. The execution core coordinates components through shared contracts.
+The chosen components supply the application, platform, automation, provider,
+and observation capabilities; the core does not prescribe those choices.
 
-  graphmodel --> binding
-  binding --> plan
-  plan --> runner
-  profiles --> runner
-  driver --> adapter
-  observer --> adapter
-  adapter --> runner
-  runner --> result
-  result --> reporting
-  observer --> reporting
-  reporting --> reports
+### Main blocks
+
+```mermaid
+flowchart LR
+  journey["Journey description"] --> execution["Journey execution and checks"]
+  components["Composed components"] --> execution
+  execution <--> system["System under check"]
+  execution --> evidence["Results and evidence"]
 ```
 
+A composition can use one execution adapter or combine several within one
+journey. It can collect additional evidence through observers and publish it
+through reporters. Each component brings its own capabilities and requirements;
+composition depends on compatible contracts.
 
-### Extension responsibilities
+### Description to plan
 
-- Model bindings own model parsing, validation, source references, and execution-plan generation.
-- Automation adapters own generic execution, resource isolation, and cleanup against an automation runtime such as Playwright or Appium.
-- Application drivers are pure service-specific resolvers for entry targets and transition values; shared environments own fixture setup, effect verification, and cleanup.
-- Interaction profiles own input-modality selection such as default pointer-first and keyboard-only operation.
-- Observers own evidence collection and redaction for functional, accessibility, reliability, and deployment signals.
-- Reporters own versioned output formats, human-readable summaries, and CI-compatible artifacts.
+```mermaid
+flowchart LR
+  description["Journey description"] --> binding["Model binding"]
+  binding --> plan["JourneyPlan"]
+  plan --> runner["Journey runner"]
+```
 
-The runtime-neutral `JourneyAdapter` contract also supports composing adapters by
-touchpoint with `touchpointAdapter(...)`. This allows different runtimes in one
-journey. See [adapter contracts](docs/automation-adapters.md) and the
-[Android migration path](docs/nextcloud-android.md). Model-defined input modalities,
-profiles composed by touchpoint, and shared environment hooks keep runtime
-commands and service fixtures out of the adapter contract.
+A model binding translates its source format into the shared execution model.
+`JourneyPlan` carries ordered operations, expected states, transitions, input
+requirements, effects, and source references. Automation handles stay within
+adapters. Callers can also construct and supply a plan directly.
 
+The current runner understands state, transition, and control-flow operations.
+A new model binding must translate into those semantics; choosing a different
+source format does not introduce new operation kinds into the runner.
 
-## Available Today
+### Execution composition
 
-- Generic runner, UJG binding, Playwright and Android Appium adapters, Nextcloud web/native drivers, composed input profiles, and web/native accessibility observers.
-- A Nextcloud federated file-sharing example with web and explicit Alice-web/Bob-Android modes, local stack scripts, and CI artifact upload.
-- Published demo and known-good report:
-  [journey-mesh.openuji.org](https://journey-mesh.openuji.org/) and
-  [nextcloud-filesharing.axe-path](https://journey-mesh.openuji.org/accessibility/filesharing/artifacts/nextcloud-filesharing.axe-path).
+```mermaid
+flowchart LR
+  profiles["Interaction profiles"] --> runner["Journey runner"]
+  environment["Environment hooks<br/>(optional)"] <--> runner
+  runner --> adapters["Execution adapters"]
+  drivers["Application bindings<br/>(when needed)"] --> adapters
+  adapters <--> system["System under check"]
+```
+
+The runner needs a plan, an adapter, and at least one profile. Profiles determine
+applicability and select model-declared input modalities. Adapters translate
+operations and selected modalities into execution commands, assert expected
+states, and own their execution resources and cleanup.
+
+An adapter can itself be a composition: `routedAdapter(...)` selects a child
+adapter for each operation, while `touchpointAdapter(...)` offers routing by
+touchpoint. Profiles can likewise be composed for different parts of a journey.
+This lets one run span different execution mechanisms without putting their
+commands into the runner.
+
+Application drivers provide deterministic entry targets and transition values
+through a contract defined by their adapter family. Optional environment hooks
+own shared fixture setup, declared-effect verification, and teardown. Without a
+verification hook, declaring an effect alone does not perform an external check.
+
+Profiles and operations execute sequentially. A failed operation stops that
+profile execution; adapter cleanup and environment teardown still run. Cleanup
+failures are retained alongside the original failure.
+
+### Observation and reporting
+
+```mermaid
+flowchart LR
+  runner["Journey runner"] --> result["RunResult"]
+  runner -.->|lifecycle events| lifecycle["Runner observers<br/>(optional)"]
+  adapters["Execution adapters"] -.->|live observations| capture["Adapter observers<br/>(optional)"]
+  capture -->|collected evidence| reporters["Reporters<br/>(optional)"]
+  result --> reporters
+  reporters --> output["Published evidence and reports"]
+```
+
+Functional outcomes and operation evidence are part of `RunResult`, even when no
+additional observer is installed. Runner observers receive run and execution
+lifecycle events. Adapter observers receive observations through an
+adapter-specific contract, which may expose live runtime handles.
+
+Observers can retain detached evidence and also implement a reporter. Reporting
+runs separately after execution and can combine that evidence with the immutable
+`RunResult`. Reporting errors remain separate from execution history. Collection
+errors during execution can still fail the execution.
+
+### Component responsibilities
+
+| Component | Responsibility | When needed |
+| --- | --- | --- |
+| Model binding | Parse and validate a source model; produce a plan and source references | When translating a journey description into a plan |
+| Execution adapter | Execute operations, check states, manage execution resources and cleanup | Required; may route to several child adapters |
+| Application driver | Resolve application entry targets and transition values | When required by the selected adapter |
+| Interaction profile | Assess applicability and select declared input modalities | At least one profile per run |
+| Environment | Set up shared fixtures, verify effects, and tear down fixtures | Optional |
+| Runner observer | Observe run and execution lifecycle events | Optional |
+| Adapter observer | Collect evidence at the adapter's observation boundary | Optional; must match the adapter contract |
+| Reporter | Publish results and any collected evidence | Optional, after execution |
+
+Drivers and live observers follow their adapter's contracts. Input modality IDs
+are open model identifiers; a profile must choose a declared modality that the
+selected adapter can execute. Replacing a component means satisfying these
+contracts and the selected journey's requirements.
+
+### Ways to compose a run
+
+**Programmatically:** supply components to `runJourney(...)`, then optionally
+publish the result with `reportJourneyResult(...)`. See the
+[runner API](packages/journey-runner/src/index.ts) and
+[execution model](packages/journey-execution-model/src/index.ts).
+
+**Through configuration:** the supplied YAML/CLI host loads plugins, compiles
+selected journeys, composes profiles, and routes operations to adapters. It
+validates every selected test before starting shared fixture setup. The host
+checks plugin API versions and kinds, driver contracts, and observer runtime
+compatibility. See the [configuration types](packages/journey-runtime/src/config.ts)
+and [plugin contract](packages/journey-runtime/src/plugin.ts).
+
+```sh
+journey-mesh validate mesh.yaml
+journey-mesh test mesh.yaml
+journey-mesh report test-results
+```
+
+The configuration host and CLI use Node.js. The runner's main entry has no Node
+builtin or automation-runtime imports, and is checked in a restricted VM by the
+[portability test](packages/journey-runner/test/runner-portability.mjs). Its
+separate console helper uses Node.js. Infrastructure lifecycle plugins are
+optional host tooling, independent of an individual journey execution.
+
+## Available integrations and examples
+
+The repository currently includes:
+
+- A UJG JSON-LD model binding and input-modality profiles.
+- Playwright and Android Appium adapters, with Nextcloud web/native drivers.
+- Axe and Android accessibility observers and reporters.
+
+The [Nextcloud file-sharing example](examples/nextcloud-filesharing/README.md)
+demonstrates two compositions of the same architecture:
+
+- [Browser sharing](examples/nextcloud-filesharing/README.md#run-the-browser-test):
+  both participants use web execution, with default and keyboard-only profiles.
+- [Web/native sharing](examples/nextcloud-filesharing/README.md#run-the-native-recipient-test):
+  one participant uses web execution and the other uses Android, within one run.
+
+Concrete diagrams, configuration, prerequisites, lifecycle commands, and evidence
+limits live in the example. Other integrations can implement the extension
+contracts; the implementations above are the ones supplied today.
+
+Explore the [live demo](https://journey-mesh.openuji.org/#demo) and
+[known-good accessibility report](https://journey-mesh.openuji.org/accessibility/filesharing/artifacts/nextcloud-filesharing.axe-path).
+
+## Current limitations
+
+- The shipped UJG compiler produces deterministic linear plans; ambiguous
+  branches and cycles are rejected.
+- Nextcloud is the only application binding currently supplied in this
+  repository. Deployment and platform prerequisites depend on the selected
+  integrations.
+- Accessibility evidence supports journey review; it does not certify conformance.
+- Extension APIs and report formats are prototype contracts.
 
 ## Proposed Work
 
 The proposed roadmap adds multipath-aware execution, stable extension contracts, Fediversity/Nix post-deployment and upgrade validation, expanded Nextcloud scenarios, a Mastodon driver, runtime reliability evidence, and improved reporting and documentation.
 
-- [Technical roadmap](docs/roadmap.md)
 - [Public roadmap issue](https://github.com/openuji/journey-mesh/issues/11)
 
 The roadmap is proposed and is not a delivery commitment.
-
-## YAML journey tests
-
-Declare selected journeys and their adapters in one YAML file, then execute them
-with the same command for any runtime combination:
-
-```sh
-journey-mesh test mesh.yaml --test browser-sharing
-journey-mesh test mesh.yaml --test native-recipient-sharing
-journey-mesh test mesh.yaml # all declared tests; prepare every configured runtime first
-journey-mesh validate mesh.yaml --test browser-sharing
-journey-mesh report test-results
-```
-
-The [Nextcloud configuration](examples/nextcloud-filesharing/mesh.yaml) contains
-both browser-only and native-recipient tests. Fixtures and reporting belong to
-the test; adapters own browser and device resources. See the
-[configuration and plugin contract](docs/yaml-tests.md) and
-[example setup](examples/nextcloud-filesharing/README.md).
-
-## Limitations
-
-- Current execution compiles the checked-in UJG into a linear plan; ambiguous branches are rejected.
-- The only application binding in this repository is the pure Nextcloud web/Android reference driver.
-- The example requires Docker and canonical Nextcloud URLs reachable by its runtimes; the local lifecycle commands provision a dedicated Android emulator and Appium service when native execution is selected.
-- Accessibility evidence supports journey review, but it is not WCAG certification.
-- Extension APIs and report formats are prototype contracts.
-- Roadmap items are proposed work, not committed delivery.
 
 ## UJG Citation
 
