@@ -19,15 +19,17 @@ Journey Mesh separates the journey's intent from the mechanisms used to run and
 check it. The execution core coordinates components through shared contracts.
 The chosen components supply the application, platform, automation, provider,
 and observation capabilities; the core does not prescribe those choices.
+Examples in parentheses make each role concrete; they illustrate a composition
+you can choose.
 
 ### Main blocks
 
 ```mermaid
 flowchart LR
-  journey["Journey description"] --> execution["Journey execution and checks"]
-  components["Composed components"] --> execution
-  execution <--> system["System under check"]
-  execution --> evidence["Results and evidence"]
+  journey["Journey description<br/>(UJG JSON-LD)"] --> execution["Journey execution and checks<br/>(runJourney)"]
+  components["Composed components<br/>(Playwright, Nextcloud driver, axe)"] --> execution
+  execution <--> system["System under check<br/>(Nextcloud)"]
+  execution --> evidence["Results and evidence<br/>(operation outcomes, audit findings)"]
 ```
 
 A composition can use one execution adapter or combine several within one
@@ -39,9 +41,9 @@ composition depends on compatible contracts.
 
 ```mermaid
 flowchart LR
-  description["Journey description"] --> binding["Model binding"]
-  binding --> plan["JourneyPlan"]
-  plan --> runner["Journey runner"]
+  description["Journey description<br/>(UJG JSON-LD)"] --> binding["Model binding<br/>(UJG compiler)"]
+  binding --> plan["JourneyPlan<br/>(states, transitions, control flow)"]
+  plan --> runner["Journey runner<br/>(runJourney)"]
 ```
 
 A model binding translates its source format into the shared execution model.
@@ -56,13 +58,21 @@ source format does not introduce new operation kinds into the runner.
 ### Execution composition
 
 ```mermaid
-flowchart LR
-  profiles["Interaction profiles"] --> runner["Journey runner"]
-  environment["Environment hooks<br/>(optional)"] <--> runner
-  runner --> adapters["Execution adapters"]
-  drivers["Application bindings<br/>(when needed)"] --> adapters
-  adapters <--> system["System under check"]
+flowchart TB
+  document["Journey document<br/>(UJG JSON-LD)"] --> binding["Model binding<br/>(UJG compiler)"]
+  binding --> plan["JourneyPlan<br/>(resolved operations)"]
+  plan --> runner["Journey runner<br/>(runJourney)"]
+  drivers["Application drivers<br/>(Nextcloud web/Android)"] --> adapters["Execution adapters<br/>(Playwright, Appium)"]
+  runner --> adapters
+  adapters <--> system["System under check<br/>(Nextcloud web / Android app)"]
+  profiles["Interaction profiles<br/>(default, keyboard-only)"] --> runner
+  environment["Environment hooks — optional<br/>(Nextcloud sharing fixtures)"] --> runner
 ```
+
+The journey document is the input to the model binding. In the illustrated
+composition, the UJG compiler turns UJG JSON-LD into a `JourneyPlan`; the runner
+receives that compiled plan. Other document formats can use their own bindings
+to produce the same execution model.
 
 The runner needs a plan, an adapter, and at least one profile. Profiles determine
 applicability and select model-declared input modalities. Adapters translate
@@ -75,25 +85,63 @@ touchpoint. Profiles can likewise be composed for different parts of a journey.
 This lets one run span different execution mechanisms without putting their
 commands into the runner.
 
-Application drivers provide deterministic entry targets and transition values
-through a contract defined by their adapter family. Optional environment hooks
-own shared fixture setup, declared-effect verification, and teardown. Without a
-verification hook, declaring an effect alone does not perform an external check.
+Application drivers bind operations to an application by providing deterministic
+entry targets and transition values through their adapter family's contract.
+Optional environment hooks own shared fixture setup, declared-effect
+verification, and teardown. Without a verification hook, declaring an effect
+alone does not perform an external check.
 
 Profiles and operations execute sequentially. A failed operation stops that
 profile execution; adapter cleanup and environment teardown still run. Cleanup
 failures are retained alongside the original failure.
 
+### Adapter runtime lifecycle
+
+An **adapter runtime** manages the automation infrastructure used by adapter
+executions. `JourneyAdapterRuntime` exposes `up()` and an optional `down()` for
+preparing, starting, and stopping that infrastructure. It can stay available
+across multiple profile executions and journey runs.
+
+```mermaid
+flowchart TB
+  host["Runtime lifecycle host<br/>(CLI runtime up / down)"] --> runtime["Adapter runtime<br/>(Android / Appium lifecycle)"]
+  runtime -->|prepare and manage| infrastructure["Automation infrastructure<br/>(emulator, Appium server)"]
+  runner["Journey runner<br/>(runJourney)"] --> execution["Adapter execution<br/>(Appium device session)"]
+  execution -.->|uses| infrastructure
+```
+
+Each profile receives a fresh **adapter execution**, with `start()` and `close()`
+owning resources such as browser contexts or device sessions. Closing that
+execution leaves separately managed infrastructure available. The
+**environment** has its own per-profile lifecycle for service fixtures and
+effect checks, such as creating and verifying a shared file.
+
+Runtime lifecycle management is optional: infrastructure can be provided
+externally. The YAML host loads runtime plugins from `runtimes` and manages them
+through explicit commands:
+
+```sh
+journey-mesh runtime up mesh.yaml
+journey-mesh runtime down mesh.yaml
+```
+
+`journey-mesh test` does not automatically start or stop these runtimes, and
+`runJourney(...)` does not receive an adapter runtime. See the
+[lifecycle contracts](packages/journey-runner/src/adapters/contracts.ts).
+The `runtime` tag on adapter and observer plugins identifies compatibility
+(for example, `playwright` or `appium`); it is separate from the `runtimes`
+configuration that manages infrastructure.
+
 ### Observation and reporting
 
 ```mermaid
-flowchart LR
-  runner["Journey runner"] --> result["RunResult"]
-  runner -.->|lifecycle events| lifecycle["Runner observers<br/>(optional)"]
-  adapters["Execution adapters"] -.->|live observations| capture["Adapter observers<br/>(optional)"]
-  capture -->|collected evidence| reporters["Reporters<br/>(optional)"]
+flowchart TB
+  runner["Journey runner<br/>(runJourney)"] --> result["RunResult<br/>(outcomes, operation evidence)"]
+  runner -.->|lifecycle events| lifecycle["Runner observers — optional<br/>(custom lifecycle logger)"]
+  adapters["Execution adapters<br/>(Playwright, Appium)"] -.->|live observations| capture["Adapter observers — optional<br/>(axe, Android accessibility)"]
+  capture -->|collected evidence| reporters["Reporters — optional<br/>(axe / Android HTML reporters)"]
   result --> reporters
-  reporters --> output["Published evidence and reports"]
+  reporters --> output["Published evidence and reports<br/>(JSON, HTML, captures)"]
 ```
 
 Functional outcomes and operation evidence are part of `RunResult`, even when no
@@ -112,6 +160,7 @@ errors during execution can still fail the execution.
 | --- | --- | --- |
 | Model binding | Parse and validate a source model; produce a plan and source references | When translating a journey description into a plan |
 | Execution adapter | Execute operations, check states, manage execution resources and cleanup | Required; may route to several child adapters |
+| Adapter runtime | Prepare and manage automation infrastructure across executions; expose `up()` and optional `down()` | Optional; infrastructure may be managed externally |
 | Application driver | Resolve application entry targets and transition values | When required by the selected adapter |
 | Interaction profile | Assess applicability and select declared input modalities | At least one profile per run |
 | Environment | Set up shared fixtures, verify effects, and tear down fixtures | Optional |
@@ -156,6 +205,7 @@ The repository currently includes:
 
 - A UJG JSON-LD model binding and input-modality profiles.
 - Playwright and Android Appium adapters, with Nextcloud web/native drivers.
+- Android emulator and Appium server runtime lifecycle plugins.
 - Axe and Android accessibility observers and reporters.
 
 The [Nextcloud file-sharing example](examples/nextcloud-filesharing/README.md)
@@ -177,9 +227,8 @@ Explore the [live demo](https://journey-mesh.openuji.org/#demo) and
 
 - The shipped UJG compiler produces deterministic linear plans; ambiguous
   branches and cycles are rejected.
-- Nextcloud is the only application binding currently supplied in this
-  repository. Deployment and platform prerequisites depend on the selected
-  integrations.
+- Only Nextcloud application drivers are currently supplied in this repository.
+  Deployment and platform prerequisites depend on the selected integrations.
 - Accessibility evidence supports journey review; it does not certify conformance.
 - Extension APIs and report formats are prototype contracts.
 
