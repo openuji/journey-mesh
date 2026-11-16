@@ -59,14 +59,13 @@ source format does not introduce new operation kinds into the runner.
 
 ```mermaid
 flowchart TB
-  document["Journey document<br/>(UJG JSON-LD)"] --> binding["Model binding<br/>(UJG compiler)"]
-  binding --> plan["JourneyPlan<br/>(resolved operations)"]
-  plan --> runner["Journey runner<br/>(runJourney)"]
-  drivers["Application drivers<br/>(Nextcloud web/Android)"] --> adapters["Execution adapters<br/>(Playwright, Appium)"]
-  runner --> adapters
-  adapters <--> system["System under check<br/>(Nextcloud web / Android app)"]
-  profiles["Interaction profiles<br/>(default, keyboard-only)"] --> runner
-  environment["Environment hooks — optional<br/>(Nextcloud sharing fixtures)"] --> runner
+  A["Journey document (JSON-LD)"] --> B["Compiler (UJG)"]
+  B --> C["JourneyPlan"] --> D["Runner (runJourney)"]
+  D --> E["Adapters (Playwright/Appium)"]
+  E <--> F["App (Web/Android)"]
+  G["Drivers (Web/Android)"] --> E
+  H["Profiles (Default/Keyboard)"] --> D
+  I["Hooks (Fixtures)"] --> D
 ```
 
 The journey document is the input to the model binding. In the illustrated
