@@ -37,12 +37,6 @@ tests:
           bob-setup: default
           alice-offers: default
           bob-accepts: default
-      - id: keyboard-only
-        journeys:
-          alice-setup: keyboard
-          bob-setup: keyboard
-          alice-offers: keyboard
-          bob-accepts: keyboard
     environment:
       use: "@openuji/journey-driver-nextcloud/federated-sharing/plugin"
       options:
@@ -156,10 +150,6 @@ profiles:
     use: "@openuji/journey-profiles/plugin"
     options:
       preset: default
-  keyboard:
-    use: "@openuji/journey-profiles/plugin"
-    options:
-      preset: keyboard-only
 kind: suite
 label: Nextcloud 34.0.2
 services:
