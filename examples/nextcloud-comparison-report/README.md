@@ -87,13 +87,22 @@ interprets its own namespace and rejects unsupported namespaces in preflight.
 
 ## Publish with GitHub Actions
 
-Pages is configured to use GitHub Actions for this repository. After pushing these
-changes to the default branch, run **Nextcloud acceptance comparison** from the
-Actions tab. For forks, first select **Settings → Pages → Source → GitHub Actions**.
-The workflow retains evidence for 90 days and deploys the static report. The
-publish summary contains the ticket-ready link; version/profile selections are
-shareable query parameters. Ticket posting is manual.
+**Nextcloud acceptance comparison** runs on pushes to `feature/**` branches and
+`main`. Feature-branch runs work before the workflow is merged. Each run uploads
+`nextcloud-acceptance-report` and the raw evidence as artifacts, retained for 90
+days. The run summary links to the report download. Extract the archive and run
+`python3 -m http.server 8000` inside it, then open `http://localhost:8000`.
 
-Test failures remain failures in the final workflow status while their diagnostic
-page is published. The page records generation time and workflow URL. Pages shows
-the latest published report; workflow artifacts retain the corresponding evidence.
+Only `main` runs publish to GitHub Pages. Pages is configured to use GitHub Actions
+for this repository; forks must first select **Settings → Pages → Source → GitHub
+Actions**. The publish summary contains the ticket-ready link; version/profile
+selections are shareable query parameters. Ticket posting is manual.
+
+Once the workflow exists on `main`, it can also be started from **Actions →
+Nextcloud acceptance comparison → Run workflow**, selecting a branch to test.
+
+Test failures remain failures in the final workflow status while diagnostic reports
+are retained and, on `main`, published. Skipped Pages publication on a feature
+branch does not count as a failure. The page records generation time and workflow
+URL. Pages shows the latest published report; workflow artifacts retain the
+corresponding evidence.

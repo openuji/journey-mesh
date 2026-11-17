@@ -1,13 +1,17 @@
 name: Nextcloud acceptance comparison
 
 on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: nextcloud-comparison-pages
+  group: nextcloud-comparison-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -42,16 +46,33 @@ jobs:
           path: examples/nextcloud-filesharing/test-results/comparison
           retention-days: 90
       - name: Upload Pages bundle
-        if: ${{ !cancelled() && steps.journeys.outcome != 'skipped' }}
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (steps.journeys.outcome == 'success' || steps.journeys.outcome == 'failure') }}
         uses: actions/upload-pages-artifact@v3
         with:
           path: examples/nextcloud-comparison-report/dist
+      - name: Upload downloadable report
+        id: report
+        if: ${{ !cancelled() && (steps.journeys.outcome == 'success' || steps.journeys.outcome == 'failure') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextcloud-acceptance-report
+          path: examples/nextcloud-comparison-report/dist
+          if-no-files-found: error
+          retention-days: 90
+      - name: Link report download
+        if: ${{ !cancelled() && steps.report.outcome == 'success' }}
+        env:
+          REPORT_ARTIFACT_URL: ${{ steps.report.outputs.artifact-url }}
+        run: |
+          echo "[Download comparison report]($REPORT_ARTIFACT_URL)" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Extract the archive and run `python3 -m http.server 8000` inside it, then open http://localhost:8000.' >> "$GITHUB_STEP_SUMMARY"
       - name: Stop comparison stacks
         if: always()
         run: pnpm --filter @openuji/example-nextcloud-filesharing comparison:down
 
   publish:
     needs: comparison
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -79,4 +100,11 @@ jobs:
           BUILD_RESULT: ${{ needs.comparison.result }}
           PUBLISH_RESULT: ${{ needs.publish.result }}
           JOURNEYS_RESULT: ${{ needs.comparison.outputs.journeys }}
-        run: test "$BUILD_RESULT" = success && test "$PUBLISH_RESULT" = success && test "$JOURNEYS_RESULT" = success
+        run: |
+          test "$BUILD_RESULT" = success
+          test "$JOURNEYS_RESULT" = success
+          if [ "$GITHUB_REF" = refs/heads/main ]; then
+            test "$PUBLISH_RESULT" = success
+          else
+            test "$PUBLISH_RESULT" = skipped
+          fi
