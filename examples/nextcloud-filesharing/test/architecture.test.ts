@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 import { compileUjgJourneyPlan } from "@openuji/journey-model-ujg";
-import { loadJourneyTestConfig, validateConfiguredTests } from "@openuji/journey-runtime";
+import { loadSuiteConfig, validateSuite } from "@openuji/journey-host";
 
 const example = new URL("../", import.meta.url);
 
@@ -32,10 +32,10 @@ test("native scenario enters the application and models notification navigation"
 
 test("browser selection validates without Android device or APK configuration", async () => {
   const config = new URL("../mesh.yaml", import.meta.url);
-  assert.deepEqual((await validateConfiguredTests(config.pathname, { test: "browser-sharing", env: {} })).tests, ["browser-sharing"]);
-  const loaded = await loadJourneyTestConfig(config.pathname, {});
-  assert.equal(Object.keys(loaded.config.tests).length, 2);
-  assert.deepEqual(loaded.config.envFiles?.filter((entry) => typeof entry === "object" && entry.path?.startsWith("./.runtime/")), [
+  assert.deepEqual((await validateSuite(config.pathname, { test: "browser-sharing", env: {} })).tests, ["browser-sharing"]);
+  const loaded = await loadSuiteConfig(config.pathname, {});
+  assert.equal(loaded.config.tests.length, 2);
+  assert.deepEqual(loaded.config.envFiles.filter((entry) => entry.path?.startsWith("./.runtime/")), [
     { path: "./.runtime/stack.env", optional: true },
     { path: "./.runtime/android.env", optional: true },
     { path: "./.runtime/appium.env", optional: true }
@@ -45,8 +45,8 @@ test("browser selection validates without Android device or APK configuration", 
   assert.ok(!legacy.includes("playwright.config.ts"));
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   assert.equal(packageJson.scripts["android:local"], undefined);
-  assert.match(packageJson.scripts["android:up"], /journey-mesh runtime up mesh\.yaml --runtime android/);
-  assert.match(packageJson.scripts["appium:up"], /journey-mesh runtime up mesh\.yaml --runtime appium/);
+  assert.match(packageJson.scripts["android:up"], /journey-mesh services up mesh\.yaml --service android/);
+  assert.match(packageJson.scripts["appium:up"], /journey-mesh services up mesh\.yaml --service appium/);
 });
 
 test("example delegates Android/Appium infrastructure lifecycle to the owning packages", async () => {
@@ -65,8 +65,8 @@ test("example delegates Android/Appium infrastructure lifecycle to the owning pa
 
 test("Android device pins and the Nextcloud application config live in mesh.yaml, not a separate manifest", async () => {
   const config = new URL("../mesh.yaml", import.meta.url);
-  const loaded = await loadJourneyTestConfig(config.pathname, {});
-  const androidRuntime = loaded.config.runtimes?.android?.options as Record<string, unknown> | undefined;
+  const loaded = await loadSuiteConfig(config.pathname, {});
+  const androidRuntime = loaded.config.services.android?.options as Record<string, unknown> | undefined;
   assert.ok(androidRuntime);
   assert.equal(androidRuntime?.api, 35);
   assert.equal(androidRuntime?.profile, "pixel_6");
@@ -75,4 +75,19 @@ test("Android device pins and the Nextcloud application config live in mesh.yaml
   assert.ok(androidAdapterOptions?.application);
   assert.equal((androidAdapterOptions?.application as Record<string, unknown>).package, "com.nextcloud.client");
   assert.equal(androidAdapterOptions?.runtimeManifest, undefined);
+});
+
+test("every journey a mesh runs is drawn on the report's journey map from its JSON-LD source", async () => {
+  const { dirname, resolve } = await import("node:path");
+  const { loadUjgDocument, toJourneyMapDocument } = await import("@openuji/journey-model-ujg");
+  for (const mesh of ["mesh.yaml", "comparison/nc34.mesh.yaml", "comparison/pr66147.mesh.yaml"]) {
+    const path = new URL(mesh, example).pathname;
+    for (const item of (await loadSuiteConfig(path, {})).config.tests.flatMap((test) => test.journeys)) {
+      const map = toJourneyMapDocument(await loadUjgDocument(resolve(dirname(path), item.source)));
+      // The renderer starts root journeys from the entry index: the selected journey must be one of them.
+      const root = Object.values(map.states).find((state) => "subjourney" in state && state.subjourney.id === item.select);
+      assert.ok(root && "subjourney" in root, `${mesh}: ${item.id} is not a root journey`);
+      assert.ok((map.journeyEntryIndex?.entryRefs as string[] | undefined)?.includes(root.subjourney.defaultEntryRef ?? ""), `${mesh}: ${item.id} has no indexed entry`);
+    }
+  }
 });

@@ -12,16 +12,12 @@ import {
 } from "../shared/strings.js";
 import { metadataTable, reportStyles, trustedHtml } from "./html-fragments.js";
 
-export function renderAxePathAuditHtml(
-  report: AxePathAuditReport,
-  options: { baseHref?: string } = {}
-): string {
+export function renderAxePathAuditHtml(report: AxePathAuditReport): string {
   return [
     "<!doctype html>",
     '<html lang="en">',
     "<head>",
     '<meta charset="utf-8">',
-    options.baseHref ? `<base href="${escapeAttribute(options.baseHref)}">` : "",
     `<title>${escapeHtml(report.reportId)} axe path report</title>`,
     reportStyles(),
     "</head>",
@@ -30,7 +26,7 @@ export function renderAxePathAuditHtml(
     `<h1>${escapeHtml(report.reportId)} axe path report</h1>`,
     metadataTable([
       ["Created", report.createdAt],
-      ["Schema version", report.schemaVersion],
+      ["Report format", report.format],
       ["WCAG tags", report.wcagTags.join(", ")],
       ["Metadata", JSON.stringify(report.metadata, null, 2)]
     ]),

@@ -15,12 +15,11 @@ import type {
   AxeJourneyOperation
 } from "../types.js";
 import { addOptional, unique } from "../shared/json.js";
-import type { Immutable } from "../shared/immutable.js";
+import type { Immutable } from "@openuji/journey-core";
 
 export function metadataForOperation(
   profileId: string,
   executionId: string,
-  graphNodeId: string,
   operation: AxeJourneyOperation
 ): AxeAuditMetadata {
   const metadata: AxeAuditMetadata = {
@@ -29,7 +28,6 @@ export function metadataForOperation(
     operationId: operation.id,
     sequence: operation.sequence,
     kind: operation.kind,
-    graphNodeId,
     actorId: operation.actorId,
     touchpointId: operation.touchpointId,
     entryId: operation.entry.id

@@ -3,9 +3,6 @@ export {
   executionDescriptor,
   profileDescriptor
 } from "./observers/contracts.js";
-export {
-  reportJourneyResult
-} from "./reporting/report-journey-result.js";
 export { errorToJourneyRunError } from "./errors.js";
 export { runJourney } from "./run-journey.js";
 export { routedAdapter } from "./adapters/routed-adapter.js";
@@ -48,7 +45,6 @@ export type {
   JourneyAdapterCloseInput,
   JourneyAdapterExecution,
   JourneyAdapterExecutionInput,
-  JourneyAdapterRuntime,
   JourneyExecutionContext,
   JourneyProfile
 } from "./adapters/contracts.js";
@@ -68,12 +64,6 @@ export type {
   JourneyProgressEvent,
   JourneyProgressSink
 } from "./progress/contracts.js";
-export type {
-  JourneyReporter,
-  JourneyReporterInput,
-  ReportJourneyResultInput,
-  ReportJourneyResultOutcome
-} from "./reporting/contracts.js";
 export type {
   JourneyEffectVerificationInput,
   JourneyEnvironment,

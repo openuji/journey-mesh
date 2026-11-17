@@ -1,12 +1,11 @@
-import type { JourneyEnvironment } from "@openuji/journey-runner";
 import {
   booleanOption,
+  defineEnvironmentPlugin,
   knownOptions,
   optionsObject,
   positiveNumber,
-  requiredString,
-  type JourneyMeshPlugin
-} from "@openuji/journey-runtime/plugin";
+  requiredString
+} from "@openuji/journey-plugin";
 
 import {
   createNextcloudFederatedSharingEnvironment,
@@ -47,14 +46,24 @@ const environmentOptions = (
       shareAccepted: requiredString(effectIds.shareAccepted, "effectIds.shareAccepted")
     },
     preserveFixtures: booleanOption(options.preserveFixtures),
+    ...(options.recipientViewConfig !== undefined ? { recipientViewConfig: recipientViewConfigOption(options.recipientViewConfig) } : {}),
     timeoutMs: positiveNumber(options.timeoutMs, 30_000)
   };
 };
 
-export const journeyMeshPlugin: JourneyMeshPlugin<JourneyEnvironment> = {
-  apiVersion: 1,
+function recipientViewConfigOption(value: unknown): NonNullable<NextcloudFederatedSharingEnvironmentOptions["recipientViewConfig"]> {
+  const views = optionsObject(value, "recipientViewConfig");
+  return Object.fromEntries(Object.entries(views).map(([view, settings]) => [view,
+    Object.fromEntries(Object.entries(optionsObject(settings, `recipientViewConfig.${view}`)).map(([key, entry]) => {
+      if (!["string", "number", "boolean"].includes(typeof entry) || typeof entry === "number" && !Number.isFinite(entry)) throw new Error(`Invalid view configuration ${view}.${key}`);
+      return [key, entry as string | number | boolean];
+    }))
+  ]));
+}
+
+export const journeyMeshPlugin = defineEnvironmentPlugin({
   kind: "environment",
-  validate(options, context) {
+  parse(options, context) {
     knownOptions(options, [
       "sharerTouchpoint",
       "recipientTouchpoint",
@@ -64,11 +73,12 @@ export const journeyMeshPlugin: JourneyMeshPlugin<JourneyEnvironment> = {
       "fixtureFileName",
       "effectIds",
       "preserveFixtures",
+      "recipientViewConfig",
       "timeoutMs"
     ]);
-    createNextcloudFederatedSharingEnvironment(environmentOptions(options, (path) => context.resolvePath(path)));
+    const settings = environmentOptions(options, (path) => context.resolvePath(path));
+    createNextcloudFederatedSharingEnvironment(settings);
+    return settings;
   },
-  create(options, context) {
-    return createNextcloudFederatedSharingEnvironment(environmentOptions(options, (path) => context.resolvePath(path)));
-  }
-};
+  create(settings) { return createNextcloudFederatedSharingEnvironment(settings); }
+});

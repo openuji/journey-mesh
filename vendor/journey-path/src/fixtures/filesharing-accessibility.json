@@ -1,0 +1,427 @@
+{
+  "schemaVersion": "ujg-fed-a11y.accessibility-summary-by-graph-id.v1",
+  "generatedAt": "2026-07-26T13:09:07.585Z",
+  "source": {
+    "testResultDirectoryName": "accessible-filesharing-fed-804ab-path-is-standard-accessible-chromium",
+    "reportId": "federated-sharing-standard.axe-path",
+    "reportMode": "standard",
+    "reportCreatedAt": "2026-07-26T11:52:01.335Z",
+    "delivery": "astro-hydration-prop",
+    "aggregateHtmlHref": "./artifacts/federated-sharing-standard.axe-path.html",
+    "summary": {
+      "items": 15,
+      "audited": 13,
+      "skipped": 1,
+      "notApplicable": 1,
+      "violations": 23,
+      "incomplete": 39,
+      "passes": 560,
+      "inapplicable": 1055,
+      "scanSummaries": {
+        "page-state": {
+          "violations": 23,
+          "incomplete": 35,
+          "passes": 404,
+          "inapplicable": 406
+        },
+        "matched-surface": {
+          "violations": 0,
+          "incomplete": 4,
+          "passes": 156,
+          "inapplicable": 649
+        }
+      }
+    }
+  },
+  "states": {
+    "urn:state:alice-files-ready": {
+      "id": "urn:state:alice-files-ready",
+      "itemId": "standard-000-alice-files-ready",
+      "auditId": "standard-000-alice-files-ready",
+      "status": "audited",
+      "summary": {
+        "violations": 3,
+        "incomplete": 3,
+        "passes": 42,
+        "inapplicable": 82
+      },
+      "metrics": {
+        "pageState": {
+          "violations": 3,
+          "incomplete": 3,
+          "passes": 30,
+          "inapplicable": 32
+        },
+        "matchedSurface": {
+          "violations": 0,
+          "incomplete": 0,
+          "passes": 12,
+          "inapplicable": 50
+        }
+      },
+      "sourceHtmlHref": "./artifacts/federated-sharing-standard.axe-path.html#standard-000-alice-files-ready",
+      "sourceScreenshotHref": "./artifacts/standard-000-alice-files-ready.source.playwright-screenshot.png"
+    },
+    "urn:state:alice-share-panel-open": {
+      "id": "urn:state:alice-share-panel-open",
+      "itemId": "standard-002-alice-share-panel-open",
+      "auditId": "standard-002-alice-share-panel-open",
+      "status": "audited",
+      "summary": {
+        "violations": 2,
+        "incomplete": 4,
+        "passes": 57,
+        "inapplicable": 67
+      },
+      "metrics": {
+        "pageState": {
+          "violations": 2,
+          "incomplete": 3,
+          "passes": 33,
+          "inapplicable": 29
+        },
+        "matchedSurface": {
+          "violations": 0,
+          "incomplete": 1,
+          "passes": 24,
+          "inapplicable": 38
+        }
+      },
+      "sourceHtmlHref": "./artifacts/federated-sharing-standard.axe-path.html#standard-002-alice-share-panel-open",
+      "sourceScreenshotHref": "./artifacts/standard-002-alice-share-panel-open.source.playwright-screenshot.png"
+    },
+    "urn:state:alice-remote-recipient-entered": {
+      "id": "urn:state:alice-remote-recipient-entered",
+      "itemId": "standard-004-alice-remote-recipient-entered",
+      "auditId": "standard-004-alice-remote-recipient-entered",
+      "status": "audited",
+      "summary": {
+        "violations": 2,
+        "incomplete": 4,
+        "passes": 48,
+        "inapplicable": 76
+      },
+      "metrics": {
+        "pageState": {
+          "violations": 2,
+          "incomplete": 3,
+          "passes": 34,
+          "inapplicable": 28
+        },
+        "matchedSurface": {
+          "violations": 0,
+          "incomplete": 1,
+          "passes": 14,
+          "inapplicable": 48
+        }
+      },
+      "sourceHtmlHref": "./artifacts/federated-sharing-standard.axe-path.html#standard-004-alice-remote-recipient-entered",
+      "sourceScreenshotHref": "./artifacts/standard-004-alice-remote-recipient-entered.source.playwright-screenshot.png"
+    },
+    "urn:state:alice-share-permissions-open": {
+      "id": "urn:state:alice-share-permissions-open",
+      "itemId": "standard-006-alice-share-permissions-open",
+      "auditId": "standard-006-alice-share-permissions-open",
+      "status": "audited",
+      "summary": {
+        "violations": 2,
+        "incomplete": 3,
+        "passes": 36,
+        "inapplicable": 88
+      },
+      "metrics": {
+        "pageState": {
+          "violations": 2,
+          "incomplete": 3,
+          "passes": 32,
+          "inapplicable": 30
+        },
+        "matchedSurface": {
+          "violations": 0,
+          "incomplete": 0,
+          "passes": 4,
+          "inapplicable": 58
+        }
+      },
+      "sourceHtmlHref": "./artifacts/federated-sharing-standard.axe-path.html#standard-006-alice-share-permissions-open",
+      "sourceScreenshotHref": "./artifacts/standard-006-alice-share-permissions-open.source.playwright-screenshot.png"
+    },
+    "urn:state:alice-share-confirmed": {
+      "id": "urn:state:alice-share-confirmed",
+      "itemId": "standard-008-alice-share-confirmed",
+      "auditId": "standard-008-alice-share-confirmed",
+      "status": "audited",
+      "summary": {
+        "violations": 4,
+        "incomplete": 3,
+        "passes": 47,
+        "inapplicable": 77
+      },
+      "metrics": {
+        "pageState": {
+          "violations": 4,
+          "incomplete": 3,
+          "passes": 33,
+          "inapplicable": 29
+        },
+        "matchedSurface": {
+          "violations": 0,
+          "incomplete": 0,
+          "passes": 14,
+          "inapplicable": 48
+        }
+      },
+      "sourceHtmlHref": "./artifacts/federated-sharing-standard.axe-path.html#standard-008-alice-share-confirmed",
+      "sourceScreenshotHref": "./artifacts/standard-008-alice-share-confirmed.source.playwright-screenshot.png"
+    },
+    "urn:state:bob-incoming-share-visible": {
+      "id": "urn:state:bob-incoming-share-visible",
+      "itemId": "standard-009-bob-incoming-share-visible",
+      "auditId": "standard-009-bob-incoming-share-visible",
+      "status": "audited",
+      "summary": {
+        "violations": 0,
+        "incomplete": 2,
+        "passes": 43,
+        "inapplicable": 82
+      },
+      "metrics": {
+        "pageState": {
+          "violations": 0,
+          "incomplete": 2,
+          "passes": 29,
+          "inapplicable": 34
+        },
+        "matchedSurface": {
+          "violations": 0,
+          "incomplete": 0,
+          "passes": 14,
+          "inapplicable": 48
+        }
+      },
+      "sourceHtmlHref": "./artifacts/federated-sharing-standard.axe-path.html#standard-009-bob-incoming-share-visible",
+      "sourceScreenshotHref": "./artifacts/standard-009-bob-incoming-share-visible.source.playwright-screenshot.png"
+    },
+    "urn:state:bob-pending-share-offer-cleared": {
+      "id": "urn:state:bob-pending-share-offer-cleared",
+      "itemId": "standard-012-bob-pending-share-offer-cleared",
+      "auditId": null,
+      "status": "skipped",
+      "summary": {
+        "violations": 0,
+        "incomplete": 0,
+        "passes": 0,
+        "inapplicable": 0
+      },
+      "metrics": {
+        "pageState": {
+          "violations": 0,
+          "incomplete": 0,
+          "passes": 0,
+          "inapplicable": 0
+        },
+        "matchedSurface": {
+          "violations": 0,
+          "incomplete": 0,
+          "passes": 0,
+          "inapplicable": 0
+        }
+      },
+      "sourceHtmlHref": "./artifacts/federated-sharing-standard.axe-path.html#standard-012-bob-pending-share-offer-cleared",
+      "reason": "Expected match count 0 cannot be scoped to one matched locator.",
+      "sourceScreenshotHref": "./artifacts/standard-012-bob-pending-share-offer-cleared.source.playwright-screenshot.png"
+    },
+    "urn:state:bob-shared-report-visible": {
+      "id": "urn:state:bob-shared-report-visible",
+      "itemId": "standard-014-bob-shared-report-visible",
+      "auditId": "standard-014-bob-shared-report-visible",
+      "status": "audited",
+      "summary": {
+        "violations": 1,
+        "incomplete": 2,
+        "passes": 43,
+        "inapplicable": 82
+      },
+      "metrics": {
+        "pageState": {
+          "violations": 1,
+          "incomplete": 2,
+          "passes": 29,
+          "inapplicable": 34
+        },
+        "matchedSurface": {
+          "violations": 0,
+          "incomplete": 0,
+          "passes": 14,
+          "inapplicable": 48
+        }
+      },
+      "sourceHtmlHref": "./artifacts/federated-sharing-standard.axe-path.html#standard-014-bob-shared-report-visible",
+      "sourceScreenshotHref": "./artifacts/standard-014-bob-shared-report-visible.source.playwright-screenshot.png"
+    }
+  },
+  "transitions": {
+    "urn:transition:alice-opens-file-menu": {
+      "id": "urn:transition:alice-opens-file-menu",
+      "itemId": "standard-001-alice-opens-file-menu",
+      "auditId": "standard-001-alice-opens-file-menu",
+      "status": "audited",
+      "summary": {
+        "violations": 2,
+        "incomplete": 3,
+        "passes": 39,
+        "inapplicable": 85
+      },
+      "metrics": {
+        "pageState": {
+          "violations": 2,
+          "incomplete": 3,
+          "passes": 30,
+          "inapplicable": 32
+        },
+        "matchedSurface": {
+          "violations": 0,
+          "incomplete": 0,
+          "passes": 9,
+          "inapplicable": 53
+        }
+      },
+      "sourceHtmlHref": "./artifacts/federated-sharing-standard.axe-path.html#standard-001-alice-opens-file-menu"
+    },
+    "urn:transition:alice-enters-remote-bob": {
+      "id": "urn:transition:alice-enters-remote-bob",
+      "itemId": "standard-003-alice-enters-remote-bob",
+      "auditId": "standard-003-alice-enters-remote-bob",
+      "status": "audited",
+      "summary": {
+        "violations": 2,
+        "incomplete": 3,
+        "passes": 48,
+        "inapplicable": 76
+      },
+      "metrics": {
+        "pageState": {
+          "violations": 2,
+          "incomplete": 3,
+          "passes": 33,
+          "inapplicable": 29
+        },
+        "matchedSurface": {
+          "violations": 0,
+          "incomplete": 0,
+          "passes": 15,
+          "inapplicable": 47
+        }
+      },
+      "sourceHtmlHref": "./artifacts/federated-sharing-standard.axe-path.html#standard-003-alice-enters-remote-bob"
+    },
+    "urn:transition:alice-selects-remote-recipient": {
+      "id": "urn:transition:alice-selects-remote-recipient",
+      "itemId": "standard-005-alice-selects-remote-recipient",
+      "auditId": "standard-005-alice-selects-remote-recipient",
+      "status": "audited",
+      "summary": {
+        "violations": 2,
+        "incomplete": 4,
+        "passes": 48,
+        "inapplicable": 76
+      },
+      "metrics": {
+        "pageState": {
+          "violations": 2,
+          "incomplete": 3,
+          "passes": 34,
+          "inapplicable": 28
+        },
+        "matchedSurface": {
+          "violations": 0,
+          "incomplete": 1,
+          "passes": 14,
+          "inapplicable": 48
+        }
+      },
+      "sourceHtmlHref": "./artifacts/federated-sharing-standard.axe-path.html#standard-005-alice-selects-remote-recipient"
+    },
+    "urn:transition:alice-confirms-share": {
+      "id": "urn:transition:alice-confirms-share",
+      "itemId": "standard-007-alice-confirms-share",
+      "auditId": "standard-007-alice-confirms-share",
+      "status": "audited",
+      "summary": {
+        "violations": 2,
+        "incomplete": 3,
+        "passes": 36,
+        "inapplicable": 88
+      },
+      "metrics": {
+        "pageState": {
+          "violations": 2,
+          "incomplete": 3,
+          "passes": 32,
+          "inapplicable": 30
+        },
+        "matchedSurface": {
+          "violations": 0,
+          "incomplete": 0,
+          "passes": 4,
+          "inapplicable": 58
+        }
+      },
+      "sourceHtmlHref": "./artifacts/federated-sharing-standard.axe-path.html#standard-007-alice-confirms-share"
+    },
+    "urn:transition:bob-accepts-share": {
+      "id": "urn:transition:bob-accepts-share",
+      "itemId": "standard-010-bob-accepts-share",
+      "auditId": "standard-010-bob-accepts-share",
+      "status": "audited",
+      "summary": {
+        "violations": 0,
+        "incomplete": 2,
+        "passes": 39,
+        "inapplicable": 86
+      },
+      "metrics": {
+        "pageState": {
+          "violations": 0,
+          "incomplete": 2,
+          "passes": 29,
+          "inapplicable": 34
+        },
+        "matchedSurface": {
+          "violations": 0,
+          "incomplete": 0,
+          "passes": 10,
+          "inapplicable": 52
+        }
+      },
+      "sourceHtmlHref": "./artifacts/federated-sharing-standard.axe-path.html#standard-010-bob-accepts-share"
+    },
+    "urn:transition:bob-opens-shares-overview": {
+      "id": "urn:transition:bob-opens-shares-overview",
+      "itemId": "standard-013-bob-opens-shares-overview",
+      "auditId": "standard-013-bob-opens-shares-overview",
+      "status": "audited",
+      "summary": {
+        "violations": 1,
+        "incomplete": 3,
+        "passes": 34,
+        "inapplicable": 90
+      },
+      "metrics": {
+        "pageState": {
+          "violations": 1,
+          "incomplete": 2,
+          "passes": 26,
+          "inapplicable": 37
+        },
+        "matchedSurface": {
+          "violations": 0,
+          "incomplete": 1,
+          "passes": 8,
+          "inapplicable": 53
+        }
+      },
+      "sourceHtmlHref": "./artifacts/federated-sharing-standard.axe-path.html#standard-013-bob-opens-shares-overview"
+    }
+  }
+}

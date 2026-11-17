@@ -311,7 +311,7 @@ async function ensureEntryOpen(
   operation: JourneyPlanOperation
 ): Promise<EntryMap> {
   if (!operation.entryBinding) return entries;
-  const sessionKey = JSON.stringify([operation.source?.references?.journeyItemId, operation.actorId, operation.touchpointId]);
+  const sessionKey = JSON.stringify([operation.segment, operation.actorId, operation.touchpointId]);
   const entryKey = `${operation.entry.id}\u0000${operation.entryBinding.id}\u0000${operation.entryBinding.value}`;
   if (entries.get(sessionKey) === entryKey) return entries;
   await execution.openEntry(operation);
@@ -352,10 +352,8 @@ function operationEvidence(
   adapter: JourneyComponentDescriptor,
   outcome: JourneyOutcome
 ): JourneyOperationEvidence {
-  const graphNodeId = operation.source?.references?.graphNodeId;
   return Object.freeze({
     operationId: operation.id,
-    ...(typeof graphNodeId === "string" ? { graphNodeId } : {}),
     ...(operation.source?.references ? { source: Object.freeze({ references: Object.freeze(Object.fromEntries(
       Object.entries(operation.source.references).map(([key, value]) => [key, typeof value === "string" ? value : Object.freeze([...value])])
     )) }) } : {}),

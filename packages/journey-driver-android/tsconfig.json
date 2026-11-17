@@ -6,9 +6,18 @@
     "composite": true,
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"],
+  "include": [
+    "src/**/*.ts"
+  ],
   "references": [
-    { "path": "../journey-execution-model" },
-    { "path": "../journey-runtime" }
+    {
+      "path": "../journey-execution-model"
+    },
+    {
+      "path": "../journey-host"
+    },
+    {
+      "path": "../journey-plugin"
+    }
   ]
 }

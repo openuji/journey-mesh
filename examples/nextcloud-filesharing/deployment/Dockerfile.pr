@@ -1,0 +1,25 @@
+# Build context is a clean checkout at the manifest's exact source SHA.
+FROM node:24.11.1-bookworm-slim@sha256:48abc13a19400ca3985071e287bd405a1d99306770eb81d61202fb6b65cf0b57 AS frontend
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+WORKDIR /source
+COPY . .
+RUN npm ci && npm run build
+RUN cd apps/notifications && npm ci && npm run build
+
+FROM nextcloud:34.0.2-apache@sha256:e93ccfc952c95f18175f3d297fb2f60c35070c05ca976050c250a9ddab793e75
+COPY --from=composer:2.8.12@sha256:5248900ab8b5f7f880c2d62180e40960cd87f60149ec9a1abfd62ac72a02577c /usr/bin/composer /usr/local/bin/composer
+ARG SOURCE_SHA
+LABEL org.opencontainers.image.source="https://github.com/nextcloud/server" \
+      org.opencontainers.image.revision=$SOURCE_SHA
+# Preserve the official image's installation configuration and runtime. Replace
+# all server source and assets together; never overlay a feature onto a release.
+RUN cp -a /usr/src/nextcloud/config /tmp/docker-config && rm -rf /usr/src/nextcloud
+COPY --from=frontend /source /usr/src/nextcloud
+RUN test "$(cat /usr/src/nextcloud/.source-sha)" = "$SOURCE_SHA" \
+    && cd /usr/src/nextcloud && composer install --no-dev --no-interaction --prefer-dist --no-scripts \
+    && cp /tmp/docker-config/*.php /usr/src/nextcloud/config/ \
+    && mkdir -p /usr/src/nextcloud/data /usr/src/nextcloud/custom_apps \
+    && mv /usr/src/nextcloud/apps/notifications /usr/src/nextcloud/custom_apps/notifications \
+    && cd /usr/src/nextcloud/custom_apps/notifications && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --no-interaction --prefer-dist \
+    && printf '%s\n' "$SOURCE_SHA" > /usr/src/nextcloud/.journey-source-sha \
+    && rm -rf /usr/src/nextcloud/.git /usr/src/nextcloud/node_modules /usr/src/nextcloud/build/frontend/node_modules /usr/src/nextcloud/build/frontend-legacy/node_modules /usr/src/nextcloud/custom_apps/notifications/node_modules

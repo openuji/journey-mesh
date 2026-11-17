@@ -19,9 +19,9 @@ async function fixture(t) {
   return { root, put };
 }
 
-test("stack runtime discovers and persists one cross-runtime host", async (t) => {
+test("Android stack runtime discovers and persists a device-reachable host", async (t) => {
   const { root } = await fixture(t);
-  const first = await configureStackRuntime({ root, refresh: true, environment: {}, hostPlatform: "darwin", interfaces: {
+  const first = await configureStackRuntime({ root, refresh: true, resolveDeviceHost: true, environment: {}, hostPlatform: "darwin", interfaces: {
     en0: [{ family: "IPv4", internal: false, address: "192.0.2.40" }]
   }, capture: async () => ({ stdout: "interface: en0\n" }) });
   assert.equal(first, join(root, ".runtime/stack.env"));
@@ -32,6 +32,18 @@ test("stack runtime discovers and persists one cross-runtime host", async (t) =>
     en0: [{ family: "IPv4", internal: false, address: "192.0.2.99" }]
   } });
   assert.equal(await readFile(reused, "utf8"), generated);
+});
+
+test("web stack runtime preserves host.docker.internal without network discovery", async (t) => {
+  const { root } = await fixture(t);
+  const target = await configureStackRuntime({ root, refresh: true, environment: {}, capture: async () => { throw new Error("Web must not discover a network address"); } });
+  assert.match(await readFile(target, "utf8"), /NEXTCLOUD_ALICE_URL=http:\/\/host\.docker\.internal:18081/);
+});
+
+test("an explicit host override remains available for device CI", async (t) => {
+  const { root } = await fixture(t);
+  const target = await configureStackRuntime({ root, refresh: true, environment: { NEXTCLOUD_STACK_HOST: "203.0.113.7" } });
+  assert.match(await readFile(target, "utf8"), /NEXTCLOUD_ALICE_HOST=203\.0\.113\.7/);
 });
 
 test("stack runtime materializes an explicit environment file", async (t) => {

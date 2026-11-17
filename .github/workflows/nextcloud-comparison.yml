@@ -1,0 +1,113 @@
+name: Nextcloud acceptance comparison
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nextcloud-comparison-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  comparison:
+    outputs:
+      journeys: ${{ steps.journeys.outcome }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build && pnpm typecheck && pnpm test
+      - name: Install Chromium
+        run: pnpm --filter @openuji/journey-adapter-playwright exec playwright install --with-deps chromium
+      - name: Check report viewer controls, journey paths and layouts
+        run: pnpm --filter @openuji/journey-reporter test:browser
+      - name: Register the canonical web hostname
+        run: echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+      - name: Preflight both subjects before either stack starts
+        run: pnpm --filter @openuji/example-nextcloud-filesharing comparison:validate
+      - name: Run the release journeys
+        id: baseline
+        continue-on-error: true
+        run: pnpm --filter @openuji/example-nextcloud-filesharing comparison:baseline
+      - name: Run the PR journeys
+        id: candidate
+        continue-on-error: true
+        run: pnpm --filter @openuji/example-nextcloud-filesharing comparison:candidate
+      - name: Compare the saved runs
+        id: journeys
+        if: ${{ !cancelled() && steps.baseline.outcome != 'skipped' }}
+        continue-on-error: true
+        run: pnpm --filter @openuji/example-nextcloud-filesharing comparison:compare
+      - name: Upload Pages bundle
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (steps.journeys.outcome == 'success' || steps.journeys.outcome == 'failure') }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: examples/nextcloud-filesharing/test-results/comparison
+      - name: Upload downloadable report and evidence
+        id: report
+        if: ${{ !cancelled() && (steps.journeys.outcome == 'success' || steps.journeys.outcome == 'failure') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextcloud-acceptance-report
+          path: examples/nextcloud-filesharing/test-results/comparison
+          if-no-files-found: error
+          retention-days: 90
+      - name: Link report download
+        if: ${{ !cancelled() && steps.report.outcome == 'success' }}
+        env:
+          REPORT_ARTIFACT_URL: ${{ steps.report.outputs.artifact-url }}
+        run: |
+          echo "[Download comparison report]($REPORT_ARTIFACT_URL)" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Extract the archive and run `python3 -m http.server 8000` inside it, then open http://localhost:8000.' >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    needs: comparison
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
+      - name: Report link for the ticket
+        env:
+          REPORT_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          echo "Nextcloud acceptance comparison: [$REPORT_URL]($REPORT_URL)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Tested identities and source pins are included in the report provenance." >> "$GITHUB_STEP_SUMMARY"
+
+  result:
+    needs: [comparison, publish]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preserve the comparison result
+        env:
+          BUILD_RESULT: ${{ needs.comparison.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          JOURNEYS_RESULT: ${{ needs.comparison.outputs.journeys }}
+        run: |
+          test "$BUILD_RESULT" = success
+          test "$JOURNEYS_RESULT" = success
+          if [ "$GITHUB_REF" = refs/heads/main ]; then
+            test "$PUBLISH_RESULT" = success
+          else
+            test "$PUBLISH_RESULT" = skipped
+          fi

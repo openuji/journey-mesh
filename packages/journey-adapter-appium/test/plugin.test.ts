@@ -5,7 +5,8 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { fileArtifactStore, type JourneyPluginContext } from "@openuji/journey-runtime";
+import { fileArtifactStore } from "@openuji/journey-reporter";
+import type { JourneyPluginContext } from "@openuji/journey-plugin";
 import { journeyMeshPlugin } from "../src/plugin.js";
 
 async function serveApk(data: Buffer): Promise<{ url: string; sha256: string; close: () => Promise<void> }> {
@@ -20,11 +21,11 @@ async function serveApk(data: Buffer): Promise<{ url: string; sha256: string; cl
 async function context(directory: string): Promise<JourneyPluginContext> {
   return {
     artifacts: fileArtifactStore(directory), configPath: join(directory, "mesh.yaml"), testId: "test",
-    operations: [], env: {}, resolvePath: (value) => join(directory, value)
+    operations: [], env: {}, resolveOperation() { throw new Error("No operations"); }, resolvePath: (value) => join(directory, value)
   };
 }
 
-test("the adapter plugin ensures its APK is downloaded from inline application options, no manifest file", async () => {
+test("validation never downloads; the pinned APK is downloaded once, when the first execution starts", async () => {
   const data = Buffer.from("fake apk bytes");
   const server = await serveApk(data);
   const directory = await mkdtemp(join(tmpdir(), "journey-adapter-appium-plugin-"));
@@ -35,10 +36,14 @@ test("the adapter plugin ensures its APK is downloaded from inline application o
   };
   try {
     const ctx = await context(directory);
-    await journeyMeshPlugin.validate(options, ctx);
+    const settings = await journeyMeshPlugin.parse(options, ctx);
     const driver = Object.freeze({ name: "driver", resolveEntry: () => Object.freeze({ kind: "application" as const }), resolveTransitionValue: () => undefined });
-    const adapter = await journeyMeshPlugin.create(options, ctx, { driver });
+    const adapter = await journeyMeshPlugin.create(settings, ctx, { driver, observers: [] });
     assert.equal(adapter.name, "@openuji/journey-adapter-appium");
+    await assert.rejects(readFile(join(directory, ".android/app.apk")), /ENOENT/);
+    const execution = adapter.createExecution({ context: { runId: "run", executionId: "execution", plan: { id: "plan", operations: [] }, profile: { id: "profile" } } });
+    await execution.start();
+    await execution.close({ executionFailed: false });
     assert.deepEqual(await readFile(join(directory, ".android/app.apk")), data);
   } finally { await server.close(); }
 });
@@ -47,5 +52,5 @@ test("the adapter plugin rejects an application config missing required fields",
   const directory = await mkdtemp(join(tmpdir(), "journey-adapter-appium-plugin-"));
   const options = { application: { apk: "app.apk" }, apkDirectory: "./.android", devices: {} };
   const ctx = await context(directory);
-  await assert.rejects(async () => { await journeyMeshPlugin.validate(options, ctx); }, /application\.(url|sha256|package|activity)/);
+  await assert.rejects(async () => { await journeyMeshPlugin.parse(options, ctx); }, /application\.(url|sha256|package|activity)/);
 });

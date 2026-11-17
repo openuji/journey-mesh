@@ -8,7 +8,7 @@ import type {
 } from "@openuji/journey-runner";
 
 import type { AxeAuditReport } from "../types.js";
-import type { Immutable } from "../shared/immutable.js";
+import type { Immutable } from "@openuji/journey-core";
 
 export type AxeScreenshotEvidence =
   | Readonly<{ kind: "not-requested" }>

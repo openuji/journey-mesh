@@ -1,0 +1,110 @@
+compilesTo: ujg-ed
+modules:
+  - core
+  - graph
+  - surface
+  - distributed-journey
+
+journey:
+  id: app-auth-journey
+  type: Journey
+  label: App auth journey
+  defaultEntryRef: app-auth-entry
+
+  entries:
+    app-auth-entry:
+      type: JourneyEntry
+      label: Start app auth
+      stateRef: app-sign-in-required
+
+  states:
+    app-sign-in-required:
+      type: State
+      label: Sign-in required
+      surface:
+        id: app-sign-in-required-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-sign-in-required.png
+      transitions:
+        - id: app-sign-in-required-continue
+          type: Transition
+          label: Continue
+          tags:
+            - primary
+          to: app-auth-callback-processing
+
+    app-auth-callback-processing:
+      type: State
+      label: Completing sign-in
+      surface:
+        id: app-auth-callback-processing-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-auth-callback-processing.png
+      transitions:
+        - id: app-finishes-login
+          type: Transition
+          label: Finish sign-in
+          tags:
+            - primary
+          to: app-logged-in
+        - id: app-callback-processing-fails
+          type: Transition
+          label: Callback processing failed
+          tags:
+            - terminal-error
+          to: app-login-error
+
+    app-logged-in:
+      type: State
+      label: Logged in
+      surface:
+        id: app-logged-in-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-logged-in.png
+
+    app-login-error:
+      type: State
+      label: Login error
+      surface:
+        id: app-login-error-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-login-error.png
+      transitions:
+        - id: app-login-error-try-again
+          type: Transition
+          label: Try again
+          tags:
+            - optional-recovery
+            - cycle-reference
+          to: app-sign-in-required
+        - id: app-login-error-contact-support
+          type: Transition
+          label: Contact support
+          tags:
+            - optional-recovery
+          to: app-support
+
+    app-support:
+      type: State
+      label: App support
+      surface:
+        id: app-support-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-support.png
+
+  transitions:
+    - id: app-continue-to-support
+      type: Transition
+      label: Continue to support
+      tags:
+        - primary
+      from: app-sign-in-required
+      to: app-support
+    - id: app-continues-to-start
+      type: Transition
+      label: Continue after supprt
+      tags:
+        - outcome
+        - cycle-reference
+      from: app-support
+      to: app-sign-in-required

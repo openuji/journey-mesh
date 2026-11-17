@@ -2,7 +2,7 @@ import type { PlaywrightOperationObservation } from "@openuji/journey-adapter-pl
 import { errorToJourneyRunError } from "@openuji/journey-runner";
 
 import { createAxeJourneyItem } from "../journey/journey-item.js";
-import { immutableSnapshot } from "../shared/immutable.js";
+import { immutableSnapshot } from "@openuji/journey-core";
 import type { AxeAuditRunner, AxeObserverOptions } from "../types.js";
 import type { AxeAuditEvidence, AxeOperationEvidence } from "./evidence.js";
 import { captureStateSourceScreenshot } from "./source-screenshot.js";
@@ -46,8 +46,6 @@ export async function collectAxeEvidence(
   const page = observation.page;
   const locator = observation.locator;
   const auditOptions = {
-    testInfo: options.testInfo,
-    artifacts: options.artifacts,
     strict: options.strict,
     tags: options.tags ? [...options.tags] : undefined,
     evidenceTimeoutMs: options.evidenceTimeoutMs

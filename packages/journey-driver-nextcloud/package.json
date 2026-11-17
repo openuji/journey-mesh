@@ -12,7 +12,9 @@
     "./android": "./src/android.ts",
     "./android/plugin": "./src/android-plugin.ts",
     "./federated-sharing": "./src/federated-sharing.ts",
-    "./federated-sharing/plugin": "./src/federated-sharing-plugin.ts"
+    "./federated-sharing/plugin": "./src/federated-sharing-plugin.ts",
+    "./stack": "./src/runtime/stack.ts",
+    "./stack/service": "./src/runtime/plugin.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
@@ -20,11 +22,12 @@
     "@openuji/journey-driver-android": "workspace:*",
     "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
-    "@openuji/journey-runtime": "workspace:*"
+    "@openuji/journey-plugin": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.20.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "@openuji/journey-reporter": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

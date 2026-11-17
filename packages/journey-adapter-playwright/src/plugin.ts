@@ -1,29 +1,29 @@
 import { chromium, firefox, webkit, type LaunchOptions, type BrowserContextOptions } from "playwright";
-import { booleanOption, knownOptions, optionsObject, positiveNumber, type JourneyMeshPlugin } from "@openuji/journey-runtime/plugin";
-import { webDriverContract, type WebJourneyDriver } from "@openuji/journey-driver-web";
-import { playwrightAdapter, type PlaywrightExecutionObserver } from "./index.js";
-import type { JourneyAdapter } from "@openuji/journey-runner";
-export const journeyMeshPlugin: JourneyMeshPlugin<JourneyAdapter> = {
-  apiVersion: 1, kind: "adapter", runtime: "playwright", driverContract: webDriverContract,
-  validate(options) {
+import { booleanOption, defineAdapterPlugin, knownOptions, optionsObject, positiveNumber } from "@openuji/journey-plugin";
+import { webDriverContract } from "@openuji/journey-driver-web";
+import { playwrightAutomation } from "./automation.js";
+import { playwrightAdapter } from "./index.js";
+
+const browsers = { chromium, firefox, webkit };
+
+export const journeyMeshPlugin = defineAdapterPlugin({
+  kind: "adapter", automation: playwrightAutomation, driverContract: webDriverContract,
+  parse(options) {
     knownOptions(options, ["browser", "headless", "launchOptions", "contextOptions", "assertionTimeoutMs", "actionTimeoutMs", "navigationTimeoutMs"]);
-    if (options.browser !== undefined && !["chromium", "firefox", "webkit"].includes(String(options.browser))) throw new Error("Unknown browser");
-    booleanOption(options.headless, true);
-    for (const key of ["assertionTimeoutMs", "actionTimeoutMs", "navigationTimeoutMs"]) positiveNumber(options[key], 30_000);
-    if (options.launchOptions !== undefined) optionsObject(options.launchOptions, "launchOptions");
-    if (options.contextOptions !== undefined) optionsObject(options.contextOptions, "contextOptions");
-  },
-  create(options, _context, dependencies) {
-    if (!dependencies.driver) throw new Error("Playwright requires a driver");
-    return playwrightAdapter({
-      driver: dependencies.driver as WebJourneyDriver,
-      executionObservers: dependencies.observers as PlaywrightExecutionObserver[],
-      browserType: { chromium, firefox, webkit }[String(options.browser ?? "chromium") as "chromium"],
-      headless: booleanOption(options.headless, true), launchOptions: options.launchOptions as LaunchOptions | undefined,
-      contextOptions: options.contextOptions as BrowserContextOptions | undefined,
+    const browser = String(options.browser ?? "chromium");
+    if (!Object.hasOwn(browsers, browser)) throw new Error("Unknown browser");
+    return {
+      browser: browser as keyof typeof browsers,
+      headless: booleanOption(options.headless, true),
+      launchOptions: options.launchOptions === undefined ? undefined : optionsObject(options.launchOptions, "launchOptions") as LaunchOptions,
+      contextOptions: options.contextOptions === undefined ? undefined : optionsObject(options.contextOptions, "contextOptions") as BrowserContextOptions,
       assertionTimeoutMs: positiveNumber(options.assertionTimeoutMs, 30_000),
       actionTimeoutMs: positiveNumber(options.actionTimeoutMs, 30_000),
       navigationTimeoutMs: positiveNumber(options.navigationTimeoutMs, 30_000)
-    });
+    };
+  },
+  create({ browser, ...settings }, _context, { driver, observers }) {
+    if (!driver) throw new Error("Playwright requires a driver");
+    return playwrightAdapter({ ...settings, driver, executionObservers: observers, browserType: browsers[browser] });
   }
-};
+});

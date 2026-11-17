@@ -21,6 +21,16 @@ const driver = Object.freeze({
   resolveTransitionValue: () => undefined
 });
 
+test("Playwright interprets only its explicit CustomLocator namespace and rejects others in preflight", async () => {
+  const { extensions, ...custom } = { id: "custom", extensions: { "urn:openuji:playwright:css": "[data-example]" }, features: [], contexts: [] };
+  const calls: string[] = [];
+  const root = { locator(selector: string) { calls.push(selector); return "resolved"; } };
+  assert.equal(await toPlaywrightLocator(root as never, { ...custom, extensions }), "resolved");
+  assert.deepEqual(calls, ["[data-example]"]);
+  const invalid = { ...operation, target: { ...operation.target, bindings: [{ ...operation.target.bindings[0], locators: [{ ...custom, extensions: { "foreign:locator": "query" } }] }] } };
+  assert.throws(() => playwrightAdapter({ driver }).describeOperation!(invalid), /Unsupported CustomLocator/);
+});
+
 test("Playwright lifecycle reduction is immutable and closed states reject resources", () => {
   const created = initialPlaywrightLifecycleState();
   const starting = reducePlaywrightLifecycle(created, { type: "start" });
@@ -132,4 +142,23 @@ test("Playwright exact-name features disambiguate partial accessible names", asy
   assert.strictEqual(resolved, roleLocator);
   assert.equal(options?.name, "Log in");
   assert.equal(options?.exact, true);
+});
+
+test("browser action observations record command failure without including locator handles", async () => {
+  const modality = { id: "observability:pointer" };
+  const input = { id: "pointer", modalities: [modality] };
+  const transition: import("@openuji/journey-runner").TransitionPlanOperation = {
+    ...operation, id: "activate", kind: "transition", transition: { id: "source-action", from: "state", to: "state" },
+    from: { id: "state", type: "State" }, to: { id: "state", type: "State" }, effects: [],
+    activation: { transitionId: "source-action", eventId: "activate", from: { id: "state", type: "State" }, to: { id: "state", type: "State" }, surfaceId: "surface", requiredInputModalityProfiles: [input], bindings: [...operation.target.bindings] }
+  };
+  const locator = { async count() { return 1; }, first() { return this; }, async waitFor() {}, async click() { throw new Error("command failed"); } };
+  const page = { getByRole() { return locator; }, async goto() {} };
+  const browser = { async newContext() { return { async newPage() { return page; }, async close() {} }; } };
+  const actions: import("@openuji/journey-core").JourneyInputAction[] = [];
+  const result = await runJourney({ plan: { id: "commands", operations: [transition] }, profiles: [{ id: "pointer", selectInputModality() { return { profileId: "pointer", inputModalityProfile: input, modality }; } }], adapter: playwrightAdapter({ driver, browser: browser as never, executionObservers: [{ name: "commands", onAction(action) { actions.push(action); } }] }) });
+  assert.equal(result.ok, false);
+  assert.deepEqual(actions.map((action) => action.status), ["attempted", "failed"]);
+  assert.equal(actions[0].id, actions[1].id);
+  assert.doesNotThrow(() => structuredClone(actions));
 });

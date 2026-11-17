@@ -1,3 +1,4 @@
+import type { JourneyInputAction } from "@openuji/journey-core";
 import type {
   ControlFlowPlanOperation,
   InputModalityDecision,
@@ -47,6 +48,7 @@ export type PlaywrightExecutionObserver = {
   onExecutionStarted?(
     input: PlaywrightObserverExecutionStartedInput
   ): Promise<void> | void;
+  onAction?(action: JourneyInputAction): Promise<void> | void;
   observeOperation?(observation: PlaywrightOperationObservation): Promise<void> | void;
 };
 

@@ -5,7 +5,8 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { executionDescriptor, runJourney, type JourneyPlan } from "@openuji/journey-runner";
-import { fileArtifactStore } from "@openuji/journey-runtime";
+import { fileArtifactStore } from "@openuji/journey-reporter";
+import { axeReporter } from "../src/reporter.js";
 import { axeObserver } from "../src/index.js";
 import { collectAxeEvidence } from "../src/observer/collect-evidence.js";
 
@@ -27,7 +28,7 @@ test("excluded phases append frozen not-applicable evidence before capture or au
     locator: Object.freeze({}),
     page: Object.freeze({ screenshot() { pageReads++; throw new Error("capture must not run"); } })
   } as never, {
-    reportId: "test",
+    reportId: "test", artifacts: {} as never,
     excludedPhaseIds: Object.freeze(["urn:phase:setup"]),
     sourceScreenshots: { states: true }
   }, async () => {
@@ -63,15 +64,19 @@ test("axe writes standalone artifacts without Playwright TestInfo or example fix
   await observer.onExecutionStarted!({ execution });
   await observer.observeOperation!({
     stage: "state-asserted", execution, operation, expectedMatchCount: 0, locator: {} as never,
-    page: { async screenshot(input: { path: string }) { await writeFile(input.path, Buffer.from("png")); } } as never
+    page: { async screenshot() { return Buffer.from("png"); } } as never
   } as never);
   const result = await runJourney({
     plan: { id: plan.id, operations: [] }, profiles: [profile], runId: "standalone",
     adapter: { name: "fixture", createExecution() { return { start() {}, close() {}, openEntry() {}, assertState() {}, performTransition() {}, recordControlFlow() {} }; } }
   });
-  await observer.report({ result, json: JSON.stringify(result) });
+  const output = observer.output(result);
+  // An unmatched surface cannot be audited: the journey map shows the node as skipped.
+  assert.deepEqual(output.nodes?.map((node) => [node.executionId, node.operationId, node.metrics.kind]), [["standalone", "state", "skipped"]]);
+  assert.ok(!artifacts.files.some((file) => file.contentType === "text/html"));
+  await axeReporter().report({ bundle: { kind: "test", id: "standalone", segments: [], views: {}, result, plan, outputs: [output], reportingErrors: [], artifacts: artifacts.files }, artifacts });
 
-  assert.ok(artifacts.files.some((file) => file.name.includes("standalone") && file.path.endsWith(".html")));
-  assert.ok(artifacts.files.some((file) => file.path.endsWith(".png")));
-  for (const file of artifacts.files) await access(file.path);
+  assert.ok(artifacts.files.some((file) => file.name.includes("standalone") && file.href.endsWith(".html")));
+  assert.ok(artifacts.files.some((file) => file.href.endsWith(".png")));
+  for (const file of artifacts.files) await access(join(directory, file.href));
 });

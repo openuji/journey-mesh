@@ -81,6 +81,28 @@ test("federated-sharing environment rejects effects it does not own", async () =
   );
 });
 
+test("recipient view preconditions are detached and repeated for each profile setup", async (t) => {
+  const requests: unknown[] = [];
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = (async (url, init) => {
+    if (String(url).includes("/apps/files/api/v1/views")) {
+      requests.push(JSON.parse(String(init?.body)));
+      return new Response("{}", { status: 503 });
+    }
+    throw new Error("Fixture work should not start after a failed precondition");
+  }) as typeof fetch;
+  const recipientViewConfig = { shareoverview: { expanded: false } };
+  const environment = createNextcloudFederatedSharingEnvironment({
+    sharerTouchpoint: { baseURL: "https://alice.example.test" }, recipientTouchpoint: { baseURL: "https://bob.example.test" },
+    sharerUser: { username: "alice", password: "secret" }, recipientUser: { username: "bob", password: "secret" },
+    fixturePath: "/fixture.pdf", fixtureFileName: "fixture.pdf", effectIds: { shareCreated: "created", shareAccepted: "accepted" }, recipientViewConfig
+  });
+  recipientViewConfig.shareoverview.expanded = true;
+  for (let i = 0; i < 2; i++) await assert.rejects(async () => environment.setup!({} as never), /Could not prepare recipient view/);
+  assert.deepEqual(requests, [{ view: "shareoverview", key: "expanded", value: false }, { view: "shareoverview", key: "expanded", value: false }]);
+});
+
 test("Nextcloud package has no automation runtime dependency or mutable driver session state", async () => {
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { dependencies?: Record<string, string> };
   const dependencyNames = Object.keys(packageJson.dependencies ?? {});
@@ -90,4 +112,28 @@ test("Nextcloud package has no automation runtime dependency or mutable driver s
   const driverSources = sources.join("\n");
   assert.doesNotMatch(driverSources, /PlaywrightJourneyDriver|AppiumJourneyDriver|createExecution\s*\(|new Map\s*\(|new Set\s*\(|\.push\s*\(|\.splice\s*\(/);
   await assert.rejects(readFile(new URL("../../journey-driver-nextcloud-android/package.json", import.meta.url), "utf8"));
+});
+
+test("a freshly provisioned server creates its fixture before querying path-specific outgoing shares", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let uploaded = false;
+  globalThis.fetch = (async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname.includes("/remote.php/dav/")) {
+      if (init?.method === "PUT") { uploaded = true; return new Response(null, { status: 201 }); }
+      if (init?.method === "HEAD") return new Response(null, { status: url.hostname === "alice.example.test" && uploaded ? 200 : 404 });
+      return new Response(null, { status: 404 });
+    }
+    if (url.searchParams.has("path")) assert.equal(uploaded, true, "The OCS path endpoint requires the fixture to exist");
+    return Response.json({ ocs: { data: [] } });
+  }) as typeof fetch;
+  const environment = createNextcloudFederatedSharingEnvironment({
+    sharerTouchpoint: { baseURL: "https://alice.example.test" }, recipientTouchpoint: { baseURL: "https://bob.example.test" },
+    sharerUser: { username: "alice", password: "secret" }, recipientUser: { username: "bob", password: "secret" },
+    fixturePath: new URL("../../../examples/nextcloud-filesharing/deployment/fixtures/report.pdf", import.meta.url).pathname,
+    fixtureFileName: "report.pdf", effectIds: { shareCreated: "created", shareAccepted: "accepted" }
+  });
+  await environment.setup!({} as never);
+  assert.equal(uploaded, true);
 });

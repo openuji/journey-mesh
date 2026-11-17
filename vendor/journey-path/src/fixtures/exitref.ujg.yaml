@@ -1,0 +1,147 @@
+compilesTo: ujg-ed
+modules:
+  - core
+  - graph
+  - surface
+  - distributed-journey
+
+touchpoints:
+  app:
+    label: App touchpoint
+  idp:
+    label: Identity provider touchpoint
+  pod-authorization:
+    label: Pod/resource authorization touchpoint
+  authenticator-app:
+    label: Authenticator app touchpoint
+  sms-channel:
+    label: SMS channel touchpoint
+  email-provider:
+    label: Email provider touchpoint
+  platform-authenticator:
+    label: Platform authenticator touchpoint
+
+journey:
+  id: app-auth-journey
+  type: Journey
+  label: App auth journey
+  defaultEntryRef: app-auth-entry
+
+  entries:
+    app-auth-entry:
+      type: JourneyEntry
+      label: Start app auth
+      stateRef: app-sign-in-required
+
+  states:
+    app-sign-in-required:
+      type: State
+      label: Sign-in required
+      surface:
+        id: app-sign-in-required-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-sign-in-required.png
+      transitions:
+        - id: app-starts-idp-account-selection
+          type: Transition
+          label: Choose account
+          tags:
+            - primary
+            - account-selection
+            - oidc-prompt-select-account
+          to: idp-auth-flow
+
+    idp-auth-flow:
+      type: CompositeState
+      label: Authenticate with identity provider
+      subjourney:
+        id: idp-auth-journey
+        type: Journey
+        label: IdP auth journey
+        defaultEntryRef: idp-login-entry
+
+        entries:
+          idp-login-entry:
+            type: JourneyEntry
+            label: Start at login
+            stateRef: idp-login
+
+        states:
+          idp-login:
+            type: State
+            label: Login
+            surface:
+              id: idp-login-surface
+              touchpointRef: idp
+              sampleScreenRef: screens/idp-login.png
+            transitions:
+              - id: idp-login-to-success
+                type: Transition
+                label: Complete without visible consent
+                tags:
+                  - shortcut
+                to: idp-auth-success
+              - id: idp-login-cancelled
+                type: Transition
+                label: Cancel login
+                tags:
+                  - cancel
+                to: idp-auth-cancelled
+        exits:
+          idp-auth-success:
+            type: JourneyExit
+            label: IdP auth success
+          idp-auth-cancelled:
+            type: JourneyExit
+            label: IdP auth cancelled
+
+    app-auth-callback-processing:
+      type: State
+      label: Completing sign-in
+      surface:
+        id: app-auth-callback-processing-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-auth-callback-processing.png
+      transitions:
+        - id: app-finishes-login
+          type: Transition
+          label: Finish sign-in
+          tags:
+            - primary
+          to: app-logged-in
+
+    app-logged-in:
+      type: State
+      label: Logged in
+      surface:
+        id: app-logged-in-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-logged-in.png
+    
+    app-login-cancelled:
+      type: State
+      label: Login cancelled
+      surface:
+        id: app-login-cancelled-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-login-cancelled.png
+
+
+  transitions:
+    - id: app-continues-after-idp-success
+      type: Transition
+      label: Continue after IdP success
+      tags:
+        - primary
+        - outcome
+      from: idp-auth-flow
+      fromExitRef: idp-auth-success
+      to: app-auth-callback-processing
+    - id: app-continues-after-idp-cancelled
+      type: Transition
+      label: Continue after cancelled login
+      tags:
+        - outcome
+      from: idp-auth-flow
+      fromExitRef: idp-auth-cancelled
+      to: app-login-cancelled

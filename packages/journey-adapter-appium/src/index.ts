@@ -1,3 +1,4 @@
+import type { JourneyInputAction } from "@openuji/journey-core";
 import { type AndroidJourneyDriver } from "@openuji/journey-driver-android";
 import {
   executionDescriptor,
@@ -25,6 +26,7 @@ import {
 } from "./lifecycle.js";
 
 export type * from "./contracts.js";
+export { appiumAutomation } from "./automation.js";
 export { appiumCommandForModality, appiumLocatorQuery, appiumObservationQuery, touchTapInputModalityId, xpathLiteral } from "./queries.js";
 export type { AppiumInteractionCommand } from "./queries.js";
 export { initialAppiumLifecycleState, reduceAppiumLifecycle } from "./lifecycle.js";
@@ -40,6 +42,8 @@ export type AppiumAdapterOptions = Readonly<{
   executionObservers?: readonly AppiumExecutionObserver[];
   assertionTimeoutMs?: number;
   pollIntervalMs?: number;
+  /** Provisions what executions need (e.g. the pinned APK); runs once, when the first execution starts. */
+  prepare?: () => Promise<void>;
 }>;
 
 export function appiumSessionKey(operation: JourneyPlanOperation): string {
@@ -47,7 +51,12 @@ export function appiumSessionKey(operation: JourneyPlanOperation): string {
 }
 
 export function appiumAdapter(options: AppiumAdapterOptions): JourneyAdapter {
-  const configured = freezeOptions(options);
+  let prepared: Promise<void> | undefined;
+  const prepare = options.prepare && (() => {
+    prepared ??= options.prepare!().catch((error) => { prepared = undefined; throw error; });
+    return prepared;
+  });
+  const configured = freezeOptions({ ...options, ...(prepare ? { prepare } : {}) });
   return Object.freeze({
     name: appiumAdapterName,
     version: "0.1.0",
@@ -68,6 +77,7 @@ export function appiumAdapter(options: AppiumAdapterOptions): JourneyAdapter {
 }
 
 class AppiumExecution implements JourneyAdapterExecution {
+  private actionSequence = 0;
   private state: AppiumLifecycleState = initialAppiumLifecycleState();
   private readonly execution;
 
@@ -81,6 +91,8 @@ class AppiumExecution implements JourneyAdapterExecution {
   async start(): Promise<void> {
     this.state = reduceAppiumLifecycle(this.state, { type: "start" });
     try {
+      await this.options.prepare?.();
+      this.input.context.signal?.throwIfAborted();
       for (const observer of this.options.executionObservers ?? []) {
         await observer.onExecutionStarted?.({ execution: this.execution });
       }
@@ -127,15 +139,27 @@ class AppiumExecution implements JourneyAdapterExecution {
     const targets = await this.assertCount(session, query, 1);
     await this.observe({ execution: this.execution, stage: "transition-ready", operation, session, targets, decision, expectedMatchCount: 1 });
     this.input.context.signal?.throwIfAborted();
-    switch (command) {
-      case "tap": await session.tap(targets[0]!.elementId); break;
-      case "type": {
-        const value = this.options.driver.resolveTransitionValue(operation);
-        if (!value) throw new Error(`Transition ${operation.transition.id} requires a text value`);
-        await session.setValue(targets[0]!.elementId, value);
-        break;
-      }
+    const action: JourneyInputAction = Object.freeze({
+      id: `${this.execution.executionId}/action/${this.actionSequence++}`,
+      runId: this.execution.runId, executionId: this.execution.executionId,
+      profileId: this.execution.profile.id, operationId: operation.id,
+      modalityId: decision.modality.id, command, unit: "adapter-command", status: "attempted"
+    });
+    const notify = async (event: JourneyInputAction) => {
+      for (const observer of this.options.executionObservers ?? []) await observer.onAction?.(Object.freeze(event));
+    };
+    // Resolve text before announcing an actual command attempt.
+    const text = command === "type" ? this.options.driver.resolveTransitionValue(operation) : undefined;
+    if (command === "type" && !text) throw new Error(`Transition ${operation.transition.id} requires a text value`);
+    await notify(action);
+    try {
+      if (command === "tap") await session.tap(targets[0]!.elementId);
+      else await session.setValue(targets[0]!.elementId, text!);
+    } catch (error) {
+      await notify({ ...action, status: "failed", error: { name: error instanceof Error ? error.name : "Error", message: String(error) } });
+      throw error;
     }
+    await notify({ ...action, status: "completed" });
     this.input.context.signal?.throwIfAborted();
   }
 

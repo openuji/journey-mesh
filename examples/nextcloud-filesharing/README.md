@@ -2,6 +2,10 @@
 
 # Nextcloud file-sharing tests
 
+For the acceptance comparison of Nextcloud PR #66147 against Nextcloud 34.0.2,
+including UX measurements and GitHub Pages publication, see the
+[configured comparison](#compare-independent-deployments).
+
 Two compositions of the [Journey Mesh architecture](../../README.md#architecture)
 exercise the same federated file-sharing scenario. The tools and prerequisites
 below belong to this example's selected components.
@@ -57,9 +61,10 @@ pnpm stack:provision
 pnpm stack:seed
 ```
 
-`stack:up` starts only the containers. It discovers a host IPv4 address reachable
-from the host browser, Docker containers, and Android, then writes the effective
-configuration to `.runtime/stack.env`. Provisioning creates the users and
+`stack:up` starts only the containers and preserves `host.docker.internal` for
+web runs, then writes the effective configuration to `.runtime/stack.env`.
+For Android, use `pnpm stack:up:android` instead: it discovers a host IPv4 address
+reachable from the device and Docker containers. Provisioning creates the users and
 federation configuration; seeding uploads `report.pdf` for Alice.
 
 Set `NEXTCLOUD_STACK_HOST` to a reachable IPv4 address before `stack:up` to
@@ -98,7 +103,7 @@ The test runs both its default and keyboard-only profiles. Set `HEADLESS=false`
 to watch the browsers. `AXE_STRICT=true` enables the browser accessibility
 observer's reporting failure policy.
 
-## Start the optional native runtime
+## Start the optional native services
 
 Android and Appium have separate lifecycles:
 
@@ -107,7 +112,7 @@ pnpm android:up
 pnpm appium:up
 ```
 
-`android:up` runs via `@openuji/journey-driver-android`'s runtime, installs
+`android:up` runs the `@openuji/journey-driver-android/service` plugin, installs
 missing platform tools, emulator, command-line tools, and the host-native
 Google APIs API 35 image. It creates or validates the dedicated Pixel 6 AVD
 `journey-mesh-api35`, boots headlessly, disables animations, and writes the
@@ -116,14 +121,14 @@ large components and may show Android SDK license prompts. An existing AVD
 with the same name is reused only when its API, image architecture, and
 device profile match the pins. These device pins — `api`, `avd`, `image`,
 `localImages`, `profile`, `locale`, `requiredPackages` — live directly in
-`mesh.yaml`'s `runtimes.android.options`; there is no separate manifest file.
+`mesh.yaml`'s `services.android.options`; there is no separate manifest file.
 
-`appium:up` runs via `@openuji/journey-adapter-appium`'s runtime, verifies that
+`appium:up` runs the `@openuji/journey-adapter-appium/service` plugin, verifies that
 device, installs the pinned UiAutomator2 driver into a versioned repository
 cache, starts Appium on port 4723, waits for readiness, and writes
 `.runtime/appium.env`. It neither starts Nextcloud nor runs a journey — nor
-does it download the Nextcloud APK; the adapter's own plugin does that
-automatically the first time a native test actually runs (same as Chromium
+does it download the Nextcloud APK; the Appium adapter does that when its first
+execution starts (same as Chromium
 for the web adapter — see "One-time prerequisites" above), from the `application`
 block already declared in `adapters.android.options`. Appium logs are stored
 under `.tmp/appium-runtime/`; emulator logs are under `.tmp/android-runtime/`.
@@ -139,20 +144,20 @@ flowchart TB
   test["journey-mesh test"] --> session
 ```
 
-The runtime commands own the emulator and server processes. The adapter owns
+The service commands own the emulator and server processes. The adapter owns
 the test session, application state, and its cleanup; ending a profile does not
-stop the infrastructure. During test validation, the adapter plugin may populate
-its checksum-pinned APK cache without opening a device session.
+stop the infrastructure. Validation never downloads anything; the checksum-pinned
+APK cache is populated when the first native execution starts.
 
 Both `android:up` and `appium:up` are the generic
-`journey-mesh runtime up mesh.yaml --runtime <key>` command underneath —
+`journey-mesh services up mesh.yaml --service <key>` command underneath —
 `pnpm android:up`/`pnpm appium:up` are just this example's own thin script
-names for `--runtime android`/`--runtime appium`. Overrides go through
-`mesh.yaml`'s `runtimes.<key>.options` (interpolated the same way as every
+names for `--service android`/`--service appium`. Overrides go through
+`mesh.yaml`'s `services.<key>.options` (interpolated the same way as every
 other option in this file), not CLI flags:
 
 ```yaml
-runtimes:
+services:
   android:
     options:
       avd: '${ANDROID_AVD_NAME:-journey-mesh-api35}'
@@ -165,14 +170,14 @@ runtimes:
 So `ANDROID_AVD_NAME=another-dedicated-avd pnpm android:up` and
 `APPIUM_PORT=4725 pnpm appium:up` override without editing the YAML.
 `ANDROID_CLI`, `ANDROID_STUDIO_HOME`, and `APPIUM_HOME` provide further
-environment-level overrides read directly by the runtime, same as before.
+environment-level overrides read directly by the service, same as before.
 Global Appium installations are never modified.
 
 ## Run the native-recipient test
 
 Alice's setup and offer journeys route to Playwright; Bob's setup and acceptance
 journeys route to Appium. Routing follows each journey item's configured
-`adapterId`, so one combined plan retains the order and source references across
+`adapter`: every operation carries its journey item as its `segment`, so one combined plan retains the order and source references across
 both adapters. Profiles combine Alice's default or keyboard-only interaction
 with Bob's touch interaction.
 
@@ -209,7 +214,7 @@ pnpm exec journey-mesh test mesh.yaml --test native-recipient-sharing
 This runs `default-web-touch-android` and
 `keyboard-only-web-touch-android`. Set `ANDROID_A11Y_STRICT=true` to enable the
 native accessibility observer's reporting failure policy. Omitting `--test`
-selects both configured tests and therefore requires both runtime lifecycles.
+selects both configured tests and therefore requires both the web and the native services.
 
 From the repository root, the same selections are:
 
@@ -247,12 +252,12 @@ processes.
 
 ## Configuration and lifecycle
 
-The [configuration types](../../packages/journey-runtime/src/config.ts) and
-[plugin contract](../../packages/journey-runtime/src/plugin.ts) define the YAML
+The [configuration schema](../../packages/journey-host/src/config/schema.ts) and
+[plugin contracts](../../packages/journey-plugin/src/plugins.ts) define the YAML
 host's interfaces. In this example, `model` selects the UJG compiler, `adapters`
 declare drivers and observers, and each test declares ordered journey items,
 profile assignments, and a shared environment. `envFiles` supply configuration
-values, `outputDir` selects the report root, and `runtimes` declare optional
+values, `outputDir` selects the report root, and `services` declare optional
 infrastructure lifecycles. Changing journey and adapter selections changes where
 execution runs; there are no platform-specific runner files.
 
@@ -304,7 +309,11 @@ The web observer captures axe scans and optional source screenshots. The native
 observer captures a redacted UI hierarchy, device metrics, optional screenshots,
 and heuristic accessibility checks. Observers collect evidence at adapter stages
 such as state assertion and transition readiness, retain detached evidence, and
-also act as reporters after execution.
+provide detached outputs after execution. The host saves them in the result
+bundle. The report opens on the journey map, drawn from the same `ujg/*.ujg.jsonld`
+documents that are executed, with outcomes and accessibility metrics on every
+state. Open `test-results/index.html` directly or serve it with `pnpm e2e:report`. The axe and Android reporters write the
+detailed standalone reports linked below the map.
 
 ```mermaid
 flowchart TB
@@ -312,7 +321,7 @@ flowchart TB
   native["Appium observations"] --> android["Hierarchy + metrics<br/>optional screenshots + heuristic checks"]
   axe --> journals["Detached observer evidence"]
   android --> journals
-  journals --> reporting["Observer reporters"]
+  journals --> reporting["Configured reporter plugins"]
   result["Immutable RunResult"] --> reporting
   result --> base["Functional evidence + summary"]
   reporting --> artifacts["Per-test artifact store"]
@@ -320,10 +329,10 @@ flowchart TB
   artifacts --> indexes["Test and suite indexes"]
 ```
 
-The host writes functional evidence and invokes observer reporters sequentially.
+The host collects observer outputs and invokes independently configured reporters sequentially.
 Reporting errors do not rewrite `RunResult`; the configured suite succeeds only
 when execution passes and reporting has no errors. Accessibility strict modes
-apply their finding policies during reporting. Evidence-collection errors during
+record policy errors in observer outputs. Evidence-collection errors during
 execution can fail the operation itself.
 
 From the repository root:
@@ -332,12 +341,11 @@ From the repository root:
 pnpm exec journey-mesh report examples/nextcloud-filesharing/test-results
 ```
 
-The report root contains `index.html` and `journey-results.json`. Each test has a
+The report root contains `index.html` and `bundle.json`. Each test has a
 subdirectory, such as `test-results/browser-sharing/`, containing:
 
-- `ujg-evidence.json`: immutable functional outcomes with model, journey-item,
-  and adapter provenance.
-- `ujg-summary.json`: functional results, reporting errors, and artifact links.
+- `bundle.json`: compiled plan, immutable functional outcomes, observer outputs,
+  measurements, reporting errors, and artifact descriptors.
 - `index.html`: test summary and links to observer artifacts.
 - Axe path HTML/JSON, accessibility summaries, and source screenshots.
 - For native execution: hierarchy evidence, screenshots, device metrics,
@@ -351,3 +359,66 @@ are explicitly excluded from accessibility capture, so evidence covers the
 selected sharing operations rather than every screen encountered during login.
 Both native-recipient profiles have passed locally on API 35 arm64.
 The API 35 x86_64 CI target requires its own successful workflow run.
+
+## Compare independent deployments
+
+```sh
+pnpm comparison:validate   # preflight both subjects before either stack starts
+pnpm comparison:run        # test nc34, test PR 66147, then compare the saved bundles
+pnpm comparison:report     # serve the comparison report
+```
+
+The candidate is the pull request itself, not a commit. `build.pullRequest: 66147`
+in [`comparison/pr66147.mesh.yaml`](comparison/pr66147.mesh.yaml) names it, and
+every run fetches the pull request's current head (`refs/pull/66147/head`), so
+commits pushed since the last run are tested. It is built on whatever Nextcloud
+version the pull request is based on: the version is read from the checked-out
+source, not configured. The tested commit, the version and the image identity are
+recorded in the report's provenance. The first build of a commit compiles the
+Nextcloud frontend and takes several minutes; later runs of the same commit reuse
+Docker's layer cache. `pnpm comparison:baseline` and `pnpm comparison:candidate`
+run one side.
+
+To test a different pull request, change that number (and the names that carry it:
+the file, `label`, `outputDir`, `project` and `directory`), or copy the file. Use
+`build.sha` instead of `build.pullRequest` to pin an exact commit.
+
+`comparison/nc34.mesh.yaml` and `comparison/pr66147.mesh.yaml` are ordinary suites.
+Each owns its `label`, deployment, fixtures, journeys, UX recipes, reporters and
+output directory, and lists its Nextcloud stack under `services`. The baseline pins
+the stock `nextcloud:34.0.2` image by digest; the candidate builds the pull
+request's source over the same runtime image, plus a pinned `notifications` app.
+The stack service builds and verifies the deployment, provisions
+accounts, and records installed identities as provenance. Managed stacks and
+their volumes are removed after execution; artifacts remain. The ordinary
+browser/native example continues to use externally prepared services.
+
+The candidate's journey (`ujg/comparison/pr66147.ujg.jsonld`) is the one scenario
+both subjects are measured on: Bob accepting Alice's federated share. It follows
+the pending-shares flow of that pull request, so a pull request that changes the
+recipient's experience differently needs its own journey, referenced from
+`comparison/pr66147.mesh.yaml`.
+
+The comparison itself is `journey-mesh compare test-results/nc34/bundle.json
+test-results/pr66147/bundle.json`. It loads no plugins and runs nothing: it copies
+each subject's registered evidence below `test-results/comparison/subjects/`,
+pairs the executions by their equal test and profile IDs, and publishes
+`test-results/comparison/` with the report viewer. Both subjects' journey maps
+appear together, each with node metrics and a link to that subject's full report
+(`subjects/<side>/`); scenario and profile controls switch both, and the
+measurement table shows candidate minus baseline. On narrow screens the maps
+switch to the vertical layout. The selected JSON-LD journeys are checked-in scenario data referenced by
+each mesh; there is no comparison-specific model generator or report
+application. Findings and measured values come from the result bundles.
+
+To inspect the report:
+
+```sh
+pnpm comparison:report
+```
+
+The publishing workflow uploads this same directory. All evidence links are
+relative and the bundle contains no local paths, so it works under a project
+URL. Serve the directory with the report command so the viewer can load its
+saved JSON and assets. Comparison outputs from earlier versions use an obsolete
+contract and must be regenerated.

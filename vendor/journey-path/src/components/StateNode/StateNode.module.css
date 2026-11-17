@@ -1,0 +1,149 @@
+.wrapper {
+  display: flex;
+  align-items: center;
+  max-inline-size: 100%;
+  height: 100%;
+
+  &[data-block="true"] {
+    flex-direction: column;
+  }
+}
+.root {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  box-sizing: border-box;
+  max-inline-size: 100%;
+
+  border-radius: var(--jp-radius-md, var(--radius-md, 0.5rem));
+  box-shadow: var(--jp-shadow-sm, var(--shadow-sm, 0 2px 4px rgb(0 0 0 / 0.1)));
+  background-color: var(--jp-color-surface, var(--color-surface, oklch(1 0 0)));
+  border: 1px solid var(--jp-color-border, var(--color-border, oklch(0.9 0.01 285)));
+  height: 100%;
+  overflow: hidden;
+
+  width: var(--jp-state-width);
+  .wrapper[data-block="true"] & {
+    width: var(--jp-state-block-wdith);
+  }
+}
+
+.content {
+  display: flex;
+  align-items: center;
+  min-block-size: 0;
+  padding: var(--jp-spacing-space-md, var(--spacing-space-md, 0.75rem));
+  gap: var(--jp-spacing-space-sm, var(--spacing-space-sm, 0.5rem));
+}
+
+.dot {
+  width: var(--jp-spacing-space-md, var(--spacing-space-md, 0.75rem));
+  height: var(--jp-spacing-space-md, var(--spacing-space-md, 0.75rem));
+  border-radius: var(--jp-radius-full, var(--radius-full, 9999px));
+  background-color: var(--jp-color-accent, var(--color-accent, oklch(0.62 0.14 255)));
+  flex-shrink: 0;
+}
+
+
+.label {
+  min-inline-size: 0;
+  color: var(--jp-color-foreground, var(--color-foreground, oklch(0.21 0.01 285)));
+  font-size: var(--jp-text-ui-sm, var(--text-ui-sm, 0.8rem));
+  font-weight: var(--jp-font-weight-medium, var(--font-weight-medium, 500));
+  line-height: var(--jp-text-ui-sm-line-height, var(--text-ui-sm--line-height, 1.25rem));
+  overflow-wrap: anywhere;
+}
+
+.metricsFooter {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  min-inline-size: 0;
+  border-block-start: var(--jp-border-width-thin, var(--border-width-thin, 1px)) solid var(--jp-color-border, var(--color-border, oklch(0.9 0.01 285)));
+  background: color-mix(in srgb, var(--jp-color-surface-muted, var(--color-surface-muted, oklch(0.985 0.006 285))) 82%, var(--jp-color-surface, var(--color-surface, oklch(1 0 0))));
+  color: var(--jp-color-foreground-muted, var(--color-foreground-muted, oklch(0.48 0.01 285)));
+  font-family: var(--jp-font-mono, var(--font-mono, "SFMono-Regular", Consolas, "Liberation Mono", monospace));
+  font-size: var(--jp-text-code-xs, var(--text-code-xs, 0.7rem));
+  font-weight: var(--jp-font-weight-bold, var(--font-weight-bold, 700));
+  line-height: var(--jp-text-code-xs-line-height, var(--text-code-xs--line-height, 1rem));
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.metricsFooter[data-columns="1"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.metricsFooter[data-columns="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metricGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--jp-spacing-space-xs, var(--spacing-space-xs, 0.25rem));
+  min-inline-size: 0;
+  padding: var(--jp-spacing-space-xs, var(--spacing-space-xs, 0.25rem)) var(--jp-spacing-space-sm, var(--spacing-space-sm, 0.5rem));
+}
+
+.metricGroup + .metricGroup {
+  border-inline-start: var(--jp-border-width-thin, var(--border-width-thin, 1px)) solid color-mix(in srgb, var(--jp-color-border, var(--color-border, oklch(0.9 0.01 285))) 70%, transparent);
+}
+
+.metricLabel {
+  flex: 0 0 auto;
+}
+
+.metricValue,
+.metricClean,
+.metricPlaceholder {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.metricClean {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--jp-spacing-space-xs, var(--spacing-space-xs, 0.25rem));
+  color: var(--jp-color-success, var(--color-success, oklch(0.64 0.12 155)));
+}
+
+.metricToneDanger {
+  color: var(--jp-color-danger, var(--color-danger, oklch(0.58 0.19 28)));
+}
+
+.metricToneReview {
+  color: var(--jp-color-warning, var(--color-warning, oklch(0.62 0.14 75)));
+}
+
+.metricTonePass {
+  color: var(--jp-color-success, var(--color-success, oklch(0.64 0.12 155)));
+}
+
+.metricPlaceholder {
+  color: color-mix(in srgb, var(--jp-color-foreground-muted, var(--color-foreground-muted, oklch(0.48 0.01 285))) 74%, transparent);
+}
+
+.in,
+.out {
+  width: 10px;
+  height: 10px;
+}
+
+.in {
+  margin-inline-end: -5px;
+}
+
+.out {
+  margin-inline-start: -5px;
+}
+
+.wrapper[data-block="true"] .in {
+  margin-inline-end: 0;
+  margin-block-end: -5px;
+}
+
+.wrapper[data-block="true"] .out {
+  margin-inline-start: 0;
+  margin-block-start: -5px;
+}

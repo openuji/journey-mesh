@@ -1,0 +1,199 @@
+outputDir: ../test-results/nc34
+envFiles:
+  - ../deployment/.env.example
+model:
+  use: "@openuji/journey-model-ujg/plugin"
+tests:
+  browser-sharing:
+    timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-600000}
+    journeys:
+      - id: alice-setup
+        source: ../ujg/setup.web.ujg.jsonld
+        select: urn:journey:alice-web-setup
+        adapter: web
+      - id: bob-setup
+        source: ../ujg/setup.web.ujg.jsonld
+        select: urn:journey:bob-web-setup
+        adapter: web
+      - id: alice-offers
+        source: ../ujg/comparison/nc34.ujg.jsonld
+        select: urn:journey:alice-federated-sharing
+        adapter: web
+      - id: bob-accepts
+        source: ../ujg/comparison/nc34.ujg.jsonld
+        select: urn:journey:bob-remote-share
+        adapter: web
+        operations:
+          arrival: urn:state:bob-all-files-ready
+          goal: urn:transition:bob-accepts-share
+          complete: urn:state:bob-shared-report-visible
+          shares: urn:transition:bob-opens-shares
+          pending: urn:transition:bob-opens-pending-shares
+          overview: urn:transition:bob-opens-shares-overview
+    profiles:
+      - id: default
+        journeys:
+          alice-setup: default
+          bob-setup: default
+          alice-offers: default
+          bob-accepts: default
+    environment:
+      use: "@openuji/journey-driver-nextcloud/federated-sharing/plugin"
+      options:
+        recipientViewConfig:
+          shareoverview:
+            expanded: false
+        sharerTouchpoint: &a1
+          baseURL: http://host.docker.internal:18281
+        recipientTouchpoint: &a2
+          baseURL: http://host.docker.internal:18282
+        sharerUser: &a3
+          label: Alice
+          username: ${NEXTCLOUD_ALICE_USER}
+          password: ${NEXTCLOUD_ALICE_PASSWORD}
+        recipientUser: &a4
+          label: Bob
+          username: ${NEXTCLOUD_BOB_USER}
+          password: ${NEXTCLOUD_BOB_PASSWORD}
+        fixturePath: ../deployment/fixtures/report.pdf
+        fixtureFileName: report.pdf
+        effectIds:
+          shareCreated: urn:effect:alice-confirm-share
+          shareAccepted: urn:effect:bob-accept-share
+        preserveFixtures: ${NEXTCLOUD_PRESERVE_FIXTURES:-false}
+    services:
+      - stack
+    reporters:
+      - use: "@openuji/journey-observer-axe/reporter"
+adapters:
+  web:
+    use: "@openuji/journey-adapter-playwright/plugin"
+    options:
+      browser: chromium
+      headless: ${HEADLESS:-true}
+      actionTimeoutMs: 30000
+      navigationTimeoutMs: 30000
+      contextOptions:
+        viewport:
+          width: 1440
+          height: 1000
+        locale: en-US
+    driver:
+      use: "@openuji/journey-driver-nextcloud/web/plugin"
+      options:
+        touchpoints:
+          urn:touchpoint:nextcloud-a: *a1
+          urn:touchpoint:nextcloud-b: *a2
+        users:
+          urn:user:alice: *a3
+          urn:user:bob: *a4
+        entries:
+          nextcloud.login: /login
+          nextcloud.files: /apps/files/
+          nextcloud.pendingShares: /apps/files/pendingshares
+        transitionValues:
+          urn:transition:alice-enters-username:
+            source: user.username
+          urn:transition:alice-enters-password:
+            source: user.password
+          urn:transition:bob-enters-username:
+            source: user.username
+          urn:transition:bob-enters-password:
+            source: user.password
+          urn:transition:alice-enters-remote-bob: bob@http://host.docker.internal:18282
+    observers:
+      - use: "@openuji/journey-observer-ux/plugin"
+        options:
+          id: recipient-ux
+          counters:
+            - id: ux/input-actions
+              label: Input commands
+              from: bob-accepts.arrival
+              until: bob-accepts.complete
+            - id: ux/input-actions-to-goal
+              label: Input commands to verified acceptance
+              from: bob-accepts.arrival
+              until: bob-accepts.goal
+            - id: ux/navigation-before-goal
+              label: Navigation before acceptance
+              from: bob-accepts.arrival
+              until: bob-accepts.goal
+              operations:
+                - bob-accepts.shares
+                - bob-accepts.pending
+            - id: ux/navigation-after-goal
+              label: Navigation after acceptance
+              from: bob-accepts.goal
+              until: bob-accepts.complete
+              operations:
+                - bob-accepts.overview
+          checkpoints:
+            - id: ux/acceptance-verified
+              label: Acceptance verified
+              operation: bob-accepts.goal
+          probes:
+            - id: ux/acceptance-at-arrival
+              label: Acceptance control at arrival
+              at: bob-accepts.arrival
+              target: bob-accepts.goal
+      - use: "@openuji/journey-observer-axe/plugin"
+        options:
+          reportId: nextcloud-filesharing.axe-path
+          strict: ${AXE_STRICT:-false}
+          sourceScreenshots:
+            states: true
+            fullPage: true
+          excludedPhaseIds:
+            - urn:phase:setup
+profiles:
+  default:
+    use: "@openuji/journey-profiles/plugin"
+    options:
+      preset: default
+kind: suite
+label: Nextcloud 34.0.2
+services:
+  stack:
+    use: "@openuji/journey-driver-nextcloud/stack/service"
+    options:
+      project: journey-mesh-nc34
+      composeFiles:
+        - ../deployment/compose.yaml
+        - ../deployment/compose.comparison.yaml
+      image: nextcloud:34.0.2-apache@sha256:e93ccfc952c95f18175f3d297fb2f60c35070c05ca976050c250a9ddab793e75
+      expectedVersion: 34.0.2
+      directory: ../.runtime/nc34
+      environment:
+        POSTGRES_DB: ${POSTGRES_DB}
+        POSTGRES_USER: ${POSTGRES_USER}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+        NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER}
+        NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD}
+        NEXTCLOUD_STACK_SUBNET: 10.251.34.0/24
+        NEXTCLOUD_ALICE_HOST: host.docker.internal
+        NEXTCLOUD_ALICE_PORT: "18281"
+        NEXTCLOUD_ALICE_URL: http://host.docker.internal:18281
+        NEXTCLOUD_ALICE_USER: ${NEXTCLOUD_ALICE_USER}
+        NEXTCLOUD_ALICE_PASSWORD: ${NEXTCLOUD_ALICE_PASSWORD}
+        NEXTCLOUD_ALICE_DB: ${NEXTCLOUD_ALICE_DB}
+        NEXTCLOUD_ALICE_DB_USER: ${NEXTCLOUD_ALICE_DB_USER}
+        NEXTCLOUD_ALICE_DB_PASSWORD: ${NEXTCLOUD_ALICE_DB_PASSWORD}
+        NEXTCLOUD_BOB_HOST: host.docker.internal
+        NEXTCLOUD_BOB_PORT: "18282"
+        NEXTCLOUD_BOB_URL: http://host.docker.internal:18282
+        NEXTCLOUD_BOB_USER: ${NEXTCLOUD_BOB_USER}
+        NEXTCLOUD_BOB_PASSWORD: ${NEXTCLOUD_BOB_PASSWORD}
+        NEXTCLOUD_BOB_DB: ${NEXTCLOUD_BOB_DB}
+        NEXTCLOUD_BOB_DB_USER: ${NEXTCLOUD_BOB_DB_USER}
+        NEXTCLOUD_BOB_DB_PASSWORD: ${NEXTCLOUD_BOB_DB_PASSWORD}
+      services:
+        alice:
+          baseURL: http://host.docker.internal:18281
+          username: ${NEXTCLOUD_ALICE_USER}
+          password: ${NEXTCLOUD_ALICE_PASSWORD}
+        bob:
+          baseURL: http://host.docker.internal:18282
+          username: ${NEXTCLOUD_BOB_USER}
+          password: ${NEXTCLOUD_BOB_PASSWORD}
+      enabledApps:
+        - notifications

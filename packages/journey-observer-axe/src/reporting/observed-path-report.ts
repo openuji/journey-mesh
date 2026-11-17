@@ -1,10 +1,11 @@
 import { playwrightAdapterName } from "@openuji/journey-adapter-playwright";
-import type { JourneyComponentDescriptor, RunResult } from "@openuji/journey-runner";
+import type { RunResult } from "@openuji/journey-runner";
+import { observedOperations, routedElsewhere, type ObservedOperation } from "@openuji/journey-plugin";
 import { shouldFailForAxeViolations } from "../audit/strict-mode.js";
-import { auditedAxePathItem, createAxeJourneyItem, itemKey, unauditedAxePathItem } from "../journey/journey-item.js";
+import { auditedAxePathItem, createAxeJourneyItem, unauditedAxePathItem } from "../journey/journey-item.js";
 import { planSourceMetadata } from "../journey/operation-metadata.js";
 import type { AxeEvidence, AxeOperationEvidence, AxeScreenshotEvidence } from "../observer/evidence.js";
-import { immutableSnapshot, type Immutable } from "../shared/immutable.js";
+import { immutableSnapshot, type Immutable, type JourneyNodeSummary } from "@openuji/journey-core";
 import type {
   AxeAuditMetadata,
   AxeAuditReport,
@@ -14,12 +15,6 @@ import type {
   AxePathSourceScreenshotFields
 } from "../types.js";
 import { buildAxePathAuditReport } from "./path-audit-report.js";
-
-type PlannedOperation = Readonly<{
-  executionId: string;
-  profileId: string;
-  operation: AxeJourneyOperation;
-}>;
 
 /** Report policy is a pure projection of plan snapshots and collected evidence. */
 export function buildAxeObservedPathReport(input: {
@@ -43,35 +38,12 @@ export function buildAxeObservedPathReport(input: {
       executionCount: input.result.executions.length,
       notApplicableProfileCount: input.result.assessments.filter((assessment) => assessment.kind === "not-applicable").length
     },
-    items: buildAxePathItems(input.evidence, input.result.runId, input.result.evidence)
+    items: buildAxePathItems(input.evidence, input.result)
   });
 }
 
-export function buildAxePathItems(
-  evidence: readonly AxeEvidence[],
-  runId: string,
-  runnerEvidence?: RunResult["evidence"]
-): readonly AxePathAuditItemInput[] {
-  const facts = evidence.filter((fact) => factRunId(fact) === runId);
-  const candidates = facts.flatMap((fact): readonly PlannedOperation[] => fact.kind === "execution-started"
-    ? fact.execution.plan.operations.map((operation) => ({
-      executionId: fact.execution.executionId, profileId: fact.execution.profile.id, operation
-    }))
-    : [fact.evidence]);
-  const planned = candidates.filter((candidate, index) => candidates.findIndex((other) =>
-    itemKey(other.executionId, other.operation.id) === itemKey(candidate.executionId, candidate.operation.id)
-  ) === index);
-
-  return immutableSnapshot(planned.map((target) => {
-    const observed = facts.reduce<AxeOperationEvidence | undefined>((previous, fact) =>
-      fact.kind === "operation-observed" &&
-      fact.evidence.executionId === target.executionId && fact.evidence.operation.id === target.operation.id
-        ? fact.evidence : previous,
-    undefined);
-    const adapter = runnerEvidence?.executions.find((execution) => execution.executionId === target.executionId)
-      ?.operations.find((operation) => operation.operationId === target.operation.id)?.adapter;
-    return projectPathItem(observed ? { ...target, operation: observed.operation } : target, observed, adapter);
-  }));
+export function buildAxePathItems(evidence: readonly AxeEvidence[], result: RunResult): readonly AxePathAuditItemInput[] {
+  return immutableSnapshot(observedOperations(evidence, result).map(projectPathItem));
 }
 
 /** Strict mode derives from every completed scan, including superseded observations. */
@@ -83,14 +55,11 @@ export function strictAxeFailureReports(evidence: readonly AxeEvidence[], runId:
   }));
 }
 
-function projectPathItem(
-  target: PlannedOperation,
-  observed: AxeOperationEvidence | undefined,
-  adapter: JourneyComponentDescriptor | undefined
-): AxePathAuditItemInput {
-  const item = createAxeJourneyItem(target.profileId, target.executionId, target.operation);
-  if (!observed && adapter && adapter.name !== playwrightAdapterName) {
-    return unauditedAxePathItem(item, "not-applicable", `Operation was routed to adapter ${adapter.name}; no Playwright accessibility surface was observed.`);
+function projectPathItem(target: ObservedOperation<AxeOperationEvidence>): AxePathAuditItemInput {
+  const { observed } = target;
+  const item = createAxeJourneyItem(target.profileId, target.executionId, target.operation as AxeJourneyOperation);
+  if (routedElsewhere(target, playwrightAdapterName)) {
+    return unauditedAxePathItem(item, "not-applicable", `Operation was routed to adapter ${target.attempted!.adapter!.name}; no Playwright accessibility surface was observed.`);
   }
   if (!observed) {
     if (target.operation.kind === "control-flow") {
@@ -131,6 +100,13 @@ function unmatchedSurfaceReason(count: number): string {
   return `Expected match count ${count} cannot be scoped to one matched locator.`;
 }
 
-function factRunId(fact: AxeEvidence): string {
-  return fact.kind === "execution-started" ? fact.execution.runId : fact.evidence.runId;
+/** Journey-map node footers: page and surface counts for audited items, `skipped` when an audit was expected but missing. */
+export function axeNodeSummaries(report: AxePathAuditReport): readonly JourneyNodeSummary[] {
+  return immutableSnapshot(report.items.flatMap((item): JourneyNodeSummary[] => {
+    const executionId = item.metadata.executionId;
+    const operationId = item.metadata.operationId;
+    if (typeof executionId !== "string" || typeof operationId !== "string" || item.status === "not-applicable") return [];
+    if (item.status === "skipped") return [{ executionId, operationId, metrics: { kind: "skipped", ...(item.reason ? { reason: item.reason } : {}) } }];
+    return [{ executionId, operationId, metrics: { kind: "axe", ...(item.scanSummaries ? { pageState: item.scanSummaries["page-state"], matchedSurface: item.scanSummaries["matched-surface"] } : {}) } }];
+  }));
 }

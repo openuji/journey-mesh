@@ -1,34 +1,34 @@
 import { appendFile } from "node:fs/promises";
-import { loadJourneyTestConfig, interpolate } from "@openuji/journey-runtime";
+import { loadSuiteConfig, interpolate } from "@openuji/journey-host";
 import { parseAndroidTarget, validateAndroidTarget } from "./android.js";
 
 const help = `Usage:
-  journey-driver-android android check <config.yaml> [--runtime <key>] [--require-locale <locale>] [--github-output]
+  journey-driver-android android check <config.yaml> [--service <key>] [--require-locale <locale>] [--github-output]
 
-Loads <config.yaml>'s runtimes.<key> options (default "android"), parses and
+Loads <config.yaml>'s services.<key> options (default "android"), parses and
 validates the Android target (API/system-image agreement). --require-locale
 asserts the target's own locale pin matches exactly — a caller's business
 rule (e.g. "this example's checked-in native bindings require en-US"), not a
-generic Android-runtime constraint, so it is never assumed without this flag.
+generic Android constraint, so it is never assumed without this flag.
 --github-output writes api-level/target/arch/profile as GITHUB_OUTPUT entries
 for a step that configures android-emulator-runner.`;
 
-function parseFlags(args: readonly string[]): { runtime: string; requireLocale?: string; githubOutput: boolean } {
-  let runtime = "android";
+function parseFlags(args: readonly string[]): { service: string; requireLocale?: string; githubOutput: boolean } {
+  let service = "android";
   let requireLocale: string | undefined;
   let githubOutput = false;
   for (let index = 0; index < args.length; index++) {
     const argument = args[index]!;
     if (argument === "--github-output") { githubOutput = true; continue; }
-    if (argument === "--runtime" || argument === "--require-locale") {
+    if (argument === "--service" || argument === "--require-locale") {
       const value = args[++index];
       if (!value || value.startsWith("--")) throw new Error(`Missing value for ${argument}`);
-      if (argument === "--runtime") runtime = value; else requireLocale = value;
+      if (argument === "--service") service = value; else requireLocale = value;
       continue;
     }
     throw new Error(`Unknown option ${argument}`);
   }
-  return { runtime, requireLocale, githubOutput };
+  return { service, requireLocale, githubOutput };
 }
 
 export async function main(args: readonly string[]): Promise<number> {
@@ -36,15 +36,15 @@ export async function main(args: readonly string[]): Promise<number> {
   const [group, action, path, ...flags] = args;
   try {
     if (group !== "android" || action !== "check" || !path) throw new Error(help);
-    const { runtime, requireLocale, githubOutput } = parseFlags(flags);
-    const loaded = await loadJourneyTestConfig(path);
-    const rawOptions = loaded.config.runtimes?.[runtime]?.options;
-    if (!rawOptions) throw new Error(`${path} is missing runtimes.${runtime}.options`);
-    const options = interpolate(rawOptions, loaded.env, `runtimes.${runtime}.options`);
+    const { service, requireLocale, githubOutput } = parseFlags(flags);
+    const loaded = await loadSuiteConfig(path);
+    const rawOptions = loaded.config.services[service]?.options;
+    if (!rawOptions) throw new Error(`${path} is missing services.${service}.options`);
+    const options = interpolate(rawOptions, loaded.env, `services.${service}.options`);
     const target = parseAndroidTarget(options);
     validateAndroidTarget(target);
     if (requireLocale !== undefined && target.locale !== requireLocale) {
-      throw new Error(`runtimes.${runtime}.options.locale is ${target.locale ?? "unset"}; expected ${requireLocale}`);
+      throw new Error(`services.${service}.options.locale is ${target.locale ?? "unset"}; expected ${requireLocale}`);
     }
     if (githubOutput) {
       if (!process.env.GITHUB_OUTPUT) throw new Error("--github-output requires GITHUB_OUTPUT");
@@ -53,7 +53,7 @@ export async function main(args: readonly string[]): Promise<number> {
         `api-level=${target.api}`, `target=${imageTarget}`, `arch=${arch}`, `profile=${target.profile}`, ""
       ].join("\n"));
     }
-    console.log(`Android target's API level and system image agree (runtimes.${runtime}).`);
+    console.log(`Android target's API level and system image agree (services.${service}).`);
     return 0;
   } catch (error) {
     console.error(error instanceof Error ? error.message : "journey-driver-android failed");

@@ -5,6 +5,7 @@ import {
   deleteFileIfExists,
   deleteOcsResource,
   ensureFileExists,
+  expectOk,
   isFixtureShare,
   listOcsShares,
   nextcloudFetch,
@@ -28,6 +29,8 @@ export type NextcloudFederatedSharingEnvironmentOptions = {
     shareAccepted: string;
   };
   preserveFixtures?: boolean;
+  /** Explicit fixture preconditions, reset before each profile execution. */
+  recipientViewConfig?: Readonly<Record<string, Readonly<Record<string, string | number | boolean>>>>;
   timeoutMs?: number;
 };
 
@@ -50,6 +53,7 @@ export function createNextcloudFederatedSharingEnvironment(
   const timeoutMs = options.timeoutMs ?? 30_000;
   const fixtureFilePath = `/${fixtureFileName}`;
   const fixtureUrl = options.fixturePath;
+  const recipientViewConfig = structuredClone(options.recipientViewConfig ?? {});
   const effectChecks: Readonly<Record<string, () => Promise<void>>> = Object.freeze({
     [options.effectIds.shareCreated]: expectOutgoingFederatedShareExists,
     [options.effectIds.shareAccepted]: expectAcceptedFederatedShareHasMountedFile
@@ -58,6 +62,16 @@ export function createNextcloudFederatedSharingEnvironment(
   const environment: JourneyEnvironment = {
     setup: async (context) => {
       sharerTouchpoint.signal = recipientTouchpoint.signal = context.signal;
+      for (const [view, settings] of Object.entries(recipientViewConfig)) {
+        for (const [key, value] of Object.entries(settings)) {
+          const response = await nextcloudFetch(recipientTouchpoint, recipientUser,
+            new URL("/apps/files/api/v1/views", recipientTouchpoint.baseURL), {
+              method: "PUT", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ view, key, value })
+            });
+          if (!response.ok) throw new Error(`Could not prepare recipient view ${view}: ${response.status}`);
+        }
+      }
       await ensureFederatedShareFixtureIsClean();
     },
     verifyEffect: ({ effect, context }) => {
@@ -153,6 +167,9 @@ export function createNextcloudFederatedSharingEnvironment(
     user: NextcloudUserConfig,
     path: string
   ): Promise<void> {
+    const file = await nextcloudFetch(touchpoint, user, davFileUrl(touchpoint, user, fixtureFileName), { method: "HEAD" });
+    if (file.status === 404) return;
+    await expectOk(file, `check fixture before outgoing-share cleanup for ${user.username}`);
     const shares = await listOcsShares(touchpoint, user, "/apps/files_sharing/api/v1/shares", {
       path
     });

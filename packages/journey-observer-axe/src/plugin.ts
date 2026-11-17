@@ -1,17 +1,27 @@
-import { booleanOption, knownOptions, optionsObject, requiredString, type JourneyMeshPlugin, type JourneyObserverComponent } from "@openuji/journey-runtime/plugin";
+import { playwrightAutomation } from "@openuji/journey-adapter-playwright";
+import { booleanOption, defineObserverPlugin, knownOptions, optionsObject, positiveNumber, requiredString, stringArray } from "@openuji/journey-plugin";
 import { axeObserver } from "./index.js";
-import type { AxeObserverOptions } from "./types.js";
-export const journeyMeshPlugin: JourneyMeshPlugin<JourneyObserverComponent> = {
-  apiVersion: 1, kind: "observer", runtime: "playwright",
-  validate(options) {
-    knownOptions(options, ["reportId", "strict", "tags", "sourceScreenshots", "evidenceTimeoutMs", "accessibilitySummary", "excludedPhaseIds"]);
-    requiredString(options.reportId, "reportId"); booleanOption(options.strict);
-    if (options.tags !== undefined && (!Array.isArray(options.tags) || options.tags.some((tag) => typeof tag !== "string"))) throw new Error("tags must be a string array");
-    if (options.excludedPhaseIds !== undefined && (!Array.isArray(options.excludedPhaseIds) || options.excludedPhaseIds.some((id) => typeof id !== "string"))) throw new Error("excludedPhaseIds must be a string array");
-    if (options.sourceScreenshots !== undefined) optionsObject(options.sourceScreenshots, "sourceScreenshots");
+
+export const journeyMeshPlugin = defineObserverPlugin({
+  kind: "observer", automation: playwrightAutomation,
+  parse(options) {
+    knownOptions(options, ["reportId", "strict", "tags", "sourceScreenshots", "evidenceTimeoutMs", "excludedPhaseIds"]);
+    const screenshots = options.sourceScreenshots === undefined ? undefined : optionsObject(options.sourceScreenshots, "sourceScreenshots");
+    if (screenshots) knownOptions(screenshots, ["states", "fullPage", "timeoutMs"]);
+    return {
+      reportId: requiredString(options.reportId, "reportId"),
+      strict: booleanOption(options.strict),
+      ...(options.tags !== undefined ? { tags: stringArray(options.tags, "tags") } : {}),
+      ...(options.excludedPhaseIds !== undefined ? { excludedPhaseIds: stringArray(options.excludedPhaseIds, "excludedPhaseIds") } : {}),
+      ...(options.evidenceTimeoutMs !== undefined ? { evidenceTimeoutMs: positiveNumber(options.evidenceTimeoutMs, 0) } : {}),
+      ...(screenshots ? { sourceScreenshots: {
+        states: booleanOption(screenshots.states), fullPage: booleanOption(screenshots.fullPage, true),
+        ...(screenshots.timeoutMs !== undefined ? { timeoutMs: positiveNumber(screenshots.timeoutMs, 0) } : {})
+      } } : {})
+    };
   },
-  create(options, context) {
-    const observer = axeObserver({ ...options, strict: booleanOption(options.strict), artifacts: context.artifacts } as AxeObserverOptions);
-    return { observer, reporter: observer };
+  create(settings, context) {
+    const observer = axeObserver({ ...settings, artifacts: context.artifacts });
+    return { observer, output: ({ result }) => observer.output(result) };
   }
-};
+});

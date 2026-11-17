@@ -3,7 +3,10 @@ import type {
   TransitionPlanOperation
 } from "@openuji/journey-execution-model";
 
-export const androidDriverContract = "@openuji/journey-driver-android/v1" as const;
+import { contract } from "@openuji/journey-plugin";
+
+/** Adapters and drivers that both declare this contract can be combined. */
+export const androidDriverContract = contract<AndroidJourneyDriver>("@openuji/journey-driver-android/v1");
 
 export type AndroidApplicationEntryTarget = Readonly<{
   kind: "application";

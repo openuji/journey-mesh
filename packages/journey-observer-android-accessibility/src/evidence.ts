@@ -1,11 +1,12 @@
 import type { AndroidDeviceMetrics, AppiumOperationObservation } from "@openuji/journey-adapter-appium";
 import type { JourneyExecutionDescriptor, JourneyPlanOperation, JourneyRunError } from "@openuji/journey-runner";
 import type { AndroidHierarchy, AndroidHierarchyCheck } from "./hierarchy.js";
-import type { Immutable } from "./immutable.js";
+import type { Immutable } from "@openuji/journey-core";
 
-export type AndroidArtifact = Readonly<{ path: string; href: string }>;
+/** A capture registered in the test's artifact store. */
+export type AndroidArtifact = Readonly<{ href: string }>;
 export type AndroidArtifactWriter = (input: Readonly<{
-  name: string; data: string | Uint8Array; contentType: string;
+  name: string; data: string | Uint8Array; contentType: string; scope?: import("@openuji/journey-plugin").ArtifactScope;
 }>) => Promise<AndroidArtifact>;
 /** Read UTF-8 XML or PNG bytes at the artifact I/O boundary. */
 export type AndroidArtifactReader = (artifact: AndroidArtifact) => Promise<string | Uint8Array>;

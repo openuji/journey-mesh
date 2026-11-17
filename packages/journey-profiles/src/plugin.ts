@@ -1,20 +1,20 @@
-import { knownOptions, requiredString, type JourneyMeshPlugin } from "@openuji/journey-runtime/plugin";
-import type { JourneyProfile } from "@openuji/journey-runner";
+import { defineProfilePlugin, knownOptions, requiredString, stringArray } from "@openuji/journey-plugin";
 import { defaultProfile, keyboardOnlyProfile, inputModalityProfile } from "./index.js";
-export const journeyMeshPlugin: JourneyMeshPlugin<JourneyProfile> = {
-  apiVersion: 1, kind: "profile",
-  validate(options) {
+
+type ProfileSettings = { kind: "preset"; preset: "default" | "keyboard-only" } | { kind: "custom"; id: string; modalityPreference: string[] };
+
+export const journeyMeshPlugin = defineProfilePlugin({
+  kind: "profile",
+  parse(options): ProfileSettings {
     knownOptions(options, ["preset", "id", "modalityPreference"]);
-    if (options.preset !== undefined && options.preset !== "default" && options.preset !== "keyboard-only") throw new Error("Unknown interaction profile preset");
-    if (!options.preset) {
-      requiredString(options.id, "profile id");
-      if (!Array.isArray(options.modalityPreference) || !options.modalityPreference.length) throw new Error("modalityPreference must be a nonempty array");
-      options.modalityPreference.forEach((item) => requiredString(item, "modalityPreference item"));
-    }
+    if (options.preset === "default" || options.preset === "keyboard-only") return { kind: "preset", preset: options.preset };
+    if (options.preset !== undefined) throw new Error("Unknown interaction profile preset");
+    const modalityPreference = stringArray(options.modalityPreference, "modalityPreference");
+    if (!modalityPreference.length) throw new Error("modalityPreference must be a nonempty array");
+    return { kind: "custom", id: requiredString(options.id, "profile id"), modalityPreference };
   },
-  create(options) {
-    if (options.preset === "default") return defaultProfile();
-    if (options.preset === "keyboard-only") return keyboardOnlyProfile();
-    return inputModalityProfile({ id: options.id as string, modalityPreference: options.modalityPreference as string[] });
+  create(settings) {
+    if (settings.kind === "custom") return inputModalityProfile({ id: settings.id, modalityPreference: settings.modalityPreference });
+    return settings.preset === "default" ? defaultProfile() : keyboardOnlyProfile();
   }
-};
+});

@@ -449,6 +449,11 @@ function resolveAccessibleLocator(
     throw new Error(`Cycle detected in AccessibleLocator context chain: ${[...seen, locatorId].join(" -> ")}`);
   }
 
+  const candidate = index.byId.get(locatorId);
+  if (candidate && hasType(candidate, "CustomLocator")) {
+    if (!candidate.extensions || typeof candidate.extensions !== "object" || Array.isArray(candidate.extensions)) throw new Error(`CustomLocator ${locatorId} must declare extensions`);
+    return { id: locatorId, label: optionalString(candidate.label), extensions: candidate.extensions as Record<string, unknown>, features: [], contexts: [] };
+  }
   const locator = requireNode(index, locatorId, "AccessibleLocator");
   const featureRefs = optionalStringArray(locator.accessibleFeatureRefs);
   const contextRefs = optionalStringArray(locator.contextLocatorRefs);
@@ -995,3 +1000,5 @@ function isUjgDocument(value: unknown): value is UjgDocument {
       Array.isArray((value as { nodes?: unknown }).nodes)
   );
 }
+export { toJourneyMapDocument } from "./journey-map.js";
+export type { JourneyMapDocument } from "./journey-map.js";

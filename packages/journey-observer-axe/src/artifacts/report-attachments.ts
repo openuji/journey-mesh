@@ -1,6 +1,4 @@
-import type { AxeArtifactSink } from "./artifact-target.js";
-import { mkdir, writeFile } from "node:fs/promises";
-import { basename, dirname } from "node:path";
+import type { ArtifactScope, JourneyArtifactStore } from "@openuji/journey-plugin";
 
 import type {
   AxeAccessibilitySummaryReport,
@@ -17,72 +15,18 @@ import {
 import { renderAxeAuditHtml } from "../html/axe-audit-html.js";
 import { renderAxePathAuditHtml } from "../html/path-audit-html.js";
 
-export async function attachAxeAuditReport(
-  testInfo: AxeArtifactSink,
-  report: AxeAuditReport
-): Promise<void> {
-  const jsonPath = testInfo.outputPath(auditJsonFileName(report.auditId));
-  const htmlPath = testInfo.outputPath(auditHtmlFileName(report.auditId));
-
-  await mkdir(dirname(jsonPath), { recursive: true });
-  await writeFile(jsonPath, JSON.stringify(report, null, 2));
-  await writeFile(htmlPath, renderAxeAuditHtml(report));
-
-  await testInfo.attach(`axe-${report.auditId}.json`, {
-    path: jsonPath,
-    contentType: "application/json"
-  });
-  await testInfo.attach(`axe-${report.auditId}.html`, {
-    path: htmlPath,
-    contentType: "text/html"
-  });
+/** One audit belongs to one operation of one execution. */
+export async function attachAxeAuditReport(artifacts: JourneyArtifactStore, report: AxeAuditReport, scope: ArtifactScope): Promise<void> {
+  await artifacts.write({ name: auditJsonFileName(report.auditId), data: JSON.stringify(report, null, 2), contentType: "application/json", scope });
+  await artifacts.write({ name: auditHtmlFileName(report.auditId), data: renderAxeAuditHtml(report), contentType: "text/html", scope });
 }
 
-export async function attachAxePathAuditReport(
-  testInfo: AxeArtifactSink,
-  report: AxePathAuditReport
-): Promise<string> {
-  const jsonPath = testInfo.outputPath(pathAuditJsonFileName(report.reportId));
-  const htmlPath = testInfo.outputPath(pathAuditHtmlFileName(report.reportId));
-  const attachmentHtmlPath = testInfo.outputPath(
-    "axe-path-attachments",
-    pathAuditHtmlFileName(report.reportId)
-  );
-
-  await mkdir(dirname(jsonPath), { recursive: true });
-  await writeFile(jsonPath, JSON.stringify(report, null, 2));
-  await writeFile(htmlPath, renderAxePathAuditHtml(report));
-  await mkdir(dirname(attachmentHtmlPath), { recursive: true });
-  await writeFile(attachmentHtmlPath, renderAxePathAuditHtml(report, { baseHref: "../" }));
-
-  await testInfo.attach(`axe-path-${report.reportId}.json`, {
-    path: jsonPath,
-    contentType: "application/json"
-  });
-  await testInfo.attach(`axe-path-${report.reportId}.html`, {
-    path: attachmentHtmlPath,
-    contentType: "text/html"
-  });
-
-  return htmlPath;
+/** The path report covers every execution of the test. */
+export async function attachAxePathAuditReport(artifacts: JourneyArtifactStore, report: AxePathAuditReport): Promise<void> {
+  await artifacts.write({ name: pathAuditJsonFileName(report.reportId), data: JSON.stringify(report, null, 2), contentType: "application/json" });
+  await artifacts.write({ name: pathAuditHtmlFileName(report.reportId), data: renderAxePathAuditHtml(report), contentType: "text/html", label: "Browser accessibility report (axe)" });
 }
 
-export async function attachAxeAccessibilitySummaryReport(
-  testInfo: AxeArtifactSink,
-  report: AxeAccessibilitySummaryReport
-): Promise<string> {
-  const jsonPath = testInfo.outputPath(accessibilitySummaryJsonFileName(report.source.reportId));
-
-  await mkdir(dirname(jsonPath), { recursive: true });
-  await writeFile(jsonPath, JSON.stringify(report, null, 2));
-  await testInfo.attach(`axe-accessibility-${report.source.reportId}.json`, {
-    path: jsonPath,
-    contentType: "application/json"
-  });
-
-  return jsonPath;
-}
-
-export function testResultDirectoryName(testInfo: AxeArtifactSink): string | undefined {
-  return testInfo.outputDir ? basename(testInfo.outputDir) : undefined;
+export async function attachAxeAccessibilitySummaryReport(artifacts: JourneyArtifactStore, report: AxeAccessibilitySummaryReport): Promise<void> {
+  await artifacts.write({ name: accessibilitySummaryJsonFileName(report.source.reportId), data: JSON.stringify(report, null, 2), contentType: "application/json" });
 }

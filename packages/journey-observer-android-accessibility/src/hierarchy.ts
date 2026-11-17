@@ -1,6 +1,6 @@
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import type { AndroidDeviceMetrics } from "@openuji/journey-adapter-appium";
-import { immutableSnapshot } from "./immutable.js";
+import { immutableSnapshot } from "@openuji/journey-core";
 
 export type AndroidHierarchyNode = Readonly<{
   id: string;

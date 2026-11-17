@@ -1,4 +1,3 @@
-import { axeArtifacts } from "../artifacts/artifact-target.js";
 import { AxeBuilder } from "@axe-core/playwright";
 import type { Page } from "playwright";
 
@@ -8,7 +7,6 @@ import type {
   AxeAuditRunnerInput,
   AxeResults
 } from "../types.js";
-import { attachAxeAuditReport } from "../artifacts/report-attachments.js";
 import { buildAxeAuditReport } from "./audit-report.js";
 import { withScopedLocator } from "./scoped-locator.js";
 import { isAxeStrict } from "./strict-mode.js";
@@ -31,7 +29,6 @@ export async function runAxeAudit(input: AxeAuditRunnerInput): Promise<AxeAuditR
     matchedSurface
   });
 
-  await attachAxeAuditReport(axeArtifacts(input), report);
   return report;
 }
 

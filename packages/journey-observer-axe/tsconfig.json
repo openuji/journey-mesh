@@ -17,7 +17,13 @@
       "path": "../journey-adapter-playwright/tsconfig.json"
     },
     {
-      "path": "../journey-runtime/tsconfig.json"
+      "path": "../journey-reporter/tsconfig.json"
+    },
+    {
+      "path": "../journey-core/tsconfig.json"
+    },
+    {
+      "path": "../journey-plugin"
     }
   ]
 }
