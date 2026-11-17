@@ -6,7 +6,7 @@ import type {
   AxeRuleResultType,
   AxeResults
 } from "../types.js";
-import type { Immutable } from "../shared/immutable.js";
+import type { Immutable } from "@openuji/journey-core";
 import { axeNodeHtmlId } from "../artifacts/report-file-names.js";
 import { summarizeResults } from "../reporting/report-summary.js";
 import {

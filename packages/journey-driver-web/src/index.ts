@@ -3,7 +3,10 @@ import type {
   TransitionPlanOperation
 } from "@openuji/journey-execution-model";
 
-export const webDriverContract = "@openuji/journey-driver-web/v1" as const;
+import { contract } from "@openuji/journey-plugin";
+
+/** Adapters and drivers that both declare this contract can be combined. */
+export const webDriverContract = contract<WebJourneyDriver>("@openuji/journey-driver-web/v1");
 
 export type WebEntryTarget = Readonly<{
   kind: "url";

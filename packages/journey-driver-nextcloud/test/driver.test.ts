@@ -113,3 +113,27 @@ test("Nextcloud package has no automation runtime dependency or mutable driver s
   assert.doesNotMatch(driverSources, /PlaywrightJourneyDriver|AppiumJourneyDriver|createExecution\s*\(|new Map\s*\(|new Set\s*\(|\.push\s*\(|\.splice\s*\(/);
   await assert.rejects(readFile(new URL("../../journey-driver-nextcloud-android/package.json", import.meta.url), "utf8"));
 });
+
+test("a freshly provisioned server creates its fixture before querying path-specific outgoing shares", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let uploaded = false;
+  globalThis.fetch = (async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname.includes("/remote.php/dav/")) {
+      if (init?.method === "PUT") { uploaded = true; return new Response(null, { status: 201 }); }
+      if (init?.method === "HEAD") return new Response(null, { status: url.hostname === "alice.example.test" && uploaded ? 200 : 404 });
+      return new Response(null, { status: 404 });
+    }
+    if (url.searchParams.has("path")) assert.equal(uploaded, true, "The OCS path endpoint requires the fixture to exist");
+    return Response.json({ ocs: { data: [] } });
+  }) as typeof fetch;
+  const environment = createNextcloudFederatedSharingEnvironment({
+    sharerTouchpoint: { baseURL: "https://alice.example.test" }, recipientTouchpoint: { baseURL: "https://bob.example.test" },
+    sharerUser: { username: "alice", password: "secret" }, recipientUser: { username: "bob", password: "secret" },
+    fixturePath: new URL("../../../examples/nextcloud-filesharing/deployment/fixtures/report.pdf", import.meta.url).pathname,
+    fixtureFileName: "report.pdf", effectIds: { shareCreated: "created", shareAccepted: "accepted" }
+  });
+  await environment.setup!({} as never);
+  assert.equal(uploaded, true);
+});

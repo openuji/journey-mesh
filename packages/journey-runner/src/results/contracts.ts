@@ -21,7 +21,6 @@ export type ExecutionResult = Readonly<{
 
 export type JourneyOperationEvidence = Readonly<{
   operationId: string;
-  graphNodeId?: string;
   operationKind: JourneyPlanOperationKind;
   source?: JourneyOperationSource;
   adapter?: JourneyComponentDescriptor;

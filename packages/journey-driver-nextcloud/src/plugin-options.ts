@@ -1,4 +1,4 @@
-import { optionsObject, requiredString } from "@openuji/journey-runtime/plugin";
+import { optionsObject, requiredString } from "@openuji/journey-plugin";
 import type {
   NextcloudTouchpointBinding, NextcloudTransitionValue, NextcloudUserBinding
 } from "./resolver.js";

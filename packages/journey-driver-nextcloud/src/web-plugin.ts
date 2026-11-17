@@ -1,20 +1,17 @@
-import { webDriverContract, type WebJourneyDriver } from "@openuji/journey-driver-web";
-import { knownOptions, optionsObject, requiredString, type JourneyMeshPlugin } from "@openuji/journey-runtime/plugin";
+import { webDriverContract } from "@openuji/journey-driver-web";
+import { defineDriverPlugin, knownOptions, optionsObject, requiredString } from "@openuji/journey-plugin";
 import { pluginBindings, validateConfiguredOperations } from "./plugin-options.js";
 import { nextcloudWebDriver } from "./web.js";
 
-export const journeyMeshPlugin: JourneyMeshPlugin<WebJourneyDriver> = {
-  apiVersion: 1, kind: "driver", driverContract: webDriverContract,
-  validate(options, context) {
+export const journeyMeshPlugin = defineDriverPlugin({
+  kind: "driver", driverContract: webDriverContract,
+  parse(options, context) {
     knownOptions(options, ["touchpoints", "users", "entries", "transitionValues"]);
-    const configuredEntries = optionsObject(options.entries, "entries");
-    for (const value of Object.values(configuredEntries)) requiredString(value, "web entry route");
+    const entries = Object.fromEntries(Object.entries(optionsObject(options.entries, "entries")).map(([id, value]) => [id, requiredString(value, "web entry route")]));
     validateConfiguredOperations(options, context.operations);
-    nextcloudWebDriver({ ...pluginBindings(options), entries: configuredEntries as Record<string, string> });
+    const settings = { ...pluginBindings(options), entries };
+    nextcloudWebDriver(settings);
+    return settings;
   },
-  create(options) {
-    return nextcloudWebDriver({
-      ...pluginBindings(options), entries: optionsObject(options.entries, "entries") as Record<string, string>
-    });
-  }
-};
+  create(settings) { return nextcloudWebDriver(settings); }
+});

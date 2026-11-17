@@ -1,4 +1,4 @@
-import { immutableSnapshot } from "../shared/immutable.js";
+import { immutableSnapshot } from "@openuji/journey-core";
 import type { AxeEvidence } from "./evidence.js";
 
 /** The append boundary owns storage; reading a snapshot never creates or changes facts. */

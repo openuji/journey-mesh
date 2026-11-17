@@ -32,6 +32,9 @@ importers:
       '@openuji/journey-execution-model':
         specifier: workspace:*
         version: link:packages/journey-execution-model
+      '@openuji/journey-host':
+        specifier: workspace:*
+        version: link:packages/journey-host
       '@openuji/journey-model-ujg':
         specifier: workspace:*
         version: link:packages/journey-model-ujg
@@ -41,15 +44,18 @@ importers:
       '@openuji/journey-observer-axe':
         specifier: workspace:*
         version: link:packages/journey-observer-axe
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:packages/journey-plugin
       '@openuji/journey-profiles':
         specifier: workspace:*
         version: link:packages/journey-profiles
+      '@openuji/journey-reporter':
+        specifier: workspace:*
+        version: link:packages/journey-reporter
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:packages/journey-runner
-      '@openuji/journey-runtime':
-        specifier: workspace:*
-        version: link:packages/journey-runtime
       '@types/node':
         specifier: ^22.13.14
         version: 22.20.1
@@ -68,40 +74,6 @@ importers:
       yaml:
         specifier: 2.9.1
         version: 2.9.1
-
-  examples/nextcloud-comparison-report:
-    dependencies:
-      '@openuji/journey-observer-ux':
-        specifier: workspace:*
-        version: link:../../packages/journey-observer-ux
-      '@openuji/journey-path':
-        specifier: workspace:*
-        version: link:../../vendor/journey-path
-      '@openuji/journey-runner':
-        specifier: workspace:*
-        version: link:../../packages/journey-runner
-      react:
-        specifier: ^19.2.7
-        version: 19.3.1
-      react-dom:
-        specifier: ^19.2.7
-        version: 19.3.1(react@19.3.1)
-      yaml:
-        specifier: 2.9.1
-        version: 2.9.1
-    devDependencies:
-      '@types/react':
-        specifier: ^19.2.0
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: ^19.2.0
-        version: 19.3.0(@types/react@19.3.0)
-      tsx:
-        specifier: ^4.20.3
-        version: 4.23.1
-      vite:
-        specifier: ^7.3.0
-        version: 7.3.8(@types/node@22.20.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)
 
   examples/nextcloud-filesharing:
     dependencies:
@@ -126,6 +98,9 @@ importers:
       '@openuji/journey-execution-model':
         specifier: workspace:*
         version: link:../../packages/journey-execution-model
+      '@openuji/journey-host':
+        specifier: workspace:*
+        version: link:../../packages/journey-host
       '@openuji/journey-model-ujg':
         specifier: workspace:*
         version: link:../../packages/journey-model-ujg
@@ -141,12 +116,12 @@ importers:
       '@openuji/journey-profiles':
         specifier: workspace:*
         version: link:../../packages/journey-profiles
+      '@openuji/journey-reporter':
+        specifier: workspace:*
+        version: link:../../packages/journey-reporter
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../../packages/journey-runner
-      '@openuji/journey-runtime':
-        specifier: workspace:*
-        version: link:../../packages/journey-runtime
     devDependencies:
       tsx:
         specifier: ^4.20.3
@@ -154,18 +129,21 @@ importers:
 
   packages/journey-adapter-appium:
     dependencies:
+      '@openuji/journey-core':
+        specifier: workspace:*
+        version: link:../journey-core
       '@openuji/journey-driver-android':
         specifier: workspace:*
         version: link:../journey-driver-android
       '@openuji/journey-execution-model':
         specifier: workspace:*
         version: link:../journey-execution-model
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner
-      '@openuji/journey-runtime':
-        specifier: workspace:*
-        version: link:../journey-runtime
       appium:
         specifier: 3.9.0
         version: 3.9.0(@types/node@22.20.1)
@@ -176,6 +154,9 @@ importers:
         specifier: 9.20.0
         version: 9.20.0
     devDependencies:
+      '@openuji/journey-reporter':
+        specifier: workspace:*
+        version: link:../journey-reporter
       '@xmldom/xmldom':
         specifier: 0.9.12
         version: 0.9.12
@@ -191,18 +172,21 @@ importers:
 
   packages/journey-adapter-playwright:
     dependencies:
+      '@openuji/journey-core':
+        specifier: workspace:*
+        version: link:../journey-core
       '@openuji/journey-driver-web':
         specifier: workspace:*
         version: link:../journey-driver-web
       '@openuji/journey-execution-model':
         specifier: workspace:*
         version: link:../journey-execution-model
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner
-      '@openuji/journey-runtime':
-        specifier: workspace:*
-        version: link:../journey-runtime
       playwright:
         specifier: ^1.61.1
         version: 1.62.0
@@ -213,15 +197,24 @@ importers:
 
   packages/journey-cli:
     dependencies:
+      '@openuji/journey-host':
+        specifier: workspace:*
+        version: link:../journey-host
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
+      '@openuji/journey-reporter':
+        specifier: workspace:*
+        version: link:../journey-reporter
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner
-      '@openuji/journey-runtime':
-        specifier: workspace:*
-        version: link:../journey-runtime
       tsx:
         specifier: ^4.20.3
         version: 4.23.1
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
 
   packages/journey-core: {}
 
@@ -230,9 +223,12 @@ importers:
       '@openuji/journey-execution-model':
         specifier: workspace:*
         version: link:../journey-execution-model
-      '@openuji/journey-runtime':
+      '@openuji/journey-host':
         specifier: workspace:*
-        version: link:../journey-runtime
+        version: link:../journey-host
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
     devDependencies:
       tsx:
         specifier: ^4.20.3
@@ -249,13 +245,16 @@ importers:
       '@openuji/journey-execution-model':
         specifier: workspace:*
         version: link:../journey-execution-model
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner
-      '@openuji/journey-runtime':
-        specifier: workspace:*
-        version: link:../journey-runtime
     devDependencies:
+      '@openuji/journey-reporter':
+        specifier: workspace:*
+        version: link:../journey-reporter
       tsx:
         specifier: ^4.20.3
         version: 4.23.1
@@ -268,6 +267,9 @@ importers:
       '@openuji/journey-execution-model':
         specifier: workspace:*
         version: link:../journey-execution-model
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
     devDependencies:
       tsx:
         specifier: ^4.20.3
@@ -279,14 +281,39 @@ importers:
         specifier: workspace:*
         version: link:../journey-core
 
+  packages/journey-host:
+    dependencies:
+      '@openuji/journey-core':
+        specifier: workspace:*
+        version: link:../journey-core
+      '@openuji/journey-execution-model':
+        specifier: workspace:*
+        version: link:../journey-execution-model
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
+      '@openuji/journey-reporter':
+        specifier: workspace:*
+        version: link:../journey-reporter
+      '@openuji/journey-runner':
+        specifier: workspace:*
+        version: link:../journey-runner
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
+    devDependencies:
+      tsx:
+        specifier: ^4.20.3
+        version: 4.23.1
+
   packages/journey-model-ujg:
     dependencies:
       '@openuji/journey-execution-model':
         specifier: workspace:*
         version: link:../journey-execution-model
-      '@openuji/journey-runtime':
+      '@openuji/journey-plugin':
         specifier: workspace:*
-        version: link:../journey-runtime
+        version: link:../journey-plugin
     devDependencies:
       tsx:
         specifier: ^4.20.3
@@ -297,12 +324,18 @@ importers:
       '@openuji/journey-adapter-appium':
         specifier: workspace:*
         version: link:../journey-adapter-appium
+      '@openuji/journey-core':
+        specifier: workspace:*
+        version: link:../journey-core
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
+      '@openuji/journey-reporter':
+        specifier: workspace:*
+        version: link:../journey-reporter
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner
-      '@openuji/journey-runtime':
-        specifier: workspace:*
-        version: link:../journey-runtime
       fast-xml-parser:
         specifier: 5.3.0
         version: 5.3.0
@@ -319,12 +352,18 @@ importers:
       '@openuji/journey-adapter-playwright':
         specifier: workspace:*
         version: link:../journey-adapter-playwright
+      '@openuji/journey-core':
+        specifier: workspace:*
+        version: link:../journey-core
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
+      '@openuji/journey-reporter':
+        specifier: workspace:*
+        version: link:../journey-reporter
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner
-      '@openuji/journey-runtime':
-        specifier: workspace:*
-        version: link:../journey-runtime
       playwright:
         specifier: ^1.61.1
         version: 1.62.0
@@ -338,15 +377,34 @@ importers:
       '@openuji/journey-adapter-playwright':
         specifier: workspace:*
         version: link:../journey-adapter-playwright
+      '@openuji/journey-core':
+        specifier: workspace:*
+        version: link:../journey-core
+      '@openuji/journey-execution-model':
+        specifier: workspace:*
+        version: link:../journey-execution-model
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
+      '@openuji/journey-runner':
+        specifier: workspace:*
+        version: link:../journey-runner
+    devDependencies:
+      tsx:
+        specifier: ^4.20.3
+        version: 4.23.1
+
+  packages/journey-plugin:
+    dependencies:
+      '@openuji/journey-core':
+        specifier: workspace:*
+        version: link:../journey-core
       '@openuji/journey-execution-model':
         specifier: workspace:*
         version: link:../journey-execution-model
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner
-      '@openuji/journey-runtime':
-        specifier: workspace:*
-        version: link:../journey-runtime
     devDependencies:
       tsx:
         specifier: ^4.20.3
@@ -357,16 +415,56 @@ importers:
       '@openuji/journey-execution-model':
         specifier: workspace:*
         version: link:../journey-execution-model
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner
-      '@openuji/journey-runtime':
-        specifier: workspace:*
-        version: link:../journey-runtime
     devDependencies:
       tsx:
         specifier: ^4.20.3
         version: 4.23.1
+
+  packages/journey-reporter:
+    dependencies:
+      '@openuji/journey-core':
+        specifier: workspace:*
+        version: link:../journey-core
+      '@openuji/journey-execution-model':
+        specifier: workspace:*
+        version: link:../journey-execution-model
+      '@openuji/journey-path':
+        specifier: workspace:*
+        version: link:../../vendor/journey-path
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
+      '@openuji/journey-runner':
+        specifier: workspace:*
+        version: link:../journey-runner
+      react:
+        specifier: ^19.2.7
+        version: 19.3.1
+      react-dom:
+        specifier: ^19.2.7
+        version: 19.3.1(react@19.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.2.0
+        version: 19.3.0(@types/react@19.3.0)
+      playwright:
+        specifier: ^1.61.1
+        version: 1.62.0
+      tsx:
+        specifier: ^4.20.3
+        version: 4.23.1
+      vite:
+        specifier: ^7.3.0
+        version: 7.3.8(@types/node@22.20.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.1)
 
   packages/journey-runner:
     dependencies:
@@ -383,22 +481,6 @@ importers:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
-
-  packages/journey-runtime:
-    dependencies:
-      '@openuji/journey-execution-model':
-        specifier: workspace:*
-        version: link:../journey-execution-model
-      '@openuji/journey-runner':
-        specifier: workspace:*
-        version: link:../journey-runner
-      yaml:
-        specifier: 2.9.1
-        version: 2.9.1
-    devDependencies:
-      tsx:
-        specifier: ^4.20.3
-        version: 4.23.1
 
   vendor/journey-path:
     dependencies:

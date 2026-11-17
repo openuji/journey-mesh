@@ -1,9 +1,14 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/journey-observer-ux/tsconfig.json" },
+    {
+      "path": "packages/journey-observer-ux/tsconfig.json"
+    },
     {
       "path": "packages/journey-core/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-plugin/tsconfig.json"
     },
     {
       "path": "packages/journey-execution-model/tsconfig.json"
@@ -39,10 +44,13 @@
       "path": "packages/journey-observer-android-accessibility/tsconfig.json"
     },
     {
-      "path": "packages/journey-runtime/tsconfig.json"
+      "path": "packages/journey-host/tsconfig.json"
     },
     {
       "path": "packages/journey-cli/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-reporter/tsconfig.json"
     }
   ]
 }

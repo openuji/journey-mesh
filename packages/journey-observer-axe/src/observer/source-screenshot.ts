@@ -1,11 +1,8 @@
-import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
-import { axeArtifacts } from "../artifacts/artifact-target.js";
 import type { PlaywrightOperationObservation } from "@openuji/journey-adapter-playwright";
 import { errorToJourneyRunError } from "@openuji/journey-runner";
 
 import type { AxeJourneyItem, AxeObserverOptions } from "../types.js";
-import { immutableSnapshot } from "../shared/immutable.js";
+import { immutableSnapshot } from "@openuji/journey-core";
 import { safeFileSegment } from "../shared/strings.js";
 import type { AxeScreenshotEvidence } from "./evidence.js";
 
@@ -18,20 +15,16 @@ export async function captureStateSourceScreenshot(
     return Object.freeze({ kind: "not-requested" });
   }
 
-  const href = `${safeFileSegment(journeyItem.auditId)}.source.playwright-screenshot.png`;
-  const artifacts = axeArtifacts(options);
-  const path = artifacts.outputPath(href);
   try {
-    await mkdir(dirname(path), { recursive: true });
-    await observation.page.screenshot({
-      path,
+    const data = await observation.page.screenshot({
       fullPage: options.sourceScreenshots.fullPage ?? true,
       timeout: options.sourceScreenshots.timeoutMs
     });
-    await artifacts.attach(`playwright-${safeFileSegment(journeyItem.auditId)}-source.png`, {
-      path, contentType: "image/png"
+    const artifact = await options.artifacts.write({
+      name: `${safeFileSegment(journeyItem.auditId)}.source.playwright-screenshot.png`, data, contentType: "image/png",
+      scope: { runId: observation.execution.runId, executionId: observation.execution.executionId, profileId: observation.execution.profile.id, operationId: observation.operation.id }
     });
-    return Object.freeze({ kind: "captured", href });
+    return Object.freeze({ kind: "captured", href: artifact.href });
   } catch (error) {
     return immutableSnapshot({ kind: "failed", error: errorToJourneyRunError(error) });
   }

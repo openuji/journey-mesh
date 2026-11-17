@@ -5,6 +5,7 @@ import {
   deleteFileIfExists,
   deleteOcsResource,
   ensureFileExists,
+  expectOk,
   isFixtureShare,
   listOcsShares,
   nextcloudFetch,
@@ -166,6 +167,9 @@ export function createNextcloudFederatedSharingEnvironment(
     user: NextcloudUserConfig,
     path: string
   ): Promise<void> {
+    const file = await nextcloudFetch(touchpoint, user, davFileUrl(touchpoint, user, fixtureFileName), { method: "HEAD" });
+    if (file.status === 404) return;
+    await expectOk(file, `check fixture before outgoing-share cleanup for ${user.username}`);
     const shares = await listOcsShares(touchpoint, user, "/apps/files_sharing/api/v1/shares", {
       path
     });

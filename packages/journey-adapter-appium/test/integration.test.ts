@@ -182,3 +182,16 @@ test("a session allocated after cancellation is transactionally closed", async (
   await new Promise<void>((done) => setImmediate(done));
   assert.equal(closed, 1);
 });
+
+test("native action observations retain commands when a later state assertion fails", async () => {
+  const session = new Session();
+  const actions: import("@openuji/journey-core").JourneyInputAction[] = [];
+  const failedState = { ...state, target: { ...state.target, expectedMatchCount: 0 } };
+  const result = await runJourney({ plan: { id: "action-observation", operations: [transition, failedState] }, profiles: [{ id: "touch", selectInputModality() { return { profileId: "touch", inputModalityProfile: inputProfile, modality: inputProfile.modalities[0] }; } }], adapter: appiumAdapter({ ...options(session), executionObservers: [{ name: "action-log", onAction(action) { actions.push(action); } }] }) });
+  assert.equal(result.ok, false);
+  assert.deepEqual(actions.map((action) => action.status), ["attempted", "completed"]);
+  assert.equal(actions[0].id, actions[1].id);
+  assert.equal(actions[0].operationId, transition.id);
+  assert.equal(Object.isFrozen(actions[0]), true);
+  assert.doesNotMatch(JSON.stringify(actions), /alice/);
+});

@@ -1,10 +1,9 @@
+import { immutableSnapshot, type JourneyObserverOutput, type JourneyMeasurement } from "@openuji/journey-core";
 import type { AppiumExecutionObserver, AppiumOperationObservation } from "@openuji/journey-adapter-appium";
-import { errorToJourneyRunError, type JourneyReporter } from "@openuji/journey-runner";
-import type { AndroidAccessibilityEvidence, AndroidArtifactReader, AndroidArtifactWriter, AndroidCapture, AndroidOperationEvidence } from "./evidence.js";
+import { errorToJourneyRunError, type RunResult } from "@openuji/journey-runner";
+import type { AndroidAccessibilityEvidence, AndroidArtifactWriter, AndroidCapture, AndroidOperationEvidence } from "./evidence.js";
 import { checkAndroidHierarchy, parseAndroidHierarchy, redactAndroidHierarchy } from "./hierarchy.js";
-import { immutableSnapshot } from "./immutable.js";
-import { androidAccessibilityFindings, buildAndroidAccessibilityReport, renderAndroidAccessibilityReport, type AndroidAccessibilityReport } from "./report.js";
-import { loadAndroidReportResources } from "./report-resources.js";
+import { androidAccessibilityFindings, buildAndroidAccessibilityReport } from "./report.js";
 
 export type * from "./evidence.js";
 export type * from "./hierarchy.js";
@@ -12,23 +11,20 @@ export { checkAndroidHierarchy, parseAndroidHierarchy, redactAndroidHierarchy } 
 export { androidAccessibilityFindings, buildAndroidAccessibilityReport, renderAndroidAccessibilityReport } from "./report.js";
 export type { AndroidAccessibilityReport, AndroidAccessibilityPathItem, AndroidReportResource } from "./report.js";
 export { loadAndroidReportResources } from "./report-resources.js";
+export { isAndroidAccessibilityOutput } from "./output.js";
+export type { AndroidAccessibilityObserverOutput } from "./output.js";
 
 export type AndroidAccessibilityObserverOptions = Readonly<{
   reportId: string;
   writeArtifact: AndroidArtifactWriter;
-  /** Defaults to reading artifact.path from disk; custom stores supply their reader. */
-  readArtifact?: AndroidArtifactReader;
   screenshots?: boolean;
   strict?: boolean;
   excludedPhaseIds?: readonly string[];
   now?: () => string;
 }>;
-export type AndroidAccessibilityObserver = AppiumExecutionObserver & JourneyReporter & {
+export type AndroidAccessibilityObserver = AppiumExecutionObserver & {
   readonly evidence: readonly AndroidAccessibilityEvidence[];
-  readonly latestReport: AndroidAccessibilityReport | undefined;
-  readonly latestReportPath: string | undefined;
-  readonly latestJsonPath: string | undefined;
-  readonly latestEvidencePath: string | undefined;
+  output(result: RunResult): JourneyObserverOutput;
 };
 
 export function androidAccessibilityObserver(options: AndroidAccessibilityObserverOptions): AndroidAccessibilityObserver {
@@ -38,15 +34,10 @@ export function androidAccessibilityObserver(options: AndroidAccessibilityObserv
   });
   // The append boundary owns mutable storage. Every fact and published view is immutable.
   let facts: readonly AndroidAccessibilityEvidence[] = Object.freeze([]);
-  let published: Readonly<{ report: AndroidAccessibilityReport; htmlPath: string; jsonPath: string; evidencePath: string }> | undefined;
   const append = (fact: AndroidAccessibilityEvidence) => { facts = Object.freeze([...facts, immutableSnapshot(fact)]); };
   return {
     name: "@openuji/journey-observer-android-accessibility", version: "0.1.0",
     get evidence() { return facts; },
-    get latestReport() { return published?.report; },
-    get latestReportPath() { return published?.htmlPath; },
-    get latestJsonPath() { return published?.jsonPath; },
-    get latestEvidencePath() { return published?.evidencePath; },
     onExecutionStarted({ execution }) { append(immutableSnapshot({ kind: "execution-started", execution })); },
     async observeOperation(observation) {
       const collected = await collectAndroidEvidence(observation, configuredOptions, facts.length);
@@ -54,18 +45,17 @@ export function androidAccessibilityObserver(options: AndroidAccessibilityObserv
       const failures = [collected.hierarchy, collected.metrics, collected.screenshot].flatMap((capture) => capture?.kind === "failed" ? [capture.error] : []);
       if (failures.length) throw new Error(`Android evidence collection failed: ${failures.map((error) => error.message).join("; ")}`);
     },
-    async report({ result }) {
+    output(result) {
       const evidence = facts.filter((fact) => fact.kind === "execution-started" ? fact.execution.runId === result.runId : fact.evidence.runId === result.runId);
       const report = buildAndroidAccessibilityReport({ reportId: configuredOptions.reportId, createdAt: (configuredOptions.now ?? (() => new Date().toISOString()))(), result, evidence, strict: configuredOptions.strict ?? false });
-      const resources = await loadAndroidReportResources(report, configuredOptions.readArtifact);
-      // Content-addressed bundles keep previously published files intact if a later write fails.
-      const name = `${safeName(configuredOptions.reportId)}-${identityHash(JSON.stringify([report, evidence, resources]))}`;
-      const journal = await configuredOptions.writeArtifact({ name: `${name}.evidence.json`, data: JSON.stringify(evidence, null, 2), contentType: "application/json" });
-      const json = await configuredOptions.writeArtifact({ name: `${name}.json`, data: JSON.stringify(report, null, 2), contentType: "application/json" });
-      const html = await configuredOptions.writeArtifact({ name: `${name}.html`, data: renderAndroidAccessibilityReport(report, resources), contentType: "text/html" });
-      published = Object.freeze({ report, htmlPath: html.path, jsonPath: json.path, evidencePath: journal.path });
+      const measurements: JourneyMeasurement[] = result.evidence.executions.map((execution) => {
+        const items = report.items.filter((item) => item.executionId === execution.executionId);
+        const checked = items.filter((item) => item.status === "checked");
+        const complete = result.executions.find((item) => item.executionId === execution.executionId)?.outcome.kind === "passed" && !items.some((item) => item.status === "error" || item.status === "skipped");
+        return { id: "android/hierarchy-findings", label: "Android hierarchy findings across checks", method: "android-hierarchy-heuristics", unit: "finding", aggregation: "sum-across-checks", scope: { runId: result.runId, executionId: execution.executionId, profileId: execution.profileId, operationIds: execution.operations.map((op) => op.operationId) }, status: !checked.length ? "unavailable" : complete ? "available" : "partial", value: checked.length ? checked.flatMap((item) => item.checks).filter((check) => check.status === "finding").length : null, ...(!checked.length ? { reason: "No completed hierarchy checks." } : !complete ? { reason: "Execution or hierarchy collection did not complete." } : {}) };
+      });
       const findings = androidAccessibilityFindings(evidence, result.runId);
-      if (configuredOptions.strict && findings.length) throw new Error(`Android hierarchy checks recorded ${findings.length} potential finding(s) across observed surfaces. See the native evidence reports.`);
+      return immutableSnapshot({ id: configuredOptions.reportId, kind: "android-accessibility", measurements, evidence: { journal: evidence, report }, errors: configuredOptions.strict && findings.length ? [{ name: "AndroidStrictError", message: `Android hierarchy checks recorded ${findings.length} potential finding(s).` }] : [] });
     }
   };
 }
@@ -88,14 +78,15 @@ async function collectAndroidEvidence(observation: AppiumOperationObservation, o
   const hierarchy = await capture(async () => {
     const xml = redactAndroidHierarchy(await observation.session.source());
     const nodes = parseAndroidHierarchy(xml);
-    const artifact = await options.writeArtifact({ name: `${prefix}.hierarchy.xml`, data: xml, contentType: "application/xml" });
-    return { nodes, artifact };
+    const { href } = await options.writeArtifact({ name: `${prefix}.hierarchy.xml`, data: xml, contentType: "application/xml", scope: { runId: target.runId, executionId: target.executionId, profileId: target.profileId, operationId: target.operation.id } });
+    return { nodes, artifact: { href } };
   });
   const metrics = await capture(() => observation.session.deviceMetrics());
   const screenshot = options.screenshots ? await capture(async () => {
     const data = Buffer.from(await observation.session.screenshot(), "base64");
     if (!data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new Error("Native screenshot is not a PNG image");
-    return options.writeArtifact({ name: `${prefix}.png`, data, contentType: "image/png" });
+    const { href } = await options.writeArtifact({ name: `${prefix}.png`, data, contentType: "image/png", scope: { runId: target.runId, executionId: target.executionId, profileId: target.profileId, operationId: target.operation.id } });
+    return { href };
   }) : { kind: "not-requested" as const };
   const checks = hierarchy.kind === "captured" ? checkAndroidHierarchy(hierarchy.value.nodes, metrics.kind === "captured" ? metrics.value : {}) : [];
   return immutableSnapshot({ ...target, expectedMatchCount, targets, hierarchy, metrics, screenshot, checks });
@@ -110,7 +101,6 @@ async function capture<T>(read: () => Promise<T>): Promise<AndroidCapture<T>> {
   try { return { kind: "captured", value: await read() }; }
   catch (error) { return { kind: "failed", error: errorToJourneyRunError(error) }; }
 }
-function safeName(value: string): string { return value.replace(/[^a-zA-Z0-9_.-]/g, "-").slice(0, 100) || "android-accessibility"; }
 function identityHash(value: string): string {
   return [...value].reduce((hash, char) => BigInt.asUintN(64, (hash ^ BigInt(char.codePointAt(0)!)) * 1099511628211n), 14695981039346656037n).toString(16);
 }

@@ -32,31 +32,37 @@ jobs:
       - run: pnpm build && pnpm typecheck && pnpm test
       - name: Install Chromium
         run: pnpm --filter @openuji/journey-adapter-playwright exec playwright install --with-deps chromium
+      - name: Check report viewer controls, journey paths and layouts
+        run: pnpm --filter @openuji/journey-reporter test:browser
       - name: Register the canonical web hostname
         run: echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
-      - name: Run isolated release and PR journeys
-        id: journeys
+      - name: Preflight both subjects before either stack starts
+        run: pnpm --filter @openuji/example-nextcloud-filesharing comparison:validate
+      - name: Run the release journeys
+        id: baseline
         continue-on-error: true
-        run: pnpm --filter @openuji/example-nextcloud-filesharing comparison:run
-      - name: Retain functional, UX, and accessibility evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: nextcloud-acceptance-evidence
-          path: examples/nextcloud-filesharing/test-results/comparison
-          retention-days: 90
+        run: pnpm --filter @openuji/example-nextcloud-filesharing comparison:baseline
+      - name: Run the PR journeys
+        id: candidate
+        continue-on-error: true
+        run: pnpm --filter @openuji/example-nextcloud-filesharing comparison:candidate
+      - name: Compare the saved runs
+        id: journeys
+        if: ${{ !cancelled() && steps.baseline.outcome != 'skipped' }}
+        continue-on-error: true
+        run: pnpm --filter @openuji/example-nextcloud-filesharing comparison:compare
       - name: Upload Pages bundle
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (steps.journeys.outcome == 'success' || steps.journeys.outcome == 'failure') }}
         uses: actions/upload-pages-artifact@v3
         with:
-          path: examples/nextcloud-comparison-report/dist
-      - name: Upload downloadable report
+          path: examples/nextcloud-filesharing/test-results/comparison
+      - name: Upload downloadable report and evidence
         id: report
         if: ${{ !cancelled() && (steps.journeys.outcome == 'success' || steps.journeys.outcome == 'failure') }}
         uses: actions/upload-artifact@v4
         with:
           name: nextcloud-acceptance-report
-          path: examples/nextcloud-comparison-report/dist
+          path: examples/nextcloud-filesharing/test-results/comparison
           if-no-files-found: error
           retention-days: 90
       - name: Link report download
@@ -66,9 +72,6 @@ jobs:
         run: |
           echo "[Download comparison report]($REPORT_ARTIFACT_URL)" >> "$GITHUB_STEP_SUMMARY"
           echo 'Extract the archive and run `python3 -m http.server 8000` inside it, then open http://localhost:8000.' >> "$GITHUB_STEP_SUMMARY"
-      - name: Stop comparison stacks
-        if: always()
-        run: pnpm --filter @openuji/example-nextcloud-filesharing comparison:down
 
   publish:
     needs: comparison
@@ -88,7 +91,7 @@ jobs:
           REPORT_URL: ${{ steps.deployment.outputs.page_url }}
         run: |
           echo "Nextcloud acceptance comparison: [$REPORT_URL]($REPORT_URL)" >> "$GITHUB_STEP_SUMMARY"
-          echo "Pinned PR source: fa7f792213a5f2782b0a77f7c8d70ddec82a7370; baseline: 34.0.2." >> "$GITHUB_STEP_SUMMARY"
+          echo "Tested identities and source pins are included in the report provenance." >> "$GITHUB_STEP_SUMMARY"
 
   result:
     needs: [comparison, publish]

@@ -4,17 +4,24 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "exports": { ".": "./src/index.ts", "./plugin": "./src/plugin.ts", "./playwright": "./src/playwright.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./plugin": "./src/plugin.ts",
+    "./playwright": "./src/playwright.ts"
+  },
   "dependencies": {
     "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
     "@openuji/journey-adapter-playwright": "workspace:*",
-    "@openuji/journey-runtime": "workspace:*"
+    "@openuji/journey-core": "workspace:*",
+    "@openuji/journey-plugin": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "test": "node --import tsx --test test/*.test.ts"
   },
-  "devDependencies": { "tsx": "^4.20.3" }
+  "devDependencies": {
+    "tsx": "^4.20.3"
+  }
 }

@@ -12,7 +12,7 @@ import type {
 } from "../types.js";
 import { addAxeSummaries, summarizeResults } from "../reporting/report-summary.js";
 import { stringTargets, urlPath } from "../shared/strings.js";
-import { immutableSnapshot } from "../shared/immutable.js";
+import { immutableSnapshot } from "@openuji/journey-core";
 
 export function buildAxeAuditReport(
   input: Pick<AxeAuditRunnerInput, "auditId" | "metadata"> & { createdAt: string; url: string; strict: boolean },

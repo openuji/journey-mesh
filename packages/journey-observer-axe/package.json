@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./plugin": "./src/plugin.ts"
+    "./plugin": "./src/plugin.ts",
+    "./reporter": "./src/reporter.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
@@ -14,7 +15,9 @@
     "@openuji/journey-adapter-playwright": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
     "playwright": "^1.61.1",
-    "@openuji/journey-runtime": "workspace:*"
+    "@openuji/journey-reporter": "workspace:*",
+    "@openuji/journey-core": "workspace:*",
+    "@openuji/journey-plugin": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -23,6 +26,7 @@
     "test": "node --import tsx --test test/*.test.ts"
   },
   "devDependencies": {
-    "tsx": "^4.20.3"
+    "tsx": "^4.20.3",
+    "@openuji/journey-reporter": "workspace:*"
   }
 }

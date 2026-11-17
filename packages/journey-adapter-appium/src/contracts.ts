@@ -1,3 +1,4 @@
+import type { JourneyInputAction } from "@openuji/journey-core";
 import type {
   ControlFlowPlanOperation,
   InputModalityDecision,
@@ -61,5 +62,6 @@ export type AppiumExecutionObserver = {
   readonly name: string;
   readonly version?: string;
   onExecutionStarted?(input: { readonly execution: JourneyExecutionDescriptor }): Promise<void> | void;
+  onAction?(action: JourneyInputAction): Promise<void> | void;
   observeOperation?(observation: AppiumOperationObservation): Promise<void> | void;
 };

@@ -1,3 +1,4 @@
+import type { JourneyInputAction } from "@openuji/journey-core";
 import {
   chromium,
   type Browser,
@@ -36,6 +37,7 @@ import {
   type PlaywrightResource
 } from "./lifecycle.js";
 
+export { playwrightAutomation } from "./automation.js";
 export { playwrightCommandForModality } from "./input-modalities.js";
 export type { PlaywrightInteractionCommand } from "./input-modalities.js";
 export {
@@ -48,24 +50,12 @@ export type {
   PlaywrightLifecycleStatus,
   PlaywrightResource
 } from "./lifecycle.js";
-export { playwrightJsonEvidenceReporter, playwrightJourneyRunSummaryReporter } from "./reporters.js";
 export type {
   PlaywrightExecutionObserver,
   PlaywrightJourneyObserver,
   PlaywrightObserverExecutionStartedInput,
   PlaywrightOperationObservation
 } from "./observers/contracts.js";
-export type {
-  PlaywrightJourneyRunSummaryReporter,
-  PlaywrightJourneyRunSummaryReporterOptions,
-  PlaywrightJsonEvidenceReporter,
-  PlaywrightJsonEvidenceReporterOptions,
-  PlaywrightSummaryArtifact,
-  PlaywrightSummaryArtifactSource,
-  PlaywrightTestAttachment,
-  PlaywrightTestInfoLike
-} from "./reporters.js";
-
 export type PlaywrightAdapterOptions = Readonly<{
   driver: WebJourneyDriver;
   executionObservers?: readonly PlaywrightExecutionObserver[];
@@ -134,6 +124,7 @@ function freezeConfigValue<T>(value: T): T {
 }
 
 class PlaywrightAdapterExecution implements JourneyAdapterExecution {
+  private actionSequence = 0;
   private state: PlaywrightLifecycleState = initialPlaywrightLifecycleState();
   private readonly context: JourneyExecutionContext;
   private readonly execution: JourneyExecutionDescriptor;
@@ -228,7 +219,21 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
       ? this.options.driver.resolveTransitionValue(operation)
       : undefined;
     this.context.signal?.throwIfAborted();
-    await activatePlaywrightLocator(locator, command, text);
+    if (command === "keyboard-text-entry" && !text) throw new Error("keyboard-text-entry requires a transition text value");
+    const action: JourneyInputAction = Object.freeze({
+      id: `${this.execution.executionId}/action/${this.actionSequence++}`,
+      runId: this.execution.runId, executionId: this.execution.executionId,
+      profileId: this.execution.profile.id, operationId: operation.id,
+      modalityId: decision.modality.id, command, unit: "adapter-command", status: "attempted"
+    });
+    await this.observers.action(action);
+    try {
+      await activatePlaywrightLocator(locator, command, text);
+    } catch (error) {
+      await this.observers.action({ ...action, status: "failed", error: { name: error instanceof Error ? error.name : "Error", message: String(error) } });
+      throw error;
+    }
+    await this.observers.action({ ...action, status: "completed" });
     this.context.signal?.throwIfAborted();
   }
 

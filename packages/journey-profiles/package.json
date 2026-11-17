@@ -12,7 +12,7 @@
   "dependencies": {
     "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
-    "@openuji/journey-runtime": "workspace:*"
+    "@openuji/journey-plugin": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

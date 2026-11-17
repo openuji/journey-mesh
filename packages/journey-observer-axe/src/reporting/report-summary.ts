@@ -5,7 +5,7 @@ import type {
   AxePathAuditSummary,
   AxeResults
 } from "../types.js";
-import type { Immutable } from "../shared/immutable.js";
+import type { Immutable } from "@openuji/journey-core";
 
 export function summarizePathItems(items: readonly AxePathAuditItem[]): AxePathAuditSummary {
   return items.reduce(

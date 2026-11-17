@@ -136,6 +136,11 @@ export type JourneyOperationSource = {
 export type JourneyPlanOperationKind = "state" | "transition" | "control-flow";
 
 export type JourneyPlanOperationBase<K extends JourneyPlanOperationKind> = CoreJourneyOperation<K> & {
+  /**
+   * The configured journey this operation belongs to when several journeys are composed into one plan.
+   * Hosts route execution by segment; `source` stays provenance only.
+   */
+  segment?: string;
   actorId: string;
   touchpointId: string;
   entry: JourneyEntryRef;

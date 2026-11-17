@@ -10,3 +10,4 @@ export interface JourneyPlan<
   readonly id: string;
   readonly operations: readonly TOperation[];
 }
+export * from "./observations.js";

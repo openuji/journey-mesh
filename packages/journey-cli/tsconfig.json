@@ -11,7 +11,16 @@
   ],
   "references": [
     {
-      "path": "../journey-runtime/tsconfig.json"
+      "path": "../journey-host/tsconfig.json"
+    },
+    {
+      "path": "../journey-reporter/tsconfig.json"
+    },
+    {
+      "path": "../journey-runner/tsconfig.json"
+    },
+    {
+      "path": "../journey-plugin"
     }
   ]
 }

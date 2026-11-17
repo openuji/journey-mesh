@@ -1,12 +1,11 @@
-import type { JourneyEnvironment } from "@openuji/journey-runner";
 import {
   booleanOption,
+  defineEnvironmentPlugin,
   knownOptions,
   optionsObject,
   positiveNumber,
-  requiredString,
-  type JourneyMeshPlugin
-} from "@openuji/journey-runtime/plugin";
+  requiredString
+} from "@openuji/journey-plugin";
 
 import {
   createNextcloudFederatedSharingEnvironment,
@@ -62,10 +61,9 @@ function recipientViewConfigOption(value: unknown): NonNullable<NextcloudFederat
   ]));
 }
 
-export const journeyMeshPlugin: JourneyMeshPlugin<JourneyEnvironment> = {
-  apiVersion: 1,
+export const journeyMeshPlugin = defineEnvironmentPlugin({
   kind: "environment",
-  validate(options, context) {
+  parse(options, context) {
     knownOptions(options, [
       "sharerTouchpoint",
       "recipientTouchpoint",
@@ -78,9 +76,9 @@ export const journeyMeshPlugin: JourneyMeshPlugin<JourneyEnvironment> = {
       "recipientViewConfig",
       "timeoutMs"
     ]);
-    createNextcloudFederatedSharingEnvironment(environmentOptions(options, (path) => context.resolvePath(path)));
+    const settings = environmentOptions(options, (path) => context.resolvePath(path));
+    createNextcloudFederatedSharingEnvironment(settings);
+    return settings;
   },
-  create(options, context) {
-    return createNextcloudFederatedSharingEnvironment(environmentOptions(options, (path) => context.resolvePath(path)));
-  }
-};
+  create(settings) { return createNextcloudFederatedSharingEnvironment(settings); }
+});

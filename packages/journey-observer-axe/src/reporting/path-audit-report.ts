@@ -18,7 +18,7 @@ import {
 } from "../artifacts/report-file-names.js";
 import { summarizePathItems, summarizeResults } from "./report-summary.js";
 import { stringTargets } from "../shared/strings.js";
-import { immutableSnapshot, type Immutable } from "../shared/immutable.js";
+import { immutableSnapshot, type Immutable } from "@openuji/journey-core";
 
 export function buildAxePathAuditReport(input: {
   reportId: string;
@@ -29,7 +29,7 @@ export function buildAxePathAuditReport(input: {
 }): AxePathAuditReport {
   const items = input.items.map(buildAxePathItem);
   return immutableSnapshot({
-    schemaVersion: "ujg-fed-a11y.axe-path.v1",
+    format: "journey-mesh/axe-path",
     reportId: input.reportId,
     createdAt: input.createdAt,
     wcagTags: [...(input.wcagTags ?? [])],

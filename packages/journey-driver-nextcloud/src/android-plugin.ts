@@ -1,5 +1,5 @@
-import { androidDriverContract, type AndroidJourneyDriver } from "@openuji/journey-driver-android";
-import { knownOptions, optionsObject, requiredString, type JourneyMeshPlugin } from "@openuji/journey-runtime/plugin";
+import { androidDriverContract } from "@openuji/journey-driver-android";
+import { defineDriverPlugin, knownOptions, optionsObject, requiredString } from "@openuji/journey-plugin";
 import { nextcloudAndroidDriver, type NextcloudAndroidEntry } from "./android.js";
 import { pluginBindings, validateConfiguredOperations } from "./plugin-options.js";
 
@@ -12,14 +12,14 @@ function entries(options: Record<string, unknown>): Record<string, NextcloudAndr
   }));
 }
 
-export const journeyMeshPlugin: JourneyMeshPlugin<AndroidJourneyDriver> = {
-  apiVersion: 1, kind: "driver", driverContract: androidDriverContract,
-  validate(options, context) {
+export const journeyMeshPlugin = defineDriverPlugin({
+  kind: "driver", driverContract: androidDriverContract,
+  parse(options, context) {
     knownOptions(options, ["touchpoints", "users", "entries", "transitionValues"]);
     validateConfiguredOperations(options, context.operations);
-    nextcloudAndroidDriver({ ...pluginBindings(options), entries: entries(options) });
+    const settings = { ...pluginBindings(options), entries: entries(options) };
+    nextcloudAndroidDriver(settings);
+    return settings;
   },
-  create(options) {
-    return nextcloudAndroidDriver({ ...pluginBindings(options), entries: entries(options) });
-  }
-};
+  create(settings) { return nextcloudAndroidDriver(settings); }
+});

@@ -1,8 +1,7 @@
 import type { AxeBuilder } from "@axe-core/playwright";
-import type { JourneyArtifactStore } from "@openuji/journey-runtime/plugin";
-import type { AxeArtifactSink } from "./artifacts/artifact-target.js";
+import type { JourneyArtifactStore } from "@openuji/journey-plugin";
 import type { Locator, Page } from "playwright";
-import type { Immutable } from "./shared/immutable.js";
+import type { Immutable } from "@openuji/journey-core";
 import type { AxeEvidence } from "./observer/evidence.js";
 
 import type {
@@ -10,7 +9,7 @@ import type {
   PlaywrightOperationObservation
 } from "@openuji/journey-adapter-playwright";
 import type {
-  JourneyReporter,
+  RunResult,
   JsonObject
 } from "@openuji/journey-runner";
 
@@ -127,7 +126,7 @@ export type AxePathAuditSummary = {
 };
 
 export type AxePathAuditReport = Immutable<{
-  schemaVersion: "ujg-fed-a11y.axe-path.v1";
+  format: "journey-mesh/axe-path";
   reportId: string;
   createdAt: string;
   wcagTags: string[];
@@ -158,14 +157,12 @@ export type AxeAccessibilitySummaryProfile = {
 };
 
 export type AxeAccessibilitySummaryReport = Immutable<{
-  schemaVersion: "ujg-fed-a11y.accessibility-summary-by-graph-id.v1";
+  format: "journey-mesh/accessibility-summary";
   generatedAt: string;
   source: {
-    testResultDirectoryName?: string;
     reportId: string;
     reportMode: string;
     reportCreatedAt: string;
-    delivery?: string;
     aggregateHtmlHref: string;
     summary: AxePathAuditSummary;
   };
@@ -197,8 +194,6 @@ export type AxePathAuditItemInput = Immutable<
 
 export type AxeAuditRunnerInput = {
   page: Page;
-  testInfo?: AxeArtifactSink;
-  artifacts?: JourneyArtifactStore;
   resolvedLocator: Locator;
   auditId: string;
   metadata?: Immutable<AxeAuditMetadata>;
@@ -210,8 +205,7 @@ export type AxeAuditRunnerInput = {
 export type AxeAuditRunner = (input: AxeAuditRunnerInput) => Promise<AxeAuditReport>;
 
 export type AxeObserverOptions = {
-  testInfo?: AxeArtifactSink;
-  artifacts?: JourneyArtifactStore;
+  artifacts: JourneyArtifactStore;
   reportId: string;
   metadata?: Immutable<AxeAuditMetadata>;
   strict?: boolean;
@@ -224,19 +218,14 @@ export type AxeObserverOptions = {
     fullPage?: boolean;
     timeoutMs?: number;
   };
-  accessibilitySummary?: {
-    delivery?: string;
-    artifactBaseHref?: string;
-  };
   auditRunner?: AxeAuditRunner;
+  /** Clock for report timestamps; injectable for deterministic output. */
+  now?: () => string;
 };
 
-export type AxeObserver = PlaywrightExecutionObserver & JourneyReporter & {
+export type AxeObserver = PlaywrightExecutionObserver & {
   readonly evidence: readonly AxeEvidence[];
-  readonly latestPathReport?: AxePathAuditReport;
-  readonly latestPathReportPath?: string;
-  readonly latestAccessibilitySummaryReport?: AxeAccessibilitySummaryReport;
-  readonly latestAccessibilitySummaryReportPath?: string;
+  output(result: RunResult): import("@openuji/journey-core").JourneyObserverOutput;
 };
 
 export type AxeJourneyOperation = Immutable<PlaywrightOperationObservation["operation"]>;

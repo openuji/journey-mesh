@@ -1,23 +1,8 @@
-import { androidDriverContract, type AndroidJourneyDriver } from "@openuji/journey-driver-android";
-import {
-  knownOptions, optionsObject, positiveNumber, requiredString, type JourneyMeshPlugin
-} from "@openuji/journey-runtime/plugin";
-import type { JourneyAdapter } from "@openuji/journey-runner";
+import { androidDriverContract } from "@openuji/journey-driver-android";
+import { defineAdapterPlugin, knownOptions, optionsObject, positiveNumber, requiredString } from "@openuji/journey-plugin";
 import { ensureApk } from "./application.js";
-import { appiumAdapter, type AppiumDeviceConfig, type AppiumExecutionObserver } from "./index.js";
-
-type ApplicationConfig = Readonly<{ apk: string; url: string; sha256: string; package: string; activity: string }>;
-
-function applicationConfig(options: Record<string, unknown>): ApplicationConfig {
-  const application = optionsObject(options.application, "application");
-  return Object.freeze({
-    apk: requiredString(application.apk, "application.apk"),
-    url: requiredString(application.url, "application.url"),
-    sha256: requiredString(application.sha256, "application.sha256"),
-    package: requiredString(application.package, "application.package"),
-    activity: requiredString(application.activity, "application.activity")
-  });
-}
+import { appiumAutomation } from "./automation.js";
+import { appiumAdapter, type AppiumDeviceConfig } from "./index.js";
 
 function endpoint(value: unknown): URL {
   if (typeof value !== "string") throw new Error("Appium endpoint must be an HTTP(S) URL");
@@ -29,49 +14,35 @@ function endpoint(value: unknown): URL {
   return url;
 }
 
-async function configuration(options: Record<string, unknown>, resolvePath: (path: string) => string) {
-  const application = applicationConfig(options);
-  const apk = resolvePath(typeof options.apk === "string" && options.apk
-    ? options.apk
-    : `${requiredString(options.apkDirectory, "apkDirectory")}/${application.apk}`);
-  await ensureApk({ path: apk, url: application.url, sha256: application.sha256 });
-  const devices = Object.fromEntries(Object.entries(optionsObject(options.devices, "devices")).map(([id, raw]) => {
-    const device = optionsObject(raw, `device ${id}`);
-    return [id, Object.freeze({
-      udid: requiredString(device.udid, `device ${id}.udid`),
-      capabilities: optionsObject(device.capabilities ?? {}, `device ${id}.capabilities`)
-    }) satisfies AppiumDeviceConfig];
-  }));
-  return Object.freeze({ application, apk, devices: Object.freeze(devices) });
-}
-
-export const journeyMeshPlugin: JourneyMeshPlugin<JourneyAdapter> = {
-  apiVersion: 1,
-  kind: "adapter",
-  runtime: "appium",
-  driverContract: androidDriverContract,
-  async validate(options, context) {
+export const journeyMeshPlugin = defineAdapterPlugin({
+  kind: "adapter", automation: appiumAutomation, driverContract: androidDriverContract,
+  parse(options, context) {
     knownOptions(options, ["endpoint", "assertionTimeoutMs", "pollIntervalMs", "application", "apkDirectory", "apk", "devices"]);
-    endpoint(options.endpoint ?? "http://127.0.0.1:4723/");
-    positiveNumber(options.assertionTimeoutMs, 60_000);
-    positiveNumber(options.pollIntervalMs, 200);
-    const configured = await configuration(options, context.resolvePath);
-    for (const operation of context.operations) {
-      if (!configured.devices[operation.touchpointId]) throw new Error(`Missing device for touchpoint ${operation.touchpointId}`);
-    }
-  },
-  async create(options, context, dependencies) {
-    if (!dependencies.driver) throw new Error("Appium requires a driver");
-    const url = endpoint(options.endpoint ?? "http://127.0.0.1:4723/");
-    const configured = await configuration(options, context.resolvePath);
-    return appiumAdapter({
-      driver: dependencies.driver as AndroidJourneyDriver,
-      application: { apk: configured.apk, package: configured.application.package, activity: configured.application.activity },
-      devices: configured.devices,
-      executionObservers: dependencies.observers as readonly AppiumExecutionObserver[],
-      connection: { hostname: url.hostname, port: Number(url.port || (url.protocol === "https:" ? 443 : 80)), protocol: url.protocol === "https:" ? "https" : "http", path: url.pathname },
+    const raw = optionsObject(options.application, "application");
+    const application = Object.freeze({
+      apk: requiredString(raw.apk, "application.apk"), url: requiredString(raw.url, "application.url"), sha256: requiredString(raw.sha256, "application.sha256"),
+      package: requiredString(raw.package, "application.package"), activity: requiredString(raw.activity, "application.activity")
+    });
+    const devices: Record<string, AppiumDeviceConfig> = Object.fromEntries(Object.entries(optionsObject(options.devices, "devices")).map(([id, value]) => {
+      const device = optionsObject(value, `device ${id}`);
+      return [id, Object.freeze({ udid: requiredString(device.udid, `device ${id}.udid`), capabilities: optionsObject(device.capabilities ?? {}, `device ${id}.capabilities`) })];
+    }));
+    for (const operation of context.operations) if (!devices[operation.touchpointId]) throw new Error(`Missing device for touchpoint ${operation.touchpointId}`);
+    return {
+      endpoint: endpoint(options.endpoint ?? "http://127.0.0.1:4723/"), application, devices: Object.freeze(devices),
+      apk: context.resolvePath(typeof options.apk === "string" && options.apk ? options.apk : `${requiredString(options.apkDirectory, "apkDirectory")}/${application.apk}`),
       assertionTimeoutMs: positiveNumber(options.assertionTimeoutMs, 60_000),
       pollIntervalMs: positiveNumber(options.pollIntervalMs, 200)
+    };
+  },
+  create({ endpoint: url, application, apk, devices, assertionTimeoutMs, pollIntervalMs }, _context, { driver, observers }) {
+    if (!driver) throw new Error("Appium requires a driver");
+    return appiumAdapter({
+      driver, devices, executionObservers: observers, assertionTimeoutMs, pollIntervalMs,
+      application: { apk, package: application.package, activity: application.activity },
+      // The pinned APK is downloaded when an execution starts, never during validation.
+      prepare: () => ensureApk({ path: apk, url: application.url, sha256: application.sha256 }),
+      connection: { hostname: url.hostname, port: Number(url.port || (url.protocol === "https:" ? 443 : 80)), protocol: url.protocol === "https:" ? "https" : "http", path: url.pathname }
     });
   }
-};
+});

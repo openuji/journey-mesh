@@ -6,7 +6,7 @@
   "type": "module",
   "packageManager": "pnpm@10.14.0",
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && pnpm -r --if-present run build:app",
     "typecheck": "tsc -b --pretty false && pnpm -r --if-present run typecheck:test",
     "lint": "node scripts/lint.mjs",
     "test": "pnpm -r --if-present run test"
@@ -30,7 +30,9 @@
     "typescript": "^5.8.3",
     "xpath": "0.0.34",
     "yaml": "2.9.1",
-    "@openuji/journey-runtime": "workspace:*",
-    "@openuji/journey-cli": "workspace:*"
+    "@openuji/journey-host": "workspace:*",
+    "@openuji/journey-cli": "workspace:*",
+    "@openuji/journey-reporter": "workspace:*",
+    "@openuji/journey-plugin": "workspace:*"
   }
 }

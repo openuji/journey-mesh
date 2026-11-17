@@ -1,118 +1,24 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { compileUjgJourneyPlan } from "@openuji/journey-model-ujg";
-import { validateConfiguredTests } from "@openuji/journey-runtime";
-// Example authoring and deployment helpers deliberately have no runtime side effects.
-// @ts-expect-error JavaScript authoring helper has no declaration file.
-import { syncModels } from "../comparison/models.mjs";
-import {
-  comparisonEnvironment,
-  comparisonProcessEnvironment,
-  composeArguments,
-} from "../comparison/deployment.mjs";
-
+import { loadSuiteConfig, validateSuite } from "@openuji/journey-host";
 const example = new URL("../", import.meta.url);
-const manifest = JSON.parse(
-  await readFile(new URL("comparison/manifest.json", example), "utf8"),
-);
+const meshes = ["comparison/nc34.mesh.yaml", "comparison/pr66147.mesh.yaml"].map((path) => new URL(path, example).pathname);
 
-test("explicit comparison values override ambient service configuration without mutation", () => {
-  const parent = Object.freeze({ PATH: "/tools", NEXTCLOUD_ALICE_URL: "https://unrelated.example" });
-  const env = comparisonProcessEnvironment(parent, "NEXTCLOUD_ALICE_URL=http://192.0.2.30:18181\n", { NEXTCLOUD_STACK_PROJECT: "isolated" });
-  assert.equal(env.NEXTCLOUD_ALICE_URL, "http://192.0.2.30:18181");
-  assert.equal(env.PATH, "/tools");
-  assert.equal(parent.NEXTCLOUD_ALICE_URL, "https://unrelated.example");
-});
-
-test("comparison models are synchronized and enter All files through the existing compiler", async () => {
-  await syncModels(true);
-  for (const variant of manifest.variants) {
-    const plan = await compileUjgJourneyPlan(new URL(variant.model, example), {
-      journeyId: "urn:journey:bob-remote-share",
-    });
-    assert.equal(plan.operations[0].entryBinding?.value, "nextcloud.files");
-    assert.equal(
-      plan.operations[0].source?.references?.graphNodeId,
-      variant.id === "nc34" ? "urn:state:bob-files-list-ready" : "urn:state:bob-all-files-ready",
-    );
-    assert.ok(Object.isFrozen(plan.operations));
-    const inputs = plan.operations.filter(
-      (op) =>
-        op.kind === "transition" &&
-        op.activation.requiredInputModalityProfiles.length,
-    );
-    assert.equal(inputs.length, variant.id === "nc34" ? 4 : 1);
-    if (variant.id === "pr66147") {
-      assert.deepEqual(plan.operations.filter((op) => op.kind === "state").map((op) => op.source?.references?.graphNodeId), [
-        "urn:state:bob-all-files-ready",
-        "urn:state:bob-shared-report-visible",
-      ]);
-      const final = plan.operations.at(-1)!;
-      assert.equal(final.kind, "state");
-      assert.equal(final.target.bindings[0]?.locators[0]?.role, "row");
-    }
-    assert.ok(!plan.operations.some((op) => /decline|reject/i.test(op.id)));
-  }
-});
-
-test("comparison stacks isolate projects, ports, and federation addresses", async () => {
-  const defaults = await readFile(
-    new URL("deployment/.env.example", example),
-    "utf8",
-  );
-  const before = JSON.stringify(manifest);
-  const environments = manifest.variants.map((variant: any) =>
-    comparisonEnvironment(defaults, variant),
-  );
-  assert.match(
-    environments[0],
-    /bob@http:\/\/host\.docker\.internal:18082/,
-  );
-  assert.match(
-    environments[1],
-    /bob@http:\/\/host\.docker\.internal:18182/,
-  );
-  assert.match(
-    environments[1],
-    /NEXTCLOUD_ALICE_URL=http:\/\/host\.docker\.internal:18181/,
-  );
-  assert.match(
-    environments[1],
-    /NEXTCLOUD_STACK_PROJECT=journey-comparison-pr66147/,
-  );
-  assert.equal(JSON.stringify(manifest), before);
-  assert.deepEqual(composeArguments("project", "/env", "/compose"), [
-    "compose",
-    "--project-name",
-    "project",
-    "--env-file",
-    "/env",
-    "-f",
-    "/compose",
-  ]);
-});
-
-test("comparison preflights without devices and keeps measurements optional", async () => {
-  const env = {
-    NEXTCLOUD_STACK_ENV_FILE: new URL("deployment/.env.example", example)
-      .pathname,
-    NEXTCLOUD_COMPARISON_MODEL: manifest.variants[0].model,
-    NEXTCLOUD_COMPARISON_OUTPUT_DIR: ".tmp/preflight",
-  };
-  assert.deepEqual(
-    (
-      await validateConfiguredTests(
-        new URL("comparison.mesh.yaml", example).pathname,
-        { env },
-      )
-    ).tests,
-    ["browser-sharing"],
-  );
-  const source = await readFile(
-    new URL("comparison.mesh.yaml", example),
-    "utf8",
-  );
-  assert.match(source, /@openuji\/journey-observer-ux\/plugin/);
-  assert.doesNotMatch(source, /appium|android|runtime:/);
+test("each comparison subject is an ordinary suite that owns its stack identity, label and output", async () => {
+  const [left, right] = await Promise.all(meshes.map(async (path) => (await loadSuiteConfig(path, {})).config));
+  const stack = (config: typeof left) => config.services.stack.options;
+  assert.notEqual(stack(left).project, stack(right).project);
+  assert.notEqual(stack(left).directory, stack(right).directory);
+  assert.notDeepEqual(stack(left).environment, stack(right).environment);
+  assert.match(String(stack(left).image), /@sha256:/);
+  assert.equal((stack(right).build as { sha: string }).sha, "fa7f792213a5f2782b0a77f7c8d70ddec82a7370");
+  assert.ok(left.label && right.label && left.label !== right.label);
+  assert.notEqual(left.outputDir, right.outputDir);
+  // Pairing by equal test and profile IDs needs no explicit correspondence.
+  const executions = (config: typeof left) => config.tests.flatMap((test) => test.profiles.map((profile) => `${test.id}/${profile.id}`));
+  assert.deepEqual(executions(left), executions(right));
+  for (const path of meshes) await validateSuite(path, { env: {} });
+  const scripts = JSON.parse(await readFile(new URL("package.json", example), "utf8")).scripts as Record<string, string>;
+  assert.match(scripts["comparison:compare"], /journey-mesh compare test-results\/nc34\/bundle\.json test-results\/pr66147\/bundle\.json/);
 });

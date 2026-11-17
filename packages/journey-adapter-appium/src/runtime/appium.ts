@@ -1,4 +1,4 @@
-import { findSdk } from "@openuji/journey-driver-android/runtime";
+import { findSdk } from "@openuji/journey-driver-android/service";
 import { closeSync, existsSync, openSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";

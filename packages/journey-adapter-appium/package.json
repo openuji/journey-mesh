@@ -7,7 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./plugin": "./src/plugin.ts",
-    "./runtime": "./src/runtime/plugin.ts"
+    "./service": "./src/runtime/plugin.ts"
   },
   "types": "./src/index.ts",
   "bin": {
@@ -20,13 +20,15 @@
     "appium": "3.9.0",
     "appium-uiautomator2-driver": "8.7.3",
     "webdriverio": "9.20.0",
-    "@openuji/journey-runtime": "workspace:*"
+    "@openuji/journey-core": "workspace:*",
+    "@openuji/journey-plugin": "workspace:*"
   },
   "devDependencies": {
     "@xmldom/xmldom": "0.9.12",
     "tsx": "^4.20.3",
     "xpath": "0.0.34",
-    "yaml": "2.9.1"
+    "yaml": "2.9.1",
+    "@openuji/journey-reporter": "workspace:*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -3,7 +3,7 @@ import type {
   AxeNode,
   AxePathAuditItem
 } from "../types.js";
-import type { Immutable } from "./immutable.js";
+import type { Immutable } from "@openuji/journey-core";
 
 export function stringTargets(node: Immutable<AxeNode>): string[] {
   return node.target.map((target) => Array.isArray(target) ? target.join(" ") : String(target));
@@ -27,27 +27,11 @@ export function stringMetadataValue(metadata: Immutable<AxeAuditMetadata>, key: 
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-export function artifactHref(href: string, artifactBaseHref: string | undefined): string {
-  if (!artifactBaseHref) return href;
-  const base = artifactBaseHref.endsWith("/") ? artifactBaseHref : `${artifactBaseHref}/`;
-  return `${base}${href.replace(/^\/+/, "")}`;
-}
-
 export function safeFileSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "-");
 }
 
-export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-export function escapeAttribute(value: string): string {
-  return escapeHtml(value).replace(/'/g, "&#39;");
-}
+export { escapeHtml, escapeHtml as escapeAttribute } from "@openuji/journey-plugin";
 
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

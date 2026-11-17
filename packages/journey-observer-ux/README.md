@@ -1,19 +1,21 @@
 # Journey UX observations
 
-An optional Playwright observer/reporter with a runtime-independent calculation
-entrypoint. It does not navigate, activate controls, or create fixtures.
+The Playwright observer records detached command events and passive visibility
+probes. It does not navigate, activate controls, create fixtures, or render reports.
 
-`deriveJourneyMetrics({ operations, result, observations, selection })` accepts
-execution data and explicit journey-item/graph landmarks. It returns detached,
-deeply frozen per-execution measurements. Incomplete paths produce `null` values.
+`deriveUXOutput` calculates provider-owned measurements from compiled operations,
+functional outcomes, recorded actions, and probe facts. Counters declare `from`
+and `until` references, optionally restrict `operations`, and select attempted,
+completed, or failed commands. Each adapter command counts once, including a
+text-entry command; these values are not physical keystrokes.
 
-The `./plugin` export composes through the YAML host's existing observer contract.
-`selection` declares the journey item, arrival state, acceptance transition,
-completion state, and navigation transitions. Each `probe` declares an ID, observed
-state, and target graph node. Probes reuse compiled bindings and retain visibility
-facts; browser handles never cross into evidence.
+The YAML plugin accepts `id`, `counters`, `checkpoints`, and `probes`. References
+use scoped operation aliases resolved by the model plugin during preparation.
+Checkpoints measure functional operation outcomes. Probes declare `at` and `target`
+references and measure visibility and viewport containment without interaction.
 
-The reporter writes `ux-metrics.json` through the supplied artifact store and
-preserves the functional result. The package root imports only types. Browser
-access lives in `./playwright`; plugin loading and publication stay at I/O
-boundaries. Collection/reporting errors follow the existing observer contracts.
+An unreached interval is unavailable. An interrupted interval retains its observed
+command count with partial status. Recorded commands remain evidence when later
+assertions fail. Every value is scoped by run, execution, profile, and operation.
+The host collects this output into the result bundle. The report viewer and
+comparisons consume its measurements without recalculation.
