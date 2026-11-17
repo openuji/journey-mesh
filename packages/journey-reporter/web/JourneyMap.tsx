@@ -74,12 +74,19 @@ function JourneyDocument({ registry, segments, touchpointLabels, block = false, 
   </div>;
 }
 
+/** A document whose every step is in the setup phase (a login) is preparation, not the scenario: it is not drawn. */
+const setupPhase = "urn:phase:setup";
+const isSetupOnly = (document: unknown) => {
+  const steps = Object.values((document as { steps?: Record<string, { phaseRef?: string }> }).steps ?? {});
+  return steps.length > 0 && steps.every((step) => step.phaseRef === setupPhase);
+};
+
 /** Registries for the test's embedded journey maps; a view the renderer rejects is left out. */
 function useRegistries(test: TestResultBundle): readonly (readonly [Registry, readonly JourneySegment[]])[] {
   return useMemo(() => {
     const byView = new Map<string, JourneySegment[]>();
     for (const segment of test.segments ?? []) {
-      if (!segment.view || test.views?.[segment.view]?.format !== "journey-map") continue;
+      if (!segment.view || test.views?.[segment.view]?.format !== "journey-map" || isSetupOnly(test.views[segment.view].document)) continue;
       byView.set(segment.view, [...(byView.get(segment.view) ?? []), segment]);
     }
     return [...byView].flatMap(([key, segments]) => {

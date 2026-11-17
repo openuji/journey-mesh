@@ -13,6 +13,8 @@ import { loadUjgDocument, toJourneyMapDocument } from "@openuji/journey-model-uj
 
 /** The journey map is projected from the real, executed JSON-LD document. */
 const journeyMap = toJourneyMapDocument(await loadUjgDocument(fileURLToPath(new URL("../../../examples/nextcloud-filesharing/ujg/comparison/nc34.ujg.jsonld", import.meta.url))));
+/** A login journey from its own document, whose steps are all in the setup phase. */
+const setupMap = toJourneyMapDocument(await loadUjgDocument(fileURLToPath(new URL("../../../examples/nextcloud-filesharing/ujg/setup.web.ujg.jsonld", import.meta.url))));
 const states = ["alice-files-ready", "alice-share-panel-open", "alice-remote-recipient-entered", "alice-share-permissions-open", "alice-share-confirmed"].map((id) => `urn:state:${id}`);
 const clean = { violations: 0, incomplete: 0, passes: 10, inapplicable: 4 };
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8R8AAAAASUVORK5CYII=", "base64");
@@ -24,8 +26,11 @@ function savedTest(side: string, id: string, index: number, failAt?: number): Te
   const outcome = (sequence: number) => failAt === undefined || sequence < failAt ? { kind: "passed" as const } : { kind: "failed" as const, error: { name: "Error", message: "Share permissions did not open" } };
   return {
     kind: "test", id, plan: { id: "plan", operations }, reportingErrors: [],
-    segments: [{ id: "alice", journeyId: "urn:journey:alice-federated-sharing", adapter: "web", view: "nc34" }],
-    views: { nc34: { format: "journey-map", document: journeyMap } },
+    segments: [
+      { id: "login", journeyId: "urn:journey:alice-web-setup", adapter: "web", view: "setup" },
+      { id: "alice", journeyId: "urn:journey:alice-federated-sharing", adapter: "web", view: "nc34" }
+    ],
+    views: { setup: { format: "journey-map", document: setupMap }, nc34: { format: "journey-map", document: journeyMap } },
     result: {
       ok: failAt === undefined, runId: `${side}-${id}`, plan: { id: "plan" }, errors: [],
       assessments: profiles.map((profile) => ({ kind: "applicable", profile: { id: profile } })),
@@ -92,6 +97,11 @@ test("comparison draws both journey maps with node metrics and links each subjec
     assert.ok(!requested.includes("bundle.json"));
     assert.equal(await pane("baseline").locator("[data-journey-map]").count(), 1);
     assert.equal(await pane("candidate").locator("[data-journey-map]").count(), 1);
+    // A document made only of setup steps (the login) is preparation, not the scenario: it is not drawn.
+    for (const side of ["baseline", "candidate"]) {
+      assert.equal(await pane(side).locator(".journey-document").count(), 1);
+      assert.equal(await pane(side).getByText("Alice web login setup").count(), 0);
+    }
     // Node footers carry the basic metrics; everything else lives in the linked reports.
     assert.match(await node("baseline", "alice-files-ready").innerText(), /3V\s*·\s*2I[\s\S]*CLEAN/);
     assert.match(await node("candidate", "alice-files-ready").innerText(), /1V\s*·\s*2I/);

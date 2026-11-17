@@ -118,3 +118,17 @@ test("a build takes either a pull request or an exact commit, and a pull request
   assert.throws(() => validateStackOptions({ ...options, image: "journey/nextcloud:latest" }), /image must be a repository name/);
   assert.throws(() => validateStackOptions({ ...options, build: undefined }), /expectedVersion is required/);
 });
+
+test("a fresh clone is built even though git reports an empty checkout as modified, but a modified existing checkout is refused", async () => {
+  const { options, artifacts, execute } = await pullRequestFixture();
+  const git = (toplevel: string): StackExecutor => async (command, args, context) => {
+    if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") return toplevel;
+    // After `git clone --no-checkout` every tracked file shows as a staged deletion.
+    if (command === "git" && args[0] === "status") return "D  version.php";
+    return execute(command, args, context);
+  };
+  const installed = (inner: StackExecutor): StackExecutor => (command, args, context) => command === "docker" && args.includes("status") ? Promise.resolve(JSON.stringify({ installed: true, versionstring: "36.0.0 dev" })) : inner(command, args, context);
+  await nextcloudStackRuntime(options, artifacts, installed(git(""))).up();
+  const reused = await pullRequestFixture();
+  await assert.rejects(nextcloudStackRuntime(reused.options, reused.artifacts, installed(git((reused.options.build as { directory: string }).directory))).up(), /Refusing to build modified source/);
+});

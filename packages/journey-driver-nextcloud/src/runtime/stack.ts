@@ -81,11 +81,14 @@ export function nextcloudStackRuntime(options: StackOptions, artifacts: JourneyA
   /** Fetch `ref` into the clone at `directory`, check out what it points at, and return that commit. */
   const checkout = async (repository: string, ref: string, directory: string): Promise<string> => {
     const head = await run("git", ["rev-parse", "--show-toplevel"], directory).catch(() => null);
-    if (!head || resolve(head) !== resolve(directory)) {
+    const reused = !!head && resolve(head) === resolve(directory);
+    if (!reused) {
       await mkdir(dirname(directory), { recursive: true });
       await run("git", ["clone", "--no-checkout", "--filter=blob:none", repository, directory]);
     }
-    if (await run("git", ["status", "--porcelain", "--untracked-files=no"], directory)) throw new Error("Refusing to build modified source");
+    // Only a checkout that already existed can hold local changes. A fresh --no-checkout clone has an empty index,
+    // so `git status` reports every tracked file as deleted.
+    if (reused && await run("git", ["status", "--porcelain", "--untracked-files=no"], directory)) throw new Error("Refusing to build modified source");
     await run("git", ["fetch", "origin", ref], directory).catch((error: Error) => { throw new Error(`Cannot fetch ${ref} from ${repository}: ${error.message}`); });
     const sha = await run("git", ["rev-parse", "FETCH_HEAD^{commit}"], directory);
     await run("git", ["checkout", "--detach", sha], directory);
