@@ -206,6 +206,8 @@ The repository currently includes:
 - Playwright and Android Appium adapters, with Nextcloud web/native drivers.
 - Android emulator and Appium server runtime lifecycle plugins.
 - Axe and Android accessibility observers and reporters.
+- An optional UX observer with pure metric derivation and a
+  [versioned Nextcloud acceptance report](examples/nextcloud-comparison-report/README.md).
 
 The [Nextcloud file-sharing example](examples/nextcloud-filesharing/README.md)
 demonstrates two compositions of the same architecture:

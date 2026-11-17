@@ -16,7 +16,13 @@ export NEXTCLOUD_STACK_ENV_FILE="$ENV_FILE"
 . "$ENV_FILE"
 
 compose() {
-	docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+	if [ -n "${NEXTCLOUD_STACK_COMPOSE_OVERRIDE:-}" ]; then
+		docker compose --project-name "${NEXTCLOUD_STACK_PROJECT:-ujg-nextcloud-federation}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" -f "$NEXTCLOUD_STACK_COMPOSE_OVERRIDE" "$@"
+	elif [ -n "${NEXTCLOUD_STACK_PROJECT:-}" ]; then
+		docker compose --project-name "$NEXTCLOUD_STACK_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+	else
+		docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+	fi
 }
 
 occ() {

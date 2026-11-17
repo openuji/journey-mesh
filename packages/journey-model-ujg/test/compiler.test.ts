@@ -36,3 +36,20 @@ test("compiler returns a detached deeply frozen plan with immutable setup metada
   assert.ok(Object.isFrozen(plan.operations[0]?.source?.references));
   assert.throws(() => Object.assign(plan.operations[0]!, { actorId: "changed" }), TypeError);
 });
+
+test("CustomLocator extensions remain opaque, detached data for adapter interpretation", async () => {
+  const input = structuredClone(document);
+  const locator = input.nodes.find((node) => node["@id"] === "urn:locator")!;
+  locator["@type"] = "CustomLocator";
+  delete locator.role;
+  locator.extensions = { "urn:example:locator": { query: "target" } };
+  const plan = await compileUjgJourneyPlan(input);
+  const operation = plan.operations[0];
+  assert.equal(operation.kind, "state");
+  if (operation.kind !== "state") throw new Error("Expected state operation");
+  const resolved = operation.target.bindings[0].locators[0];
+  assert.deepEqual(resolved.extensions, locator.extensions);
+  assert.ok(Object.isFrozen(resolved.extensions));
+  (locator.extensions as { "urn:example:locator": { query: string } })["urn:example:locator"].query = "changed";
+  assert.deepEqual(resolved.extensions, { "urn:example:locator": { query: "target" } });
+});

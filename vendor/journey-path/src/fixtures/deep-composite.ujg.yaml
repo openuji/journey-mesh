@@ -1,0 +1,703 @@
+compilesTo: ujg-ed
+modules:
+  - core
+  - graph
+  - surface
+  - distributed-journey
+
+touchpoints:
+  app:
+    label: App touchpoint
+  idp:
+    label: Identity provider touchpoint
+  pod-authorization:
+    label: Pod/resource authorization touchpoint
+  authenticator-app:
+    label: Authenticator app touchpoint
+  sms-channel:
+    label: SMS channel touchpoint
+  email-provider:
+    label: Email provider touchpoint
+  platform-authenticator:
+    label: Platform authenticator touchpoint
+
+journey:
+  id: app-auth-journey
+  type: Journey
+  label: App auth journey
+  defaultEntryRef: app-auth-entry
+
+  entries:
+    app-auth-entry:
+      type: JourneyEntry
+      label: Start app auth
+      stateRef: app-sign-in-required
+    idp-identity-consent-entry:
+      type: JourneyEntry
+      label: Start at identity consent
+      stateRef: idp-identity-consent-flow
+
+  states:
+    app-sign-in-required:
+      type: State
+      label: Sign-in required
+      surface:
+        id: app-sign-in-required-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-sign-in-required.png
+      transitions:
+        - id: app-starts-idp-step-up-auth
+          type: Transition
+          label: Continue with step-up authentication
+          tags:
+            - primary
+            - step-up
+          to: idp-auth-flow
+          toEntryRef: idp-mfa-challenge-entry
+
+    idp-auth-flow:
+      type: CompositeState
+      label: Authenticate with identity provider
+      subjourney:
+        id: idp-auth-journey
+        type: Journey
+        label: IdP auth journey
+        defaultEntryRef: idp-account-selection-entry
+
+        entries:
+          idp-login-entry:
+            type: JourneyEntry
+            label: Start at login
+            stateRef: idp-login
+          idp-account-selection-entry:
+            type: JourneyEntry
+            label: Start at account selection
+            stateRef: idp-account-selection
+          idp-mfa-challenge-entry:
+            type: JourneyEntry
+            label: Start at MFA challenge
+            stateRef: idp-mfa-challenge
+
+        states:
+          idp-account-selection:
+            type: State
+            label: Select account
+            surface:
+              id: idp-account-selection-surface
+              touchpointRef: idp
+              sampleScreenRef: screens/idp-account-selection.png
+
+          idp-login:
+            type: State
+            label: Login
+            surface:
+              id: idp-login-surface
+              touchpointRef: idp
+              sampleScreenRef: screens/idp-login.png
+
+          idp-mfa-challenge:
+            type: CompositeState
+            label: MFA challenge
+            subjourney:
+              id: mfa-challenge-journey
+              type: Journey
+              label: MFA challenge journey
+              defaultEntryRef: mfa-method-choice-entry
+
+              entries:
+                mfa-method-choice-entry:
+                  type: JourneyEntry
+                  label: Start at MFA method choice
+                  stateRef: mfa-method-choice
+                mfa-authenticator-code-entry:
+                  type: JourneyEntry
+                  label: Start at authenticator code
+                  stateRef: mfa-authenticator-code
+                mfa-sms-message-entry:
+                  type: JourneyEntry
+                  label: Start at SMS message
+                  stateRef: mfa-sms-message
+                mfa-email-message-entry:
+                  type: JourneyEntry
+                  label: Start at email message
+                  stateRef: mfa-email-message
+                mfa-push-approval-entry:
+                  type: JourneyEntry
+                  label: Start at push approval
+                  stateRef: mfa-push-approval
+                mfa-security-key-entry:
+                  type: JourneyEntry
+                  label: Start at security key prompt
+                  stateRef: mfa-security-key-prompt
+                mfa-recovery-entry:
+                  type: JourneyEntry
+                  label: Start at recovery code
+                  stateRef: mfa-recovery-code
+
+              states:
+                mfa-method-choice:
+                  type: State
+                  label: Choose MFA method
+                  surface:
+                    id: mfa-method-choice-surface
+                    touchpointRef: idp
+                    sampleScreenRef: screens/mfa-method-choice.png
+                  transitions:
+                    - id: mfa-method-choice-to-authenticator-code
+                      type: Transition
+                      label: Choose authenticator app code
+                      tags:
+                        - primary
+                        - authenticator-app
+                      to: mfa-authenticator-code
+                    - id: mfa-method-choice-to-sms-message
+                      type: Transition
+                      label: Choose SMS code
+                      tags:
+                        - primary
+                        - sms
+                      to: mfa-sms-message
+                    - id: mfa-method-choice-to-email-message
+                      type: Transition
+                      label: Choose email code
+                      tags:
+                        - primary
+                        - email
+                      to: mfa-email-message
+                    - id: mfa-method-choice-to-push-approval
+                      type: Transition
+                      label: Choose push approval
+                      tags:
+                        - primary
+                        - push
+                        - authenticator-app
+                      to: mfa-push-approval
+                    - id: mfa-method-choice-to-security-key
+                      type: Transition
+                      label: Choose security key
+                      tags:
+                        - primary
+                        - security-key
+                        - platform-authenticator
+                      to: mfa-security-key-prompt
+                    - id: mfa-method-choice-to-recovery
+                      type: Transition
+                      label: Use recovery code
+                      tags:
+                        - primary
+                        - recovery-local
+                      to: mfa-recovery-code
+                    - id: mfa-method-choice-cancelled
+                      type: Transition
+                      label: Cancel MFA
+                      tags:
+                        - cancel
+                      to: mfa-cancelled
+
+                mfa-authenticator-code:
+                  type: State
+                  label: Authenticator app code
+                  surface:
+                    id: mfa-authenticator-code-surface
+                    touchpointRef: authenticator-app
+                    sampleScreenRef: screens/mfa-authenticator-code.png
+                  transitions:
+                    - id: mfa-authenticator-code-to-idp-entry
+                      type: Transition
+                      label: Enter code in IdP
+                      tags:
+                        - primary
+                        - cross-touchpoint-return
+                      to: mfa-enter-authenticator-code
+
+                mfa-enter-authenticator-code:
+                  type: State
+                  label: Enter authenticator code
+                  surface:
+                    id: mfa-enter-authenticator-code-surface
+                    touchpointRef: idp
+                    sampleScreenRef: screens/mfa-enter-authenticator-code.png
+                  transitions:
+                    - id: mfa-enter-authenticator-code-to-success
+                      type: Transition
+                      label: Code accepted
+                      tags:
+                        - primary
+                      to: mfa-success
+                    - id: mfa-enter-authenticator-code-to-error-visible
+                      type: Transition
+                      label: Code rejected
+                      tags:
+                        - validation
+                      to: mfa-error-visible
+
+                mfa-sms-message:
+                  type: State
+                  label: SMS message
+                  surface:
+                    id: mfa-sms-message-surface
+                    touchpointRef: sms-channel
+                    sampleScreenRef: screens/mfa-sms-message.png
+                  transitions:
+                    - id: mfa-sms-message-to-idp-entry
+                      type: Transition
+                      label: Enter SMS code in IdP
+                      tags:
+                        - primary
+                        - cross-touchpoint-return
+                      to: mfa-enter-sms-code
+                    - id: mfa-sms-message-unavailable
+                      type: Transition
+                      label: SMS unavailable
+                      tags:
+                        - channel-unavailable
+                      to: mfa-channel-unavailable
+
+                mfa-enter-sms-code:
+                  type: State
+                  label: Enter SMS code
+                  surface:
+                    id: mfa-enter-sms-code-surface
+                    touchpointRef: idp
+                    sampleScreenRef: screens/mfa-enter-sms-code.png
+                  transitions:
+                    - id: mfa-enter-sms-code-to-success
+                      type: Transition
+                      label: Code accepted
+                      tags:
+                        - primary
+                      to: mfa-success
+                    - id: mfa-enter-sms-code-to-error-visible
+                      type: Transition
+                      label: Code rejected
+                      tags:
+                        - validation
+                      to: mfa-error-visible
+
+                mfa-email-message:
+                  type: State
+                  label: Email message
+                  surface:
+                    id: mfa-email-message-surface
+                    touchpointRef: email-provider
+                    sampleScreenRef: screens/mfa-email-message.png
+                  transitions:
+                    - id: mfa-email-message-to-idp-entry
+                      type: Transition
+                      label: Enter email code in IdP
+                      tags:
+                        - primary
+                        - cross-touchpoint-return
+                      to: mfa-enter-email-code
+                    - id: mfa-email-message-unavailable
+                      type: Transition
+                      label: Email unavailable
+                      tags:
+                        - channel-unavailable
+                      to: mfa-channel-unavailable
+
+                mfa-enter-email-code:
+                  type: State
+                  label: Enter email code
+                  surface:
+                    id: mfa-enter-email-code-surface
+                    touchpointRef: idp
+                    sampleScreenRef: screens/mfa-enter-email-code.png
+                  transitions:
+                    - id: mfa-enter-email-code-to-success
+                      type: Transition
+                      label: Code accepted
+                      tags:
+                        - primary
+                      to: mfa-success
+                    - id: mfa-enter-email-code-to-error-visible
+                      type: Transition
+                      label: Code rejected
+                      tags:
+                        - validation
+                      to: mfa-error-visible
+
+                mfa-push-approval:
+                  type: State
+                  label: Push approval
+                  surface:
+                    id: mfa-push-approval-surface
+                    touchpointRef: authenticator-app
+                    sampleScreenRef: screens/mfa-push-approval.png
+                  transitions:
+                    - id: mfa-push-approval-to-success
+                      type: Transition
+                      label: Push approved
+                      tags:
+                        - primary
+                      to: mfa-success
+                    - id: mfa-push-approval-to-error-visible
+                      type: Transition
+                      label: Push denied or timed out
+                      tags:
+                        - validation
+                      to: mfa-error-visible
+
+                mfa-security-key-prompt:
+                  type: State
+                  label: Security key prompt
+                  surface:
+                    id: mfa-security-key-prompt-surface
+                    touchpointRef: platform-authenticator
+                    sampleScreenRef: screens/mfa-security-key-prompt.png
+                  transitions:
+                    - id: mfa-security-key-to-success
+                      type: Transition
+                      label: Security key accepted
+                      tags:
+                        - primary
+                      to: mfa-success
+                    - id: mfa-security-key-to-error-visible
+                      type: Transition
+                      label: Security key failed
+                      tags:
+                        - validation
+                      to: mfa-error-visible
+                    - id: mfa-security-key-cancelled
+                      type: Transition
+                      label: Security key cancelled
+                      tags:
+                        - cancel
+                      to: mfa-cancelled
+
+                mfa-recovery-code:
+                  type: State
+                  label: Recovery code
+                  surface:
+                    id: mfa-recovery-code-surface
+                    touchpointRef: idp
+                    sampleScreenRef: screens/mfa-recovery-code.png
+                  transitions:
+                    - id: mfa-recovery-code-to-success
+                      type: Transition
+                      label: Recovery code accepted
+                      tags:
+                        - primary
+                      to: mfa-success
+                    - id: mfa-recovery-code-to-error-visible
+                      type: Transition
+                      label: Recovery code rejected
+                      tags:
+                        - validation
+                      to: mfa-error-visible
+
+                mfa-error-visible:
+                  type: State
+                  label: MFA error
+                  surface:
+                    id: mfa-error-visible-surface
+                    touchpointRef: idp
+                    sampleScreenRef: screens/mfa-error.png
+                  transitions:
+                    - id: mfa-error-visible-to-method-choice
+                      type: Transition
+                      label: Choose another MFA method
+                      tags:
+                        - optional-recovery
+                      to: mfa-method-choice
+                    - id: mfa-error-visible-to-recovery-code
+                      type: Transition
+                      label: Use recovery code
+                      tags:
+                        - optional-recovery
+                        - recovery-local
+                      to: mfa-recovery-code
+                    - id: mfa-error-visible-to-error-exit
+                      type: Transition
+                      label: MFA cannot continue
+                      tags:
+                        - terminal-error
+                      to: mfa-error
+
+                mfa-channel-unavailable:
+                  type: State
+                  label: MFA channel unavailable
+                  surface:
+                    id: mfa-channel-unavailable-surface
+                    touchpointRef: idp
+                    sampleScreenRef: screens/mfa-channel-unavailable.png
+                  transitions:
+                    - id: mfa-channel-unavailable-to-method-choice
+                      type: Transition
+                      label: Choose another MFA method
+                      tags:
+                        - optional-recovery
+                      to: mfa-method-choice
+                    - id: mfa-channel-unavailable-to-error-exit
+                      type: Transition
+                      label: MFA cannot continue
+                      tags:
+                        - terminal-error
+                      to: mfa-error
+
+              exits:
+                mfa-success:
+                  type: JourneyExit
+                  label: MFA succeeded
+                mfa-cancelled:
+                  type: JourneyExit
+                  label: MFA cancelled
+                mfa-error:
+                  type: JourneyExit
+                  label: MFA error
+
+          idp-identity-consent-flow:
+            type: CompositeState
+            label: Identity consent
+            subjourney:
+              id: identity-consent-journey
+              type: Journey
+              label: Identity consent journey
+              defaultEntryRef: identity-consent-entry
+
+              entries:
+                identity-consent-entry:
+                  type: JourneyEntry
+                  label: Start identity consent
+                  stateRef: identity-consent
+
+              states:
+                identity-consent:
+                  type: State
+                  label: Identity consent
+                  surface:
+                    id: identity-consent-surface
+                    touchpointRef: idp
+                    sampleScreenRef: screens/identity-consent.png
+                  transitions:
+                    - id: identity-consent-allowed
+                      type: Transition
+                      label: Allow identity access
+                      tags:
+                        - primary
+                        - identity-consent
+                      to: identity-consent-success
+                    - id: identity-consent-already-granted
+                      type: Transition
+                      label: Identity consent already granted
+                      tags:
+                        - shortcut
+                        - identity-consent
+                      to: identity-consent-success
+                    - id: identity-consent-denied
+                      type: Transition
+                      label: Deny identity access
+                      tags:
+                        - denied
+                        - identity-consent
+                      to: identity-consent-denied-visible
+                    - id: identity-consent-cancelled
+                      type: Transition
+                      label: Cancel identity consent
+                      tags:
+                        - cancel
+                        - identity-consent
+                      to: identity-consent-cancelled
+
+                identity-consent-denied-visible:
+                  type: State
+                  label: Identity consent denied
+                  surface:
+                    id: identity-consent-denied-visible-surface
+                    touchpointRef: idp
+                    sampleScreenRef: screens/identity-consent-denied-visible.png
+                  transitions:
+                    - id: identity-consent-denied-visible-to-denied
+                      type: Transition
+                      label: Back to app
+                      tags:
+                        - denied
+                        - identity-consent
+                      to: identity-consent-denied
+
+              exits:
+                identity-consent-success:
+                  type: JourneyExit
+                  label: Identity consent succeeded
+                identity-consent-denied:
+                  type: JourneyExit
+                  label: Identity consent denied
+                identity-consent-cancelled:
+                  type: JourneyExit
+                  label: Identity consent cancelled
+
+        exits:
+          idp-auth-success:
+            type: JourneyExit
+            label: IdP auth success
+          idp-auth-denied:
+            type: JourneyExit
+            label: IdP auth denied
+          idp-auth-cancelled:
+            type: JourneyExit
+            label: IdP auth cancelled
+          idp-auth-failed:
+            type: JourneyExit
+            label: IdP auth failed
+
+        transitions:
+          - id: idp-mfa-success-to-identity-consent
+            type: Transition
+            label: Continue to identity consent after MFA
+            tags:
+              - primary
+              - identity-consent
+            from: idp-mfa-challenge
+            fromExitRef: mfa-success
+            to: idp-identity-consent-flow
+
+    app-auth-callback-processing:
+      type: State
+      label: Completing sign-in
+      surface:
+        id: app-auth-callback-processing-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-auth-callback-processing.png
+      transitions:
+        - id: app-finishes-login
+          type: Transition
+          label: Finish sign-in
+          tags:
+            - primary
+          to: app-logged-in
+        - id: app-callback-processing-fails
+          type: Transition
+          label: Callback processing failed
+          tags:
+            - terminal-error
+          to: app-login-error
+
+    app-logged-in:
+      type: State
+      label: Logged in
+      surface:
+        id: app-logged-in-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-logged-in.png
+
+    app-access-denied:
+      type: State
+      label: Access denied
+      surface:
+        id: app-access-denied-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-access-denied.png
+      transitions:
+        - id: app-access-denied-try-another-account
+          type: Transition
+          label: Try another account
+          tags:
+            - optional-recovery
+          to: idp-auth-flow
+        - id: app-access-denied-continue-without-access
+          type: Transition
+          label: Continue without access
+          tags:
+            - optional-recovery
+          to: app-limited-mode
+
+    app-login-cancelled:
+      type: State
+      label: Login cancelled
+      surface:
+        id: app-login-cancelled-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-login-cancelled.png
+      transitions:
+        - id: app-login-cancelled-resume-sign-in
+          type: Transition
+          label: Resume sign-in
+          tags:
+            - optional-recovery
+          to: idp-auth-flow
+        - id: app-login-cancelled-return-to-app
+          type: Transition
+          label: Return to app
+          tags:
+            - optional-recovery
+          to: app-unauthenticated
+
+    app-login-error:
+      type: State
+      label: Login error
+      surface:
+        id: app-login-error-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-login-error.png
+      transitions:
+        - id: app-login-error-try-again
+          type: Transition
+          label: Try again
+          tags:
+            - optional-recovery
+          to: idp-auth-flow
+        - id: app-login-error-contact-support
+          type: Transition
+          label: Contact support
+          tags:
+            - optional-recovery
+          to: app-support
+
+    app-limited-mode:
+      type: State
+      label: Limited mode
+      surface:
+        id: app-limited-mode-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-limited-mode.png
+
+    app-unauthenticated:
+      type: State
+      label: Unauthenticated app
+      surface:
+        id: app-unauthenticated-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-unauthenticated.png
+
+    app-support:
+      type: State
+      label: App support
+      surface:
+        id: app-support-surface
+        touchpointRef: app
+        sampleScreenRef: screens/app-support.png
+
+  transitions:
+    - id: app-continues-after-idp-success
+      type: Transition
+      label: Continue after IdP success
+      tags:
+        - primary
+        - outcome
+      from: idp-auth-flow
+      fromExitRef: idp-auth-success
+      to: app-auth-callback-processing
+    - id: app-continues-after-idp-denied
+      type: Transition
+      label: Continue after denied consent
+      tags:
+        - outcome
+      from: idp-auth-flow
+      fromExitRef: idp-auth-denied
+      to: app-access-denied
+    - id: app-continues-after-idp-cancelled
+      type: Transition
+      label: Continue after cancelled login
+      tags:
+        - outcome
+      from: idp-auth-flow
+      fromExitRef: idp-auth-cancelled
+      to: app-login-cancelled
+    - id: app-continues-after-idp-failed
+      type: Transition
+      label: Continue after failed login
+      tags:
+        - outcome
+      from: idp-auth-flow
+      fromExitRef: idp-auth-failed
+      to: app-login-error

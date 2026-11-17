@@ -339,6 +339,7 @@ export async function toPlaywrightLocator(
   root: LocatorRoot,
   locator: ResolvedAccessibleLocator
 ): Promise<Locator> {
+  if (locator.extensions) return root.locator(customCssSelector(locator));
   const scopedRoot = await locator.contexts.reduce(
     async (currentRoot, contextLocator) => toPlaywrightLocator(await currentRoot, contextLocator),
     Promise.resolve(root)
@@ -347,6 +348,15 @@ export async function toPlaywrightLocator(
   return locator.features
     .filter((feature) => !roleOptionFeatureNames.includes(feature.name as "expanded"))
     .reduce((currentLocator, feature) => applyFeature(currentLocator, feature), roleLocator);
+}
+
+function customCssSelector(locator: ResolvedAccessibleLocator): string {
+  const extension = locator.extensions;
+  const selector = extension?.["urn:openuji:playwright:css"];
+  if (!extension || Object.keys(extension).length !== 1 || typeof selector !== "string" || !selector.trim()) {
+    throw new Error(`Unsupported CustomLocator ${locator.id}; expected urn:openuji:playwright:css`);
+  }
+  return selector;
 }
 
 export async function activatePlaywrightLocator(
@@ -461,6 +471,7 @@ const supportedRoles: readonly Parameters<Page["getByRole"]>[0][] = Object.freez
 function validatePlaywrightBindings(bindings: readonly ResolvedObservationBinding[]): void {
   if (!bindings.length) throw new Error("Expected at least one ObservationBinding");
   const validate = (locator: ResolvedAccessibleLocator): void => {
+    if (locator.extensions) { customCssSelector(locator); return; }
     if (!locator.role) throw new Error(`AccessibleLocator ${locator.id} does not declare a role`);
     if (!supportedRoles.includes(locator.role as Parameters<Page["getByRole"]>[0])) throw new Error(`Unsupported Playwright role for AccessibleLocator ${locator.id}`);
     if (locator.accessibleDescription) throw new Error(`AccessibleLocator ${locator.id} uses accessibleDescriptionRef, which this adapter does not yet support`);

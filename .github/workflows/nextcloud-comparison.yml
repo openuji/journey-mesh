@@ -1,0 +1,82 @@
+name: Nextcloud acceptance comparison
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nextcloud-comparison-pages
+  cancel-in-progress: false
+
+jobs:
+  comparison:
+    outputs:
+      journeys: ${{ steps.journeys.outcome }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build && pnpm typecheck && pnpm test
+      - name: Install Chromium
+        run: pnpm --filter @openuji/journey-adapter-playwright exec playwright install --with-deps chromium
+      - name: Register the canonical web hostname
+        run: echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+      - name: Run isolated release and PR journeys
+        id: journeys
+        continue-on-error: true
+        run: pnpm --filter @openuji/example-nextcloud-filesharing comparison:run
+      - name: Retain functional, UX, and accessibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextcloud-acceptance-evidence
+          path: examples/nextcloud-filesharing/test-results/comparison
+          retention-days: 90
+      - name: Upload Pages bundle
+        if: ${{ !cancelled() && steps.journeys.outcome != 'skipped' }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: examples/nextcloud-comparison-report/dist
+      - name: Stop comparison stacks
+        if: always()
+        run: pnpm --filter @openuji/example-nextcloud-filesharing comparison:down
+
+  publish:
+    needs: comparison
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
+      - name: Report link for the ticket
+        env:
+          REPORT_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          echo "Nextcloud acceptance comparison: [$REPORT_URL]($REPORT_URL)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pinned PR source: fa7f792213a5f2782b0a77f7c8d70ddec82a7370; baseline: 34.0.2." >> "$GITHUB_STEP_SUMMARY"
+
+  result:
+    needs: [comparison, publish]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preserve the comparison result
+        env:
+          BUILD_RESULT: ${{ needs.comparison.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          JOURNEYS_RESULT: ${{ needs.comparison.outputs.journeys }}
+        run: test "$BUILD_RESULT" = success && test "$PUBLISH_RESULT" = success && test "$JOURNEYS_RESULT" = success

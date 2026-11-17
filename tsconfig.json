@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "packages/journey-observer-ux/tsconfig.json" },
     {
       "path": "packages/journey-core/tsconfig.json"
     },

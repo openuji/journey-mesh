@@ -17,7 +17,8 @@
     "@openuji/journey-driver-android": "workspace:*",
     "@openuji/journey-observer-android-accessibility": "workspace:*",
     "@openuji/journey-cli": "workspace:*",
-    "@openuji/journey-runtime": "workspace:*"
+    "@openuji/journey-runtime": "workspace:*",
+    "@openuji/journey-observer-ux": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.20.3"
@@ -30,6 +31,7 @@
     "stack:reset": "sh deployment/scripts/reset.sh",
     "stack:seed": "sh deployment/scripts/seed.sh",
     "stack:up": "sh deployment/scripts/up.sh",
+    "stack:up:android": "sh deployment/scripts/up.sh --android",
     "e2e:android": "journey-driver-android android check mesh.yaml --require-locale en-US && journey-mesh test mesh.yaml --test native-recipient-sharing",
     "android:check": "journey-driver-android android check mesh.yaml --require-locale en-US",
     "android:up": "pnpm run android:check && journey-mesh runtime up mesh.yaml --runtime android",
@@ -39,6 +41,11 @@
     "journey:test": "journey-mesh test mesh.yaml",
     "journey:validate": "journey-mesh validate mesh.yaml",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
-    "test": "node --test deployment/*.test.mjs && node --import tsx --test test/*.test.ts"
+    "test": "node --test deployment/*.test.mjs && node --import tsx --test test/*.test.ts",
+    "comparison:run": "node --import tsx comparison/run.mjs run",
+    "comparison:prepare": "node --import tsx comparison/run.mjs prepare",
+    "comparison:report": "node --import tsx comparison/run.mjs report",
+    "comparison:down": "node --import tsx comparison/run.mjs down",
+    "comparison:models": "node comparison/models.mjs"
   }
 }

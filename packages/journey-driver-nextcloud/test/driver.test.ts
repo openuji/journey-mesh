@@ -81,6 +81,28 @@ test("federated-sharing environment rejects effects it does not own", async () =
   );
 });
 
+test("recipient view preconditions are detached and repeated for each profile setup", async (t) => {
+  const requests: unknown[] = [];
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = (async (url, init) => {
+    if (String(url).includes("/apps/files/api/v1/views")) {
+      requests.push(JSON.parse(String(init?.body)));
+      return new Response("{}", { status: 503 });
+    }
+    throw new Error("Fixture work should not start after a failed precondition");
+  }) as typeof fetch;
+  const recipientViewConfig = { shareoverview: { expanded: false } };
+  const environment = createNextcloudFederatedSharingEnvironment({
+    sharerTouchpoint: { baseURL: "https://alice.example.test" }, recipientTouchpoint: { baseURL: "https://bob.example.test" },
+    sharerUser: { username: "alice", password: "secret" }, recipientUser: { username: "bob", password: "secret" },
+    fixturePath: "/fixture.pdf", fixtureFileName: "fixture.pdf", effectIds: { shareCreated: "created", shareAccepted: "accepted" }, recipientViewConfig
+  });
+  recipientViewConfig.shareoverview.expanded = true;
+  for (let i = 0; i < 2; i++) await assert.rejects(async () => environment.setup!({} as never), /Could not prepare recipient view/);
+  assert.deepEqual(requests, [{ view: "shareoverview", key: "expanded", value: false }, { view: "shareoverview", key: "expanded", value: false }]);
+});
+
 test("Nextcloud package has no automation runtime dependency or mutable driver session state", async () => {
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { dependencies?: Record<string, string> };
   const dependencyNames = Object.keys(packageJson.dependencies ?? {});

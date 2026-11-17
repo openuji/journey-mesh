@@ -44,6 +44,7 @@ export async function configureStackRuntime({
   root = example,
   environment = process.env,
   refresh = false,
+  resolveDeviceHost = false,
   ...discovery
 } = {}) {
   const target = resolve(root, ".runtime/stack.env");
@@ -61,7 +62,7 @@ export async function configureStackRuntime({
     if (environment.NEXTCLOUD_STACK_ENV_FILE || error.code !== "ENOENT") throw error;
     source = await readFile(resolve(deploymentDirectory, ".env.example"), "utf8");
   }
-  if (source.includes("host.docker.internal")) {
+  if (source.includes("host.docker.internal") && (resolveDeviceHost || environment.NEXTCLOUD_STACK_HOST)) {
     const host = await discoverStackHost({ environment, ...discovery });
     source = source.replaceAll("host.docker.internal", host);
   }
@@ -71,7 +72,7 @@ export async function configureStackRuntime({
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
-  const unknown = process.argv.slice(2).filter((value) => value !== "--refresh");
+  const unknown = process.argv.slice(2).filter((value) => !["--refresh", "--android"].includes(value));
   if (unknown.length) throw new Error(`Unknown option ${unknown[0]}`);
-  console.log(await configureStackRuntime({ root: example, refresh: process.argv.includes("--refresh") }));
+  console.log(await configureStackRuntime({ root: example, refresh: process.argv.includes("--refresh"), resolveDeviceHost: process.argv.includes("--android") }));
 }

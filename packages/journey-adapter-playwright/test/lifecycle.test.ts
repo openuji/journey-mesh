@@ -21,6 +21,16 @@ const driver = Object.freeze({
   resolveTransitionValue: () => undefined
 });
 
+test("Playwright interprets only its explicit CustomLocator namespace and rejects others in preflight", async () => {
+  const { extensions, ...custom } = { id: "custom", extensions: { "urn:openuji:playwright:css": "[data-example]" }, features: [], contexts: [] };
+  const calls: string[] = [];
+  const root = { locator(selector: string) { calls.push(selector); return "resolved"; } };
+  assert.equal(await toPlaywrightLocator(root as never, { ...custom, extensions }), "resolved");
+  assert.deepEqual(calls, ["[data-example]"]);
+  const invalid = { ...operation, target: { ...operation.target, bindings: [{ ...operation.target.bindings[0], locators: [{ ...custom, extensions: { "foreign:locator": "query" } }] }] } };
+  assert.throws(() => playwrightAdapter({ driver }).describeOperation!(invalid), /Unsupported CustomLocator/);
+});
+
 test("Playwright lifecycle reduction is immutable and closed states reject resources", () => {
   const created = initialPlaywrightLifecycleState();
   const starting = reducePlaywrightLifecycle(created, { type: "start" });

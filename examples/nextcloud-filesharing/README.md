@@ -2,6 +2,10 @@
 
 # Nextcloud file-sharing tests
 
+For the versioned acceptance comparison against Nextcloud PR #66147, including
+UX measurements and GitHub Pages publication, see the
+[dedicated comparison report](../nextcloud-comparison-report/README.md).
+
 Two compositions of the [Journey Mesh architecture](../../README.md#architecture)
 exercise the same federated file-sharing scenario. The tools and prerequisites
 below belong to this example's selected components.
@@ -57,9 +61,10 @@ pnpm stack:provision
 pnpm stack:seed
 ```
 
-`stack:up` starts only the containers. It discovers a host IPv4 address reachable
-from the host browser, Docker containers, and Android, then writes the effective
-configuration to `.runtime/stack.env`. Provisioning creates the users and
+`stack:up` starts only the containers and preserves `host.docker.internal` for
+web runs, then writes the effective configuration to `.runtime/stack.env`.
+For Android, use `pnpm stack:up:android` instead: it discovers a host IPv4 address
+reachable from the device and Docker containers. Provisioning creates the users and
 federation configuration; seeding uploads `report.pdf` for Alice.
 
 Set `NEXTCLOUD_STACK_HOST` to a reachable IPv4 address before `stack:up` to

@@ -1,0 +1,26 @@
+{
+  "name": "@openuji/nextcloud-comparison-report",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite --host 127.0.0.1",
+    "typecheck:test": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@openuji/journey-path": "workspace:*",
+    "@openuji/journey-observer-ux": "workspace:*",
+    "@openuji/journey-runner": "workspace:*",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "vite": "^7.3.0",
+    "tsx": "^4.20.3"
+  }
+}

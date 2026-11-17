@@ -47,9 +47,20 @@ const environmentOptions = (
       shareAccepted: requiredString(effectIds.shareAccepted, "effectIds.shareAccepted")
     },
     preserveFixtures: booleanOption(options.preserveFixtures),
+    ...(options.recipientViewConfig !== undefined ? { recipientViewConfig: recipientViewConfigOption(options.recipientViewConfig) } : {}),
     timeoutMs: positiveNumber(options.timeoutMs, 30_000)
   };
 };
+
+function recipientViewConfigOption(value: unknown): NonNullable<NextcloudFederatedSharingEnvironmentOptions["recipientViewConfig"]> {
+  const views = optionsObject(value, "recipientViewConfig");
+  return Object.fromEntries(Object.entries(views).map(([view, settings]) => [view,
+    Object.fromEntries(Object.entries(optionsObject(settings, `recipientViewConfig.${view}`)).map(([key, entry]) => {
+      if (!["string", "number", "boolean"].includes(typeof entry) || typeof entry === "number" && !Number.isFinite(entry)) throw new Error(`Invalid view configuration ${view}.${key}`);
+      return [key, entry as string | number | boolean];
+    }))
+  ]));
+}
 
 export const journeyMeshPlugin: JourneyMeshPlugin<JourneyEnvironment> = {
   apiVersion: 1,
@@ -64,6 +75,7 @@ export const journeyMeshPlugin: JourneyMeshPlugin<JourneyEnvironment> = {
       "fixtureFileName",
       "effectIds",
       "preserveFixtures",
+      "recipientViewConfig",
       "timeoutMs"
     ]);
     createNextcloudFederatedSharingEnvironment(environmentOptions(options, (path) => context.resolvePath(path)));

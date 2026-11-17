@@ -1,0 +1,134 @@
+version: 1
+outputDir: ${NEXTCLOUD_COMPARISON_OUTPUT_DIR}
+envFiles:
+  - ./deployment/.env.example
+  - env: NEXTCLOUD_STACK_ENV_FILE
+model:
+  use: "@openuji/journey-model-ujg/plugin"
+tests:
+  browser-sharing:
+    timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-600000}
+    journeys:
+      - id: alice-setup
+        source: ./ujg/setup.web.ujg.jsonld
+        select: urn:journey:alice-web-setup
+        adapter: web
+      - id: bob-setup
+        source: ./ujg/setup.web.ujg.jsonld
+        select: urn:journey:bob-web-setup
+        adapter: web
+      - id: alice-offers
+        source: ${NEXTCLOUD_COMPARISON_MODEL}
+        select: urn:journey:alice-federated-sharing
+        adapter: web
+      - id: bob-accepts
+        source: ${NEXTCLOUD_COMPARISON_MODEL}
+        select: urn:journey:bob-remote-share
+        adapter: web
+    profiles:
+      - id: default
+        journeys:
+          alice-setup: default
+          bob-setup: default
+          alice-offers: default
+          bob-accepts: default
+      - id: keyboard-only
+        journeys:
+          alice-setup: keyboard
+          bob-setup: keyboard
+          alice-offers: keyboard
+          bob-accepts: keyboard
+    environment:
+      use: "@openuji/journey-driver-nextcloud/federated-sharing/plugin"
+      options:
+        recipientViewConfig:
+          shareoverview:
+            expanded: false
+        sharerTouchpoint: &a1
+          baseURL: ${NEXTCLOUD_ALICE_URL}
+        recipientTouchpoint: &a2
+          baseURL: ${NEXTCLOUD_BOB_URL}
+        sharerUser: &a3
+          label: Alice
+          username: ${NEXTCLOUD_ALICE_USER}
+          password: ${NEXTCLOUD_ALICE_PASSWORD}
+        recipientUser: &a4
+          label: Bob
+          username: ${NEXTCLOUD_BOB_USER}
+          password: ${NEXTCLOUD_BOB_PASSWORD}
+        fixturePath: ./deployment/fixtures/report.pdf
+        fixtureFileName: report.pdf
+        effectIds:
+          shareCreated: urn:effect:alice-confirm-share
+          shareAccepted: urn:effect:bob-accept-share
+        preserveFixtures: ${NEXTCLOUD_PRESERVE_FIXTURES:-false}
+adapters:
+  web:
+    use: "@openuji/journey-adapter-playwright/plugin"
+    options:
+      browser: chromium
+      headless: ${HEADLESS:-true}
+      actionTimeoutMs: 30000
+      navigationTimeoutMs: 30000
+      contextOptions:
+        viewport:
+          width: 1440
+          height: 1000
+        locale: en-US
+    driver:
+      use: "@openuji/journey-driver-nextcloud/web/plugin"
+      options:
+        touchpoints:
+          urn:touchpoint:nextcloud-a: *a1
+          urn:touchpoint:nextcloud-b: *a2
+        users:
+          urn:user:alice: *a3
+          urn:user:bob: *a4
+        entries:
+          nextcloud.login: /login
+          nextcloud.files: /apps/files/
+          nextcloud.pendingShares: /apps/files/pendingshares
+        transitionValues:
+          urn:transition:alice-enters-username:
+            source: user.username
+          urn:transition:alice-enters-password:
+            source: user.password
+          urn:transition:bob-enters-username:
+            source: user.username
+          urn:transition:bob-enters-password:
+            source: user.password
+          urn:transition:alice-enters-remote-bob: ${NEXTCLOUD_FEDERATED_RECIPIENT}
+    observers:
+      - use: "@openuji/journey-observer-ux/plugin"
+        options:
+          selection:
+            journeyItemId: bob-accepts
+            startStateId: urn:state:bob-all-files-ready
+            acceptanceTransitionId: urn:transition:bob-accepts-share
+            completionStateId: urn:state:bob-shared-report-visible
+            navigationTransitionIds:
+              - urn:transition:bob-opens-shares
+              - urn:transition:bob-opens-pending-shares
+              - urn:transition:bob-opens-shares-overview
+          probes:
+            - id: acceptance-at-arrival
+              atStateId: urn:state:bob-all-files-ready
+              targetGraphNodeId: urn:transition:bob-accepts-share
+      - use: "@openuji/journey-observer-axe/plugin"
+        options:
+          reportId: nextcloud-filesharing.axe-path
+          strict: ${AXE_STRICT:-false}
+          sourceScreenshots:
+            states: true
+            fullPage: true
+          excludedPhaseIds:
+            - urn:phase:setup
+profiles:
+  default:
+    use: "@openuji/journey-profiles/plugin"
+    options:
+      preset: default
+  keyboard:
+    use: "@openuji/journey-profiles/plugin"
+    options:
+      preset: keyboard-only

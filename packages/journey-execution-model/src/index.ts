@@ -23,6 +23,8 @@ export type AccessibleFeature = LabeledRef & {
 };
 
 export type ResolvedAccessibleLocator = LabeledRef & {
+  /** Opaque CustomLocator extensions, interpreted only by a compatible adapter. */
+  extensions?: Readonly<Record<string, unknown>>;
   /** Model role identifier. Adapters map its vocabulary to their runtime or reject it. */
   role?: string;
   accessibleName?: string;
