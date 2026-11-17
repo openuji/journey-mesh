@@ -42,7 +42,10 @@ test("saved suite runs pair by test and profile ID and publish isolated evidence
   assert.equal(result.subjects.baseline.label, "baseline system");
   assert.equal(result.subjects.candidate.source, "../candidate-results/bundle.json");
   for (const side of ["baseline", "candidate"] as const) assert.match(await readFile(join(suite.output, `subjects/${side}/task/fixture-evidence.txt`), "utf8"), /fixture/);
-  assert.match(await readFile(join(suite.output, "index.html"), "utf8"), /type="module".*assets\//s);
+  // Self-contained: the page embeds its bundle and loads nothing else, so it also opens from disk.
+  const page = await readFile(join(suite.output, "index.html"), "utf8");
+  assert.match(page, /window\.__JOURNEY_MESH_BUNDLE__=.*Release check/s);
+  assert.doesNotMatch(page, /(?:src|href)="\.?\/?assets\//);
   assert.match(await readFile(join(suite.output, "bundle.json"), "utf8"), /Release check/);
   const published = join(suite.directory, "project-path");
   await mkdir(published); await writeFile(join(published, "stale-private.env"), "not registered");

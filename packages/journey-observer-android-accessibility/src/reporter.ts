@@ -11,7 +11,7 @@ export function androidAccessibilityReporter(): JourneyReporter {
       const resources = await loadAndroidReportResources(report, (artifact) => artifacts.read(artifact));
       const name = encodeURIComponent(output.id);
       await artifacts.write({ name: `${name}.json`, data: JSON.stringify(report, null, 2), contentType: "application/json" });
-      await artifacts.write({ name: `${name}.html`, data: renderAndroidAccessibilityReport(report, resources), contentType: "text/html" });
+      await artifacts.write({ name: `${name}.html`, data: renderAndroidAccessibilityReport(report, resources), contentType: "text/html", label: "Android accessibility report" });
     }
   } };
 }

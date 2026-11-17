@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 export const journeyMeshPlugin = {
   kind: "model",
   parse() {},
-  create() { return { resolveOperation(plan, selector) { const operation = plan.operations.find(op => op.id === selector); if (!operation) throw new Error("Unknown fixture operation"); return operation; }, async compile(source, selection) {
+  create() { return { async view(source) { return { format: "fixture", document: JSON.parse(await readFile(source, "utf8")) }; }, resolveOperation(plan, selector) { const operation = plan.operations.find(op => op.id === selector); if (!operation) throw new Error("Unknown fixture operation"); return operation; }, async compile(source, selection) {
     const data = JSON.parse(await readFile(source, "utf8"));
     if (!data.journeys.includes(selection)) throw new Error("Unknown fixture journey");
     return {

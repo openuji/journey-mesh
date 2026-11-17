@@ -450,6 +450,9 @@ importers:
         specifier: ^19.2.7
         version: 19.3.1(react@19.3.1)
     devDependencies:
+      '@openuji/journey-model-ujg':
+        specifier: workspace:*
+        version: link:../journey-model-ujg
       '@types/react':
         specifier: ^19.2.0
         version: 19.3.0

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { compileUjgJourneyPlan, type UjgDocument } from "../src/index.js";
+import { compileUjgJourneyPlan, toJourneyMapDocument, type UjgDocument } from "../src/index.js";
 
 const document: UjgDocument = {
   "@id": "urn:test:document",
@@ -52,4 +52,26 @@ test("CustomLocator extensions remain opaque, detached data for adapter interpre
   assert.ok(Object.isFrozen(resolved.extensions));
   (locator.extensions as { "urn:example:locator": { query: string } })["urn:example:locator"].query = "changed";
   assert.deepEqual(resolved.extensions, { "urn:example:locator": { query: "target" } });
+});
+
+test("the journey map is projected from the executed JSON-LD: nested journeys, surfaces, phases and steps", async () => {
+  const { mkdtemp, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { journeyMeshPlugin } = await import("../src/plugin.js");
+  const directory = await mkdtemp(join(tmpdir(), "ujg-view-"));
+  const source = join(directory, "journey.ujg.jsonld");
+  await writeFile(source, JSON.stringify(document));
+  const compiler = await journeyMeshPlugin.create(undefined, {} as never, {});
+  const view = await compiler.view!(source);
+  assert.equal(view?.format, "journey-map");
+  const map = view?.document as ReturnType<typeof toJourneyMapDocument>;
+  assert.deepEqual(Object.keys(map.states), ["urn:composite"]);
+  assert.deepEqual(map.states["urn:composite"], { type: "CompositeState", subjourney: {
+    id: "urn:journey", defaultEntryRef: "urn:entry", entries: { "urn:entry": { stateRef: "urn:state" } },
+    states: { "urn:state": { label: "Ready", surface: { id: "urn:surface" } } }
+  } });
+  assert.deepEqual(map.steps, { "urn:step": { order: 0, compositeStateRef: "urn:composite", phaseRef: "urn:phase:setup" } });
+  assert.deepEqual(map.touchpoints, { "urn:touchpoint": { journeyRefs: ["urn:journey"] } });
+  assert.throws(() => toJourneyMapDocument({ ...document, nodes: document.nodes.filter((node) => node["@id"] !== "urn:journey") }), /missing node urn:journey/);
 });

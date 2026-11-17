@@ -2,7 +2,7 @@ import { appiumAdapterName } from "@openuji/journey-adapter-appium";
 import type { JourneyPlanOperation, JourneyOutcome, RunResult } from "@openuji/journey-runner";
 import type { AndroidAccessibilityEvidence, AndroidOperationEvidence } from "./evidence.js";
 import type { AndroidHierarchyCheck } from "./hierarchy.js";
-import { immutableSnapshot, type Immutable } from "@openuji/journey-core";
+import { immutableSnapshot, type Immutable, type JourneyNodeSummary } from "@openuji/journey-core";
 import { escapeHtml, observedOperations, routedElsewhere } from "@openuji/journey-plugin";
 
 export type AndroidAccessibilityPathItem = Immutable<{
@@ -53,6 +53,16 @@ export function buildAndroidAccessibilityReport(input: Readonly<{
       unassessed: items.flatMap((item) => item.checks).filter((check) => check.status === "unassessed").length
     }, items
   });
+}
+
+/** Journey-map node footers: hierarchy findings and passed checks, `skipped` when collection did not complete. */
+export function androidNodeSummaries(report: AndroidAccessibilityReport): readonly JourneyNodeSummary[] {
+  return immutableSnapshot(report.items.flatMap((item): JourneyNodeSummary[] => {
+    const node = { executionId: item.executionId, operationId: item.operationId };
+    if (item.status === "checked") return [{ ...node, metrics: { kind: "native", findings: item.checks.filter((check) => check.status === "finding").length, passes: item.checks.filter((check) => check.status === "passed").length } }];
+    if (item.status === "skipped" || item.status === "error") return [{ ...node, metrics: { kind: "skipped", ...(item.reason ? { reason: item.reason } : {}) } }];
+    return [];
+  }));
 }
 
 /** Strict policy examines all completed checks, including superseded observations. */

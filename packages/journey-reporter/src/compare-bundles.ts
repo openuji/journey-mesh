@@ -39,7 +39,11 @@ export async function compareBundles(input: CompareBundlesInput): Promise<Compar
     const subjects = {} as Record<typeof sides[number], ComparisonSubject>;
     for (const side of sides) {
       const { path, bundle, errors } = loaded[side];
-      if (bundle) await copySuiteEvidence(bundle, dirname(path), resolve(staging, subjectDirectory(side)));
+      if (bundle) {
+        // Each subject stays a complete report, so the comparison can link to its details.
+        await copySuiteEvidence(bundle, dirname(path), resolve(staging, subjectDirectory(side)));
+        await writeReport(resolve(staging, subjectDirectory(side)), bundle);
+      }
       subjects[side] = { source: relative(outputDir, path).split("\\").join("/"), ...(bundle?.label ? { label: bundle.label } : {}), bundle, errors };
     }
     const ok = sides.every((side) => !subjects[side].errors.length && subjects[side].bundle?.ok === true);

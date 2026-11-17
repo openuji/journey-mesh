@@ -17,12 +17,12 @@ export function fileArtifactStore(root: string, prefix = ""): JourneyArtifactSto
   const href = (path: string) => relative(base, path).split(sep).join("/");
   return {
     get files() { return Object.freeze([...entries.values()]); },
-    async write({ name, data, contentType, scope }) {
+    async write({ name, data, contentType, scope, label }) {
       const path = resolve(directory, name);
       if (!inside(directory, path)) throw new Error("Artifact path must be inside its test directory");
       await mkdir(resolve(path, ".."), { recursive: true });
       await writeFile(path, data);
-      const artifact: JourneyArtifact = Object.freeze({ name, href: href(path), contentType, ...(scope ? { scope: Object.freeze({ ...scope }) } : {}) });
+      const artifact: JourneyArtifact = Object.freeze({ name, href: href(path), contentType, ...(scope ? { scope: Object.freeze({ ...scope }) } : {}), ...(label ? { label } : {}) });
       entries.set(artifact.href, artifact);
       return artifact;
     },

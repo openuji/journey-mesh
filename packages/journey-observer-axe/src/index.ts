@@ -9,7 +9,7 @@ export {
 } from "./audit/strict-mode.js";
 export { buildAxePathAuditReport } from "./reporting/path-audit-report.js";
 export { buildAxeAccessibilitySummaryReport } from "./reporting/accessibility-summary-report.js";
-export { buildAxeObservedPathReport, buildAxePathItems } from "./reporting/observed-path-report.js";
+export { axeNodeSummaries, buildAxeObservedPathReport, buildAxePathItems } from "./reporting/observed-path-report.js";
 export { isAxeOutput } from "./output.js";
 export type { AxeObserverOutput } from "./output.js";
 export type { AxeEvidence, AxeOperationEvidence, AxeAuditEvidence, AxeScreenshotEvidence } from "./observer/evidence.js";

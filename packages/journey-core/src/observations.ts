@@ -18,10 +18,24 @@ export type JourneyMeasurement = Readonly<{
   reason?: string;
 }>;
 
+export type JourneyMetricCounts = Readonly<{ violations: number; incomplete: number; passes: number; inapplicable: number }>;
+/**
+ * A compact result shown in the footer of a journey-map node. `axe` reports a full-page (`pageState`)
+ * and a surface-scoped (`matchedSurface`) audit; `native` reports hierarchy findings and passed checks.
+ */
+export type JourneyNodeMetrics =
+  | Readonly<{ kind: "axe"; pageState?: JourneyMetricCounts; matchedSurface?: JourneyMetricCounts }>
+  | Readonly<{ kind: "native"; findings: number; passes: number }>
+  | Readonly<{ kind: "skipped"; reason?: string }>;
+/** What an observer recorded for one operation of one execution, for display on the journey map. */
+export type JourneyNodeSummary = Readonly<{ executionId: string; operationId: string; metrics: JourneyNodeMetrics }>;
+
 export type JourneyObserverOutput = Readonly<{
   id: string;
   kind: string;
   measurements: readonly JourneyMeasurement[];
+  /** Optional per-operation summaries shown on journey-map nodes; details stay in `evidence`. */
+  nodes?: readonly JourneyNodeSummary[];
   /** Provider-owned, serializable evidence; interpreted by the provider's reporter. */
   evidence: unknown;
   errors: readonly Readonly<{ name: string; message: string }>[];

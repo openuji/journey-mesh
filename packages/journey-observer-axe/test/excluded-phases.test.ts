@@ -71,8 +71,10 @@ test("axe writes standalone artifacts without Playwright TestInfo or example fix
     adapter: { name: "fixture", createExecution() { return { start() {}, close() {}, openEntry() {}, assertState() {}, performTransition() {}, recordControlFlow() {} }; } }
   });
   const output = observer.output(result);
+  // An unmatched surface cannot be audited: the journey map shows the node as skipped.
+  assert.deepEqual(output.nodes?.map((node) => [node.executionId, node.operationId, node.metrics.kind]), [["standalone", "state", "skipped"]]);
   assert.ok(!artifacts.files.some((file) => file.contentType === "text/html"));
-  await axeReporter().report({ bundle: { kind: "test", id: "standalone", result, plan, outputs: [output], reportingErrors: [], artifacts: artifacts.files }, artifacts });
+  await axeReporter().report({ bundle: { kind: "test", id: "standalone", segments: [], views: {}, result, plan, outputs: [output], reportingErrors: [], artifacts: artifacts.files }, artifacts });
 
   assert.ok(artifacts.files.some((file) => file.name.includes("standalone") && file.href.endsWith(".html")));
   assert.ok(artifacts.files.some((file) => file.href.endsWith(".png")));

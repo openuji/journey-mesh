@@ -3,12 +3,12 @@ import type { AppiumExecutionObserver, AppiumOperationObservation } from "@openu
 import { errorToJourneyRunError, type RunResult } from "@openuji/journey-runner";
 import type { AndroidAccessibilityEvidence, AndroidArtifactWriter, AndroidCapture, AndroidOperationEvidence } from "./evidence.js";
 import { checkAndroidHierarchy, parseAndroidHierarchy, redactAndroidHierarchy } from "./hierarchy.js";
-import { androidAccessibilityFindings, buildAndroidAccessibilityReport } from "./report.js";
+import { androidAccessibilityFindings, androidNodeSummaries, buildAndroidAccessibilityReport } from "./report.js";
 
 export type * from "./evidence.js";
 export type * from "./hierarchy.js";
 export { checkAndroidHierarchy, parseAndroidHierarchy, redactAndroidHierarchy } from "./hierarchy.js";
-export { androidAccessibilityFindings, buildAndroidAccessibilityReport, renderAndroidAccessibilityReport } from "./report.js";
+export { androidAccessibilityFindings, androidNodeSummaries, buildAndroidAccessibilityReport, renderAndroidAccessibilityReport } from "./report.js";
 export type { AndroidAccessibilityReport, AndroidAccessibilityPathItem, AndroidReportResource } from "./report.js";
 export { loadAndroidReportResources } from "./report-resources.js";
 export { isAndroidAccessibilityOutput } from "./output.js";
@@ -55,7 +55,7 @@ export function androidAccessibilityObserver(options: AndroidAccessibilityObserv
         return { id: "android/hierarchy-findings", label: "Android hierarchy findings across checks", method: "android-hierarchy-heuristics", unit: "finding", aggregation: "sum-across-checks", scope: { runId: result.runId, executionId: execution.executionId, profileId: execution.profileId, operationIds: execution.operations.map((op) => op.operationId) }, status: !checked.length ? "unavailable" : complete ? "available" : "partial", value: checked.length ? checked.flatMap((item) => item.checks).filter((check) => check.status === "finding").length : null, ...(!checked.length ? { reason: "No completed hierarchy checks." } : !complete ? { reason: "Execution or hierarchy collection did not complete." } : {}) };
       });
       const findings = androidAccessibilityFindings(evidence, result.runId);
-      return immutableSnapshot({ id: configuredOptions.reportId, kind: "android-accessibility", measurements, evidence: { journal: evidence, report }, errors: configuredOptions.strict && findings.length ? [{ name: "AndroidStrictError", message: `Android hierarchy checks recorded ${findings.length} potential finding(s).` }] : [] });
+      return immutableSnapshot({ id: configuredOptions.reportId, kind: "android-accessibility", measurements, nodes: androidNodeSummaries(report), evidence: { journal: evidence, report }, errors: configuredOptions.strict && findings.length ? [{ name: "AndroidStrictError", message: `Android hierarchy checks recorded ${findings.length} potential finding(s).` }] : [] });
     }
   };
 }

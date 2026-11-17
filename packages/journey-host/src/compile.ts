@@ -1,6 +1,6 @@
 import { basename, dirname, relative, resolve, sep } from "node:path";
 import { immutableJourneyPlan } from "@openuji/journey-execution-model";
-import type { JourneyModelCompiler } from "@openuji/journey-plugin";
+import type { JourneyModelCompiler, JourneyModelView } from "@openuji/journey-plugin";
 import type { JourneyPlan, JourneyPlanOperation } from "@openuji/journey-runner";
 import { interpolate, type Environment } from "./config/load.js";
 import type { TestConfig } from "./config/schema.js";
@@ -12,6 +12,8 @@ export type CompiledTest = Readonly<{
   segments: ReadonlyMap<string, Segment>;
   /** `<journey item>.<alias>` → plan operation ID. */
   aliases: ReadonlyMap<string, string>;
+  /** Renderable documents by segment source, saved with the run for the report viewer. */
+  views: ReadonlyMap<string, JourneyModelView>;
 }>;
 
 /** The segment of a compiled operation. Every operation of a compiled test has one. */
@@ -29,6 +31,7 @@ export async function compileTest(test: TestConfig, compiler: JourneyModelCompil
   const operations: JourneyPlanOperation[] = [];
   const segments = new Map<string, Segment>();
   const aliases = new Map<string, string>();
+  const views = new Map<string, JourneyModelView>();
   for (const item of test.journeys) {
     const source = resolve(dirname(configPath), interpolate(item.source, env, `journey ${item.id}.source`));
     // Provenance stays relative to the configuration, so saved bundles carry no local paths.
@@ -42,6 +45,10 @@ export async function compileTest(test: TestConfig, compiler: JourneyModelCompil
       aliases.set(`${item.id}.${name}`, prefix + operation.id);
     }
     segments.set(item.id, Object.freeze({ id: item.id, adapter: item.adapter, journeyId: item.select, source: sourceRef }));
+    if (!views.has(sourceRef)) {
+      const view = await compiler.view?.(source);
+      if (view) views.set(sourceRef, view);
+    }
     for (const operation of child.operations) {
       operations.push({
         ...operation, id: prefix + operation.id, sequence: operations.length, segment: item.id,
@@ -57,5 +64,5 @@ export async function compileTest(test: TestConfig, compiler: JourneyModelCompil
     source: { model: "journey-mesh-test", references: { testId: test.id, config: basename(configPath) } },
     operations
   });
-  return Object.freeze({ plan, segments, aliases });
+  return Object.freeze({ plan, segments, aliases, views });
 }

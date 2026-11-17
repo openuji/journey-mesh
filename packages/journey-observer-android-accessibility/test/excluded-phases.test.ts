@@ -62,9 +62,12 @@ test("native capture and independent reporting work from detached saved output",
   await observer.observeOperation!({ stage: "state-asserted", execution, operation, expectedMatchCount: 0, targets: [], session: { async source() { return '<hierarchy><node class="android.widget.TextView" text="Example" bounds="[0,0][100,100]"/></hierarchy>'; }, async deviceMetrics() { return { densityDpi: 160 }; }, async screenshot() { return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8R8AAAAASUVORK5CYII="; } } } as never);
   const result: import("@openuji/journey-runner").RunResult = { ok: true, runId: "run", plan: { id: plan.id }, assessments: [{ kind: "applicable", profile: { id: "touch" } }], executions: [{ executionId: "execution", profileId: "touch", outcome: { kind: "passed" } }], evidence: { executions: [{ executionId: "execution", profileId: "touch", operations: [{ operationId: operation.id, operationKind: "state", outcome: { kind: "passed" } }] }] }, errors: [] };
   const output = observer.output(result);
+  const node = output.nodes?.[0];
+  assert.equal(node?.operationId, "compiled-state");
+  assert.equal(node?.metrics.kind, "native");
   assert.ok(!store.files.some((artifact) => artifact.contentType === "text/html"));
   assert.equal(store.files[0].scope?.profileId, "touch");
-  await androidAccessibilityReporter().report({ bundle: { kind: "test", id: "native", plan, result, outputs: [JSON.parse(JSON.stringify(output))], artifacts: store.files, reportingErrors: [] }, artifacts: store });
+  await androidAccessibilityReporter().report({ bundle: { kind: "test", id: "native", segments: [], views: {}, plan, result, outputs: [JSON.parse(JSON.stringify(output))], artifacts: store.files, reportingErrors: [] }, artifacts: store });
   const html = Buffer.from(await store.read(store.files.find((artifact) => artifact.contentType === "text/html")!)).toString("utf8");
   assert.match(html, /data:image\/png;base64/);
   assert.match(html, /compiled-state/);

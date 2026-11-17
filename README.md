@@ -162,9 +162,23 @@ remain separate from execution history. Collection errors during execution can
 still fail the execution.
 
 The report viewer is a single Vite/React application published next to every
-`bundle.json`. It renders suites, tests, journey paths (via the vendored
-journey-path component) and comparisons directly from the saved bundle; no
-reporter needs to be configured for it.
+`bundle.json`; no reporter needs to be configured for it. Its first view is the
+**journey map**: the model's own journey document (actors, touchpoints, phases,
+steps, states) drawn with the vendored journey-path component, with each
+state's outcome and basic metrics in the node footer (`P 3V · 2I`, `S ✓ CLEAN`,
+`SKIPPED`). People who need every finding follow the links below the map to the
+provider reports, such as the axe path report or the Android accessibility
+report. Executed steps, screenshots and measurements stay one click away.
+
+Two small contracts feed the map. A model binding may offer `view(source)`, a
+drawable form of a journey source; the UJG binding projects the same `.ujg.jsonld`
+document it executes into the renderer's nested journey document. The host
+embeds that view in the test bundle and records each journey as a **segment**.
+Published reports inline the viewer and the bundle into `index.html`, so they
+open straight from disk as well as over HTTP. An observer
+may return `nodes` (per operation: `axe` page/surface counts, `native` findings
+and passes, or `skipped`); its full evidence stays in `evidence` for its
+reporter.
 
 ### Component responsibilities
 
@@ -270,7 +284,9 @@ journey-mesh compare baseline-results/bundle.json candidate-results/bundle.json 
 `compare` loads no plugins and executes nothing. It copies each subject's
 registered evidence to `subjects/<baseline|candidate>/`, pairs executions with
 equal test and profile IDs, and publishes the comparison bundle with the viewer
-atomically. Different IDs need an explicit pairings file:
+atomically. The comparison shows both journey maps together for the selected
+scenario and profile; each links to its subject's own full report, which is
+published under `subjects/<side>/`. Different IDs need an explicit pairings file:
 
 ```yaml
 - id: same-purpose

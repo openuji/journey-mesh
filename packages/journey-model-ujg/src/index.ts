@@ -1000,3 +1000,5 @@ function isUjgDocument(value: unknown): value is UjgDocument {
       Array.isArray((value as { nodes?: unknown }).nodes)
   );
 }
+export { toJourneyMapDocument } from "./journey-map.js";
+export type { JourneyMapDocument } from "./journey-map.js";

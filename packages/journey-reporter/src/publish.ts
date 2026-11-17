@@ -7,28 +7,46 @@ import { viteAssets } from "./vite-assets.js";
 /** A saved bundle that can be published: a suite run or a comparison of two suite runs. */
 export type PublishedBundle = SuiteResultBundle | ComparisonResultBundle;
 
-const evidenceTypes = new Set(["application/json", "text/html", "image/png", "application/xml", "text/plain", "text/javascript", "application/javascript", "text/css"]);
+const evidenceTypes = new Set(["application/json", "text/html", "image/png", "application/xml", "text/plain"]);
 
 const inside = (root: string, path: string) => {
   const child = relative(root, path);
   return child !== "" && child !== ".." && !child.startsWith(`..${sep}`) && !isAbsolute(child);
 };
 
-/** Write the report viewer next to a bundle. The viewer is application code, not evidence, so it is never registered as an artifact. */
-export async function publishViewer(outputDir: string): Promise<void> {
-  for (const asset of await viteAssets(new URL("../dist/app/", import.meta.url))) {
-    const path = resolve(outputDir, asset.name);
-    if (!inside(resolve(outputDir), path)) throw new Error("Viewer asset escapes the report directory");
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, asset.data);
-  }
+const text = (data: Uint8Array) => new TextDecoder().decode(data);
+
+/**
+ * The viewer as one self-contained HTML page: app script, styles and the bundle are inlined, so the
+ * report opens from disk (`file://`) as well as over HTTP. Browsers refuse module scripts and `fetch`
+ * from `file://`, which is why nothing here is loaded from a separate file.
+ */
+export async function viewerHtml(bundle: PublishedBundle): Promise<string> {
+  const assets = await viteAssets(new URL("../dist/app/", import.meta.url));
+  const asset = (name: string) => {
+    const found = assets.find((item) => item.name === name);
+    if (!found) throw new Error(`Viewer asset ${name} is missing. Run pnpm build.`);
+    return text(found.data);
+  };
+  let html = asset("index.html")
+    .replace(/<script type="module" crossorigin src="\.\/([^"]+)"><\/script>/g, (_match, name: string) => {
+      const code = asset(name);
+      if (code.includes("<!--")) throw new Error(`Viewer script ${name} cannot be inlined safely`);
+      return `<script type="module">${code.replace(/<\/script/gi, "<\\/script")}</script>`;
+    })
+    .replace(/<link rel="stylesheet" crossorigin href="\.\/([^"]+)">/g, (_match, name: string) => `<style>${asset(name).replace(/<\/style/gi, "<\\/style")}</style>`);
+  if (/(?:src|href)="\.\/assets\//.test(html)) throw new Error("Viewer still references external assets");
+  // `<` is escaped so no string in the bundle can close the script element.
+  const data = `<script>window.__JOURNEY_MESH_BUNDLE__=${JSON.stringify(bundle).replace(/</g, "\\u003c")};</script>`;
+  html = html.replace("</head>", () => `${data}\n</head>`);
+  return html;
 }
 
-/** The only writer of `bundle.json`: the saved bundle plus the viewer that renders it. */
+/** The only writer of `bundle.json` and the report page that renders it. */
 export async function writeReport(outputDir: string, bundle: PublishedBundle): Promise<void> {
   await mkdir(outputDir, { recursive: true });
   await writeFile(resolve(outputDir, "bundle.json"), JSON.stringify(bundle, null, 2));
-  await publishViewer(outputDir);
+  await writeFile(resolve(outputDir, "index.html"), await viewerHtml(bundle));
 }
 
 export async function readSavedBundle<K extends PublishedBundle["kind"]>(path: string, kinds: readonly K[]): Promise<Extract<PublishedBundle, { kind: K }>> {
@@ -89,13 +107,15 @@ export async function publishAtomically<T>(destination: string, sources: readonl
 export async function publishReport(path: string, outputDir = dirname(resolve(path))): Promise<PublishedBundle> {
   const source = dirname(resolve(path));
   const bundle = await readSavedBundle(path, ["suite", "comparison"]);
-  if (resolve(outputDir) === source) { await publishViewer(source); return bundle; }
+  if (resolve(outputDir) === source) { await writeReport(source, bundle); return bundle; }
   return publishAtomically(outputDir, [source], async (staging) => {
     if (bundle.kind === "suite") await copySuiteEvidence(bundle, source, staging);
     else {
       for (const side of ["baseline", "candidate"] as const) {
         const subject = bundle.subjects[side].bundle;
-        if (subject) await copySuiteEvidence(subject, resolve(source, subjectDirectory(side)), resolve(staging, subjectDirectory(side)));
+        if (!subject) continue;
+        await copySuiteEvidence(subject, resolve(source, subjectDirectory(side)), resolve(staging, subjectDirectory(side)));
+        await writeReport(resolve(staging, subjectDirectory(side)), subject);
       }
       for (const artifact of bundle.artifacts) await copyArtifact(artifact, source, staging);
     }

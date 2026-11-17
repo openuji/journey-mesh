@@ -310,8 +310,10 @@ observer captures a redacted UI hierarchy, device metrics, optional screenshots,
 and heuristic accessibility checks. Observers collect evidence at adapter stages
 such as state assertion and transition readiness, retain detached evidence, and
 provide detached outputs after execution. The host saves them in the result
-bundle; the axe and Android reporters write their standalone reports from it, and
-the report viewer renders outcomes, journey paths, screenshots and measurements.
+bundle. The report opens on the journey map, drawn from the same `ujg/*.ujg.jsonld`
+documents that are executed, with outcomes and accessibility metrics on every
+state. Open `test-results/index.html` directly or serve it with `pnpm e2e:report`. The axe and Android reporters write the
+detailed standalone reports linked below the map.
 
 ```mermaid
 flowchart TB
@@ -378,10 +380,11 @@ The comparison itself is `journey-mesh compare test-results/nc34/bundle.json
 test-results/pr66147/bundle.json`. It loads no plugins and runs nothing: it copies
 each subject's registered evidence below `test-results/comparison/subjects/`,
 pairs the executions by their equal test and profile IDs, and publishes
-`test-results/comparison/` with the report viewer. Both subjects' journey paths
-appear side by side; scenario and profile controls switch both views, and the
-measurement table shows candidate minus baseline. On narrow screens the paths
-stack. The selected JSON-LD journeys are checked-in scenario data referenced by
+`test-results/comparison/` with the report viewer. Both subjects' journey maps
+appear together, each with node metrics and a link to that subject's full report
+(`subjects/<side>/`); scenario and profile controls switch both, and the
+measurement table shows candidate minus baseline. On narrow screens the maps
+switch to the vertical layout. The selected JSON-LD journeys are checked-in scenario data referenced by
 each mesh; there is no comparison-specific model generator or report
 application. Findings and measured values come from the result bundles.
 

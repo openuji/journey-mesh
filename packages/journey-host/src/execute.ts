@@ -37,10 +37,27 @@ export async function collectObserverOutputs(observers: readonly JourneyObserver
         if (metric.scope.runId !== result.runId || !result.executions.some((execution) => execution.executionId === metric.scope.executionId && execution.profileId === metric.scope.profileId)) throw new Error(`Measurement ${metric.id} does not match the execution`);
         if (typeof metric.value === "number" && !Number.isFinite(metric.value)) throw new Error("Measurements must be finite");
       }
+      if (output.nodes !== undefined) {
+        if (!Array.isArray(output.nodes)) throw new Error("Observer nodes must be an array");
+        for (const node of output.nodes) {
+          if (!result.executions.some((execution) => execution.executionId === node.executionId)) throw new Error(`Node ${node.operationId} does not match an execution`);
+          if (!["axe", "native", "skipped"].includes(node.metrics?.kind)) throw new Error(`Node ${node.operationId} has unknown metrics`);
+        }
+      }
       outputs.push(output);
     } catch (error) { errors.push(errorToJourneyRunError(error)); }
   }
   return { outputs, errors };
+}
+
+/** The journeys of a test and the drawable view of each, embedded so reports need no model or source files. */
+function journeySegments(test: AssembledTest): Pick<TestResultBundle, "segments" | "views"> {
+  return {
+    views: Object.fromEntries(test.compiled.views),
+    segments: [...test.compiled.segments.values()].map((segment) => ({
+      id: segment.id, journeyId: segment.journeyId, adapter: segment.adapter, ...(test.compiled.views.has(segment.source) ? { view: segment.source } : {})
+    }))
+  };
 }
 
 async function executeTest(test: AssembledTest, options: ExecuteOptions): Promise<TestResultBundle> {
@@ -55,7 +72,7 @@ async function executeTest(test: AssembledTest, options: ExecuteOptions): Promis
     clearTimeout(timer); options.signal?.removeEventListener("abort", abort);
   }
   const { outputs, errors } = await collectObserverOutputs(test.observers, result);
-  const bundle: TestResultBundle = immutableSnapshot({ kind: "test", id: test.id, plan: test.plan, result, outputs, reportingErrors: errors, artifacts: test.artifacts.files });
+  const bundle: TestResultBundle = immutableSnapshot({ kind: "test", id: test.id, ...journeySegments(test), plan: test.plan, result, outputs, reportingErrors: errors, artifacts: test.artifacts.files });
   errors.push(...await reportJourneyResult({ bundle, reporters: test.reporters, artifacts: test.artifacts }));
   return immutableSnapshot({ ...bundle, reportingErrors: errors, artifacts: test.artifacts.files });
 }

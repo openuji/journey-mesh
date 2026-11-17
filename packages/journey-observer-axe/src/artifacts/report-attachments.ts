@@ -24,7 +24,7 @@ export async function attachAxeAuditReport(artifacts: JourneyArtifactStore, repo
 /** The path report covers every execution of the test. */
 export async function attachAxePathAuditReport(artifacts: JourneyArtifactStore, report: AxePathAuditReport): Promise<void> {
   await artifacts.write({ name: pathAuditJsonFileName(report.reportId), data: JSON.stringify(report, null, 2), contentType: "application/json" });
-  await artifacts.write({ name: pathAuditHtmlFileName(report.reportId), data: renderAxePathAuditHtml(report), contentType: "text/html" });
+  await artifacts.write({ name: pathAuditHtmlFileName(report.reportId), data: renderAxePathAuditHtml(report), contentType: "text/html", label: "Browser accessibility report (axe)" });
 }
 
 export async function attachAxeAccessibilitySummaryReport(artifacts: JourneyArtifactStore, report: AxeAccessibilitySummaryReport): Promise<void> {

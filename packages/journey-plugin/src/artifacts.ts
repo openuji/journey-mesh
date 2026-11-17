@@ -4,10 +4,11 @@ export type ArtifactScope = Readonly<{ runId: string; executionId: string; profi
  * A registered file. `href` is relative: test artifacts to their test directory, suite artifacts to the
  * suite output directory. Saved bundles rely only on `href`, so they can be moved and published.
  */
-export type JourneyArtifact = Readonly<{ name: string; href: string; contentType: string; scope?: ArtifactScope }>;
+/** `label` names a human-facing report, e.g. a detailed accessibility report linked from the journey map. */
+export type JourneyArtifact = Readonly<{ name: string; href: string; contentType: string; scope?: ArtifactScope; label?: string }>;
 export type JourneyArtifactStore = {
   /** Write `data` at the relative path `name` and register it. */
-  write(input: { name: string; data: string | Uint8Array; contentType: string; scope?: ArtifactScope }): Promise<JourneyArtifact>;
+  write(input: { name: string; data: string | Uint8Array; contentType: string; scope?: ArtifactScope; label?: string }): Promise<JourneyArtifact>;
   /** Read a registered artifact back, e.g. to embed a capture in a report. */
   read(artifact: Pick<JourneyArtifact, "href">): Promise<Uint8Array>;
   readonly files: readonly JourneyArtifact[];

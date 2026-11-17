@@ -35,9 +35,14 @@ export type JourneyService = {
   provenance?(): unknown;
 };
 
+/** A drawable form of a journey source: a JSON document in a format the report viewer knows (`journey-map`). */
+export type JourneyModelView = Readonly<{ format: string; document: unknown }>;
+
 export type JourneyModelCompiler = {
   compile(source: string, selection: string): Promise<JourneyPlan>;
   resolveOperation(plan: Pick<JourneyPlan, "id" | "operations">, selector: string): JourneyPlanOperation;
+  /** The journey map the report viewer draws for `source`, if the model has one. Read-only; called during preparation. */
+  view?(source: string): Promise<JourneyModelView | undefined>;
 };
 
 export type JourneyObserverComponent<O = unknown> = {

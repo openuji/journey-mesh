@@ -5,7 +5,7 @@
 export type * from "./artifacts.js";
 export type * from "./results.js";
 export type {
-  AdapterDependencies, AdapterPlugin, Contract, DriverPlugin, EnvironmentPlugin, JourneyMeshPlugin, JourneyModelCompiler,
+  AdapterDependencies, AdapterPlugin, Contract, DriverPlugin, EnvironmentPlugin, JourneyMeshPlugin, JourneyModelCompiler, JourneyModelView,
   JourneyObserverComponent, JourneyPluginContext, JourneyPluginKind, JourneyService, ModelPlugin, ObserverPlugin,
   PluginOfKind, ProfilePlugin, ReporterPlugin, ServicePlugin
 } from "./plugins.js";

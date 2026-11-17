@@ -76,3 +76,18 @@ test("Android device pins and the Nextcloud application config live in mesh.yaml
   assert.equal((androidAdapterOptions?.application as Record<string, unknown>).package, "com.nextcloud.client");
   assert.equal(androidAdapterOptions?.runtimeManifest, undefined);
 });
+
+test("every journey a mesh runs is drawn on the report's journey map from its JSON-LD source", async () => {
+  const { dirname, resolve } = await import("node:path");
+  const { loadUjgDocument, toJourneyMapDocument } = await import("@openuji/journey-model-ujg");
+  for (const mesh of ["mesh.yaml", "comparison/nc34.mesh.yaml", "comparison/pr66147.mesh.yaml"]) {
+    const path = new URL(mesh, example).pathname;
+    for (const item of (await loadSuiteConfig(path, {})).config.tests.flatMap((test) => test.journeys)) {
+      const map = toJourneyMapDocument(await loadUjgDocument(resolve(dirname(path), item.source)));
+      // The renderer starts root journeys from the entry index: the selected journey must be one of them.
+      const root = Object.values(map.states).find((state) => "subjourney" in state && state.subjourney.id === item.select);
+      assert.ok(root && "subjourney" in root, `${mesh}: ${item.id} is not a root journey`);
+      assert.ok((map.journeyEntryIndex?.entryRefs as string[] | undefined)?.includes(root.subjourney.defaultEntryRef ?? ""), `${mesh}: ${item.id} has no indexed entry`);
+    }
+  }
+});

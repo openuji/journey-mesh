@@ -10,6 +10,7 @@ import type { PluginLoader } from "./plugins/loader.js";
 export type AssembledTest = Readonly<{
   id: string;
   plan: JourneyPlan;
+  compiled: CompiledTest;
   adapter: JourneyAdapter;
   profiles: readonly JourneyProfile[];
   environment?: JourneyEnvironment;
@@ -107,7 +108,7 @@ export async function assembleTest(test: TestConfig, compiled: CompiledTest, inp
   const reporters: JourneyReporter[] = [];
   for (const [index, entry] of test.reporters.entries()) reporters.push(await (await load("reporter", entry, `tests.${test.id}.reporters[${index}]`, context)).create());
   return Object.freeze({
-    id: test.id, plan: compiled.plan, adapter, profiles, observers, reporters, services: test.services, artifacts,
+    id: test.id, plan: compiled.plan, compiled, adapter, profiles, observers, reporters, services: test.services, artifacts,
     ...(environment ? { environment } : {}),
     timeoutMs: positiveNumber(interpolate(test.timeoutMs, loaded.env, `tests.${test.id}.timeoutMs`), 600_000)
   });

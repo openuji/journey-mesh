@@ -49,6 +49,9 @@ test("service provenance and artifacts reach the suite bundle with relative href
   assert.equal(bundle.label, "Fixture system");
   assert.deepEqual(bundle.provenance, { stack: { version: "1.2.3" } });
   assert.deepEqual(bundle.artifacts.map((artifact) => artifact.href), ["services/stack/stack.identity.json"]);
+  // The model's drawable view is embedded in the bundle and referenced by each journey segment.
+  assert.deepEqual(bundle.tests[0].segments, [{ id: "task", journeyId: "task", adapter: "adapter", view: "model.json" }]);
+  assert.deepEqual(bundle.tests[0].views, { "model.json": { format: "fixture", document: { journeys: ["task"] } } });
   const saved = JSON.parse(await readFile(join(directory, "results/bundle.json"), "utf8"));
   assert.deepEqual(saved.provenance, bundle.provenance);
   // Saved bundles are publishable: no local absolute path survives anywhere in them.

@@ -5,7 +5,7 @@ import { shouldFailForAxeViolations } from "../audit/strict-mode.js";
 import { auditedAxePathItem, createAxeJourneyItem, unauditedAxePathItem } from "../journey/journey-item.js";
 import { planSourceMetadata } from "../journey/operation-metadata.js";
 import type { AxeEvidence, AxeOperationEvidence, AxeScreenshotEvidence } from "../observer/evidence.js";
-import { immutableSnapshot, type Immutable } from "@openuji/journey-core";
+import { immutableSnapshot, type Immutable, type JourneyNodeSummary } from "@openuji/journey-core";
 import type {
   AxeAuditMetadata,
   AxeAuditReport,
@@ -98,4 +98,15 @@ function screenshotFields(screenshot: AxeScreenshotEvidence): AxePathSourceScree
 
 function unmatchedSurfaceReason(count: number): string {
   return `Expected match count ${count} cannot be scoped to one matched locator.`;
+}
+
+/** Journey-map node footers: page and surface counts for audited items, `skipped` when an audit was expected but missing. */
+export function axeNodeSummaries(report: AxePathAuditReport): readonly JourneyNodeSummary[] {
+  return immutableSnapshot(report.items.flatMap((item): JourneyNodeSummary[] => {
+    const executionId = item.metadata.executionId;
+    const operationId = item.metadata.operationId;
+    if (typeof executionId !== "string" || typeof operationId !== "string" || item.status === "not-applicable") return [];
+    if (item.status === "skipped") return [{ executionId, operationId, metrics: { kind: "skipped", ...(item.reason ? { reason: item.reason } : {}) } }];
+    return [{ executionId, operationId, metrics: { kind: "axe", ...(item.scanSummaries ? { pageState: item.scanSummaries["page-state"], matchedSurface: item.scanSummaries["matched-surface"] } : {}) } }];
+  }));
 }

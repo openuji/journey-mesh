@@ -67,8 +67,11 @@ test("independent plugins compose ordered journeys sharing a touchpoint, fixture
   assert.ok(Object.isFrozen(operations[0].source?.references));
   const output = join(suite.directory, "reports");
   const html = await readFile(join(output, "index.html"), "utf8");
-  for (const [, href] of html.matchAll(/(?:href|src)="([^"]+)"/g)) await access(join(output, decodeURIComponent(href)));
-  assert.match(html, /type="module"/);
+  // Every link in the page markup resolves; inlined script and style content is not markup.
+  const markup = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/g, "");
+  for (const [, href] of markup.matchAll(/(?:href|src)="([^"]+)"/g)) await access(join(output, decodeURIComponent(href)));
+  assert.match(html, /<script type="module">/);
+  assert.match(html, /window\.__JOURNEY_MESH_BUNDLE__=/);
   assert.match(await readFile(join(output, "bundle.json"), "utf8"), /fixture-evidence.txt/);
   await access(join(output, "sharing/fixture-evidence.txt"));
   // The host is the only bundle writer: one bundle per output directory, none per test.

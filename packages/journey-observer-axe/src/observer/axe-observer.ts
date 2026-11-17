@@ -2,7 +2,7 @@ import { immutableSnapshot, type JourneyObserverOutput, type JourneyMeasurement 
 import { observerName, wcag22Tags } from "../constants.js";
 import type { AxeObserver, AxeObserverOptions } from "../types.js";
 import { runAxeAudit } from "../audit/run-axe-audit.js";
-import { buildAxeObservedPathReport, strictAxeFailureReports } from "../reporting/observed-path-report.js";
+import { axeNodeSummaries, buildAxeObservedPathReport, strictAxeFailureReports } from "../reporting/observed-path-report.js";
 import { axeFailureMessage } from "../audit/strict-mode.js";
 import { collectAxeEvidence } from "./collect-evidence.js";
 import { AxeEvidenceJournal } from "./evidence-journal.js";
@@ -30,7 +30,7 @@ export function axeObserver(options: AxeObserverOptions): AxeObserver {
           measurements.push({ id: `axe/${scan}/${category}`, label: `${scan === "pageState" ? "Page" : "Scoped"} axe ${category} across scans`, method: `axe-rule-results/${scan}/${(config.tags ?? wcag22Tags).join(",")}`, unit: "rule-result", aggregation: "sum-across-scans", scope: { runId: result.runId, executionId: execution.executionId, profileId: execution.profileId, operationIds: execution.operations.map((op) => op.operationId) }, status: !reports.length ? "unavailable" : complete ? "available" : "partial", value: reports.length ? reports.reduce((sum, report) => sum + report.scans[scan][category].length, 0) : null, ...(!reports.length ? { reason: "No completed axe scans." } : !complete ? { reason: "Execution ended before all scans completed." } : {}) });
         }
       }
-      return immutableSnapshot({ id: config.reportId, kind: "axe", measurements, evidence: { journal: evidence, pathReport }, errors: strictAxeFailureReports(evidence, result.runId).map((report) => ({ name: "AxeStrictError", message: axeFailureMessage(report) })) });
+      return immutableSnapshot({ id: config.reportId, kind: "axe", measurements, nodes: axeNodeSummaries(pathReport), evidence: { journal: evidence, pathReport }, errors: strictAxeFailureReports(evidence, result.runId).map((report) => ({ name: "AxeStrictError", message: axeFailureMessage(report) })) });
     }
   };
 }
