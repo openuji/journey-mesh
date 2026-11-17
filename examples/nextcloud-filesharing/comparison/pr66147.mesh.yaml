@@ -155,7 +155,7 @@ profiles:
     options:
       preset: keyboard-only
 kind: suite
-label: PR 66147 · Nextcloud 36 dev
+label: "PR #66147"
 services:
   stack:
     use: "@openuji/journey-driver-nextcloud/stack/service"
@@ -164,8 +164,7 @@ services:
       composeFiles:
         - ../deployment/compose.yaml
         - ../deployment/compose.comparison.yaml
-      image: journey-mesh/nextcloud:pr66147-fa7f792
-      expectedVersion: 36.0.0
+      image: journey-mesh/nextcloud
       directory: ../.runtime/pr66147
       environment:
         POSTGRES_DB: ${POSTGRES_DB}
@@ -201,9 +200,11 @@ services:
           password: ${NEXTCLOUD_BOB_PASSWORD}
       enabledApps:
         - notifications
+      # The target is pull request 66147 itself, not a commit: every run fetches its current head and builds it
+      # on whatever Nextcloud the pull request is based on. The tested commit and version go into the report.
       build:
         repository: https://github.com/nextcloud/server.git
-        sha: fa7f792213a5f2782b0a77f7c8d70ddec82a7370
+        pullRequest: 66147
         directory: ../../../.tmp/nextcloud-pr66147
         dockerfile: ../deployment/Dockerfile.pr
         apps:

@@ -12,7 +12,10 @@ test("each comparison subject is an ordinary suite that owns its stack identity,
   assert.notEqual(stack(left).directory, stack(right).directory);
   assert.notDeepEqual(stack(left).environment, stack(right).environment);
   assert.match(String(stack(left).image), /@sha256:/);
-  assert.equal((stack(right).build as { sha: string }).sha, "fa7f792213a5f2782b0a77f7c8d70ddec82a7370");
+  const build = stack(right).build as { repository: string; pullRequest?: unknown; sha?: unknown };
+  assert.equal(build.pullRequest, 66147, "the candidate is the pull request itself");
+  assert.equal(build.sha, undefined, "the pull request is not pinned to a commit");
+  assert.equal(stack(right).expectedVersion, undefined, "the version is read from the pull request's own source");
   assert.ok(left.label && right.label && left.label !== right.label);
   assert.notEqual(left.outputDir, right.outputDir);
   // Pairing by equal test and profile IDs needs no explicit correspondence.

@@ -2,8 +2,8 @@
 
 # Nextcloud file-sharing tests
 
-For the versioned acceptance comparison against Nextcloud PR #66147, including
-UX measurements and GitHub Pages publication, see the
+For the acceptance comparison of Nextcloud PR #66147 against Nextcloud 34.0.2,
+including UX measurements and GitHub Pages publication, see the
 [configured comparison](#compare-independent-deployments).
 
 Two compositions of the [Journey Mesh architecture](../../README.md#architecture)
@@ -364,17 +364,40 @@ The API 35 x86_64 CI target requires its own successful workflow run.
 
 ```sh
 pnpm comparison:validate   # preflight both subjects before either stack starts
-pnpm comparison:run        # test nc34, test pr66147, then compare the saved bundles
+pnpm comparison:run        # test nc34, test PR 66147, then compare the saved bundles
 pnpm comparison:report     # serve the comparison report
 ```
 
-`comparison/nc34.mesh.yaml` and `comparison/pr66147.mesh.yaml` are ordinary
-suites. Each owns its `label`, deployment pins, fixtures, journeys, UX recipes,
-reporters and output directory, and lists the pinned Nextcloud stack under
-`services`. The stack service builds and verifies the configured deployment,
-provisions accounts, and records installed identities as provenance. Managed
-stacks and their volumes are removed after execution; artifacts remain. The
-ordinary browser/native example continues to use externally prepared services.
+The candidate is the pull request itself, not a commit. `build.pullRequest: 66147`
+in [`comparison/pr66147.mesh.yaml`](comparison/pr66147.mesh.yaml) names it, and
+every run fetches the pull request's current head (`refs/pull/66147/head`), so
+commits pushed since the last run are tested. It is built on whatever Nextcloud
+version the pull request is based on: the version is read from the checked-out
+source, not configured. The tested commit, the version and the image identity are
+recorded in the report's provenance. The first build of a commit compiles the
+Nextcloud frontend and takes several minutes; later runs of the same commit reuse
+Docker's layer cache. `pnpm comparison:baseline` and `pnpm comparison:candidate`
+run one side.
+
+To test a different pull request, change that number (and the names that carry it:
+the file, `label`, `outputDir`, `project` and `directory`), or copy the file. Use
+`build.sha` instead of `build.pullRequest` to pin an exact commit.
+
+`comparison/nc34.mesh.yaml` and `comparison/pr66147.mesh.yaml` are ordinary suites.
+Each owns its `label`, deployment, fixtures, journeys, UX recipes, reporters and
+output directory, and lists its Nextcloud stack under `services`. The baseline pins
+the stock `nextcloud:34.0.2` image by digest; the candidate builds the pull
+request's source over the same runtime image, plus a pinned `notifications` app.
+The stack service builds and verifies the deployment, provisions
+accounts, and records installed identities as provenance. Managed stacks and
+their volumes are removed after execution; artifacts remain. The ordinary
+browser/native example continues to use externally prepared services.
+
+The candidate's journey (`ujg/comparison/pr66147.ujg.jsonld`) is the one scenario
+both subjects are measured on: Bob accepting Alice's federated share. It follows
+the pending-shares flow of that pull request, so a pull request that changes the
+recipient's experience differently needs its own journey, referenced from
+`comparison/pr66147.mesh.yaml`.
 
 The comparison itself is `journey-mesh compare test-results/nc34/bundle.json
 test-results/pr66147/bundle.json`. It loads no plugins and runs nothing: it copies
