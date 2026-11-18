@@ -76,3 +76,38 @@ test("effect recipes are detached so callers cannot turn verification into hidde
   await env.verifyEffect!({ context: execution, effect: { id: "check" } } as Parameters<NonNullable<typeof env.verifyEffect>>[0]);
   assert.deepEqual(methods, ["GET"]);
 });
+
+test("fixture cleanup retains its captures across later fixtures and effects and shares captures within its group", async () => {
+  const calls: string[] = [];
+  let nextId = 0;
+  const setup: RequestStep[] = ["first", "second"].map((id) => ({
+    id, client: "api", method: "POST", path: "/objects", status: [200], capture: { id: "/id" },
+    cleanup: [
+      { id: `trash-${id}`, client: "api", method: "POST", path: "/trash/{{id}}", status: [200], capture: { id: "/trashId" } },
+      { id: `purge-${id}`, client: "api", method: "DELETE", path: "/trash/{{id}}", status: [204] }
+    ]
+  }));
+  const env = httpEnvironment({ clients: { api: { baseURL: "http://example.test" } }, setup,
+    effects: { changed: [{ id: "check", client: "api", method: "GET", path: "/state", status: [200], capture: { id: "/id" } }] },
+    timeoutMs: 100, cleanupTimeoutMs: 100 }, undefined, async (url, init) => {
+    const path = new URL(String(url)).pathname;
+    calls.push(`${init?.method} ${path}`);
+    if (path === "/objects") return Response.json({ id: ++nextId });
+    if (path === "/state") return Response.json({ id: 999 });
+    if (init?.method === "POST") return Response.json({ trashId: Number(path.split("/").pop()) * 10 });
+    return new Response(null, { status: 204 });
+  });
+  const execution = context("cleanup-scopes");
+  await env.setup!(execution);
+  await env.verifyEffect!({ context: execution, effect: { id: "changed" } } as Parameters<NonNullable<typeof env.verifyEffect>>[0]);
+  await env.teardown!({ context: execution, executionFailed: false });
+  assert.deepEqual(calls, ["POST /objects", "POST /objects", "GET /state", "POST /trash/2", "DELETE /trash/20", "POST /trash/1", "DELETE /trash/10"]);
+});
+
+test("empty effect checks fail preflight through both the plugin and direct API", () => {
+  const options: HttpOptions = { clients: { api: { baseURL: "http://example.test" } }, setup: [],
+    effects: { changed: [] }, timeoutMs: 100, cleanupTimeoutMs: 100 };
+  const parseContext = { operations: [{ kind: "transition", effects: [{ id: "changed" }] }] } as unknown as Parameters<typeof journeyMeshPlugin.parse>[1];
+  assert.throws(() => journeyMeshPlugin.parse(options, parseContext), /changed.*at least one/);
+  assert.throws(() => httpEnvironment(options), /changed.*at least one/);
+});

@@ -29,10 +29,13 @@ Read requests may use `poll: {timeoutMs: 30000, intervalMs: 250}`. Mutating requ
 are never retried. Successful fixture creation registers its cleanup before
 response assertions run; completed fixture groups clean up in reverse order, even
 after setup failure or execution cancellation. A group's cleanup requests retain
-their listed order, allowing trash followed by permanent deletion.
+their listed order, allowing trash followed by permanent deletion. Each group
+retains the captures available when its fixture was created, so later fixtures
+and effect checks cannot redirect its cleanup. Captures made during cleanup are
+available to subsequent requests in that group.
 
-Every declared UJG effect must have checks, and every configured effect must
-exist in the compiled plan. Effect checks cannot mutate the application or register
+Every declared UJG effect must have at least one check, and every configured effect
+must exist in the compiled plan. Effect checks cannot mutate the application or register
 cleanup. A tested API mutation needs its own modeled transition and a compatible
 execution adapter. Setup/cleanup mutations are fixture lifecycle only.
 

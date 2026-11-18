@@ -39,6 +39,18 @@ test("incompatible output references fail before startup", async () => {
   await assert.rejects(validateSuite(s.path), /incompatible service input/);
   await assert.rejects(access(join(s.directory, "events")));
 });
+test("an unselected target fails preflight even when no services are selected", async () => {
+  const s = await setup(); s.config.tests.task.services = []; await s.save();
+  await assert.rejects(validateSuite(s.path), /target must reference a source-identity output of a selected service/);
+  await assert.rejects(access(join(s.directory, "events")));
+});
+test("a suite without a target or selected services does not load unrelated services", async () => {
+  const s = await setup(); s.config.tests.task.services = [];
+  s.config.services.source.use = "missing-unselected-service";
+  await writeFile(s.path, stringify({ ...s.config, target: undefined }));
+  assert.deepEqual(await validateSuite(s.path), { tests: ["task"] });
+  await assert.rejects(access(join(s.directory, "events")));
+});
 test("failed installation cleans up attempted services in reverse order", async () => {
   const s = await setup(); s.config.services.install.options.fail = true; await s.save();
   const result = await runSuite(s.path); assert.equal(result.ok, false); assert.equal(result.target, undefined);

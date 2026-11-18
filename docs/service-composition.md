@@ -74,9 +74,11 @@ or safe integers. They are applied with their explicit scalar type during stack
 provisioning; job-specific fixture settings belong here rather than in routines.
 A built stack consumes its image and version from `inputs.image`; it rejects a
 second image/build/version declaration. App installation copies artifacts before
-enabling them and verifies the installed SHA marker and version on every selected
-instance. A fresh managed stack owns its containers and volumes; teardown removes
-those resources, not unrelated running stacks or shared images.
+enabling them. Existing apps are replaced at the path Nextcloud resolves; new apps
+go into `custom_apps`. Replacements remove obsolete files, and installation verifies
+the resolved app path, SHA marker, and version on every selected instance. A fresh
+managed stack owns its containers and volumes; teardown removes those resources,
+not unrelated running stacks or shared images.
 
 ## Plugin contract
 

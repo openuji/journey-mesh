@@ -1,5 +1,5 @@
 import { defineEnvironmentPlugin, knownOptions, optionsObject, positiveNumber, requiredString } from "@openuji/journey-plugin";
-import { httpEnvironment, type HttpOptions, type RequestStep, type Assertion } from "./index.js";
+import { httpEnvironment, validateEffectChecks, type HttpOptions, type RequestStep, type Assertion } from "./index.js";
 
 const jsonPointer = (value: unknown): string => {
   if (typeof value !== "string" || value !== "" && (!value.startsWith("/") || /~(?![01])/.test(value))) throw new Error("Invalid JSON Pointer");
@@ -53,11 +53,8 @@ export const journeyMeshPlugin = defineEnvironmentPlugin({
           ...(poll ? { poll: { timeoutMs: positiveNumber(poll.timeoutMs, 30_000), intervalMs: positiveNumber(poll.intervalMs, 250) } } : {}) };
       });
     };
-    const effects = Object.fromEntries(Object.entries(optionsObject(options.effects ?? {}, "effects")).map(([id, steps]) => {
-      const checks = parseSteps(steps);
-      if (checks.some((step) => !["GET", "HEAD"].includes(step.method) || step.cleanup?.length)) throw new Error("Effect verification must be read-only; model test actions as UJG transitions");
-      return [id, checks];
-    }));
+    const effects = Object.fromEntries(Object.entries(optionsObject(options.effects ?? {}, "effects")).map(([id, steps]) => [id, parseSteps(steps)]));
+    validateEffectChecks(effects);
     const required = new Set(context.operations.flatMap((op) => op.kind === "transition" ? op.effects.map((effect) => effect.id) : []));
     for (const id of new Set([...required, ...Object.keys(effects)])) if (!required.has(id) || !Object.hasOwn(effects, id)) throw new Error(`Missing or unknown HTTP effect ${id}`);
     return { clients, setup: parseSteps(options.setup ?? []), effects,
