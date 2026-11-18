@@ -2,6 +2,7 @@ import { positiveNumber, type AdapterPlugin, type DriverPlugin, type JourneyArti
 import { routedAdapter, type JourneyAdapter, type JourneyEnvironment, type JourneyPlan, type JourneyPlanOperation, type JourneyProfile } from "@openuji/journey-runner";
 import { interpolate, type LoadedSuiteConfig } from "./config/load.js";
 import type { TestConfig } from "./config/schema.js";
+import type { JourneyReportOptions } from "@openuji/journey-plugin";
 import { segmentOf, type CompiledTest } from "./compile.js";
 import { pluginContext } from "./plugins/context.js";
 import type { PluginLoader } from "./plugins/loader.js";
@@ -9,6 +10,7 @@ import type { PluginLoader } from "./plugins/loader.js";
 /** Everything needed to execute one test. Constructing it allocates no automation resources. */
 export type AssembledTest = Readonly<{
   id: string;
+  report?: JourneyReportOptions;
   plan: JourneyPlan;
   compiled: CompiledTest;
   adapter: JourneyAdapter;
@@ -109,6 +111,7 @@ export async function assembleTest(test: TestConfig, compiled: CompiledTest, inp
   for (const [index, entry] of test.reporters.entries()) reporters.push(await (await load("reporter", entry, `tests.${test.id}.reporters[${index}]`, context)).create());
   return Object.freeze({
     id: test.id, plan: compiled.plan, compiled, adapter, profiles, observers, reporters, services: test.services, artifacts,
+    ...(test.report ? { report: test.report } : {}),
     ...(environment ? { environment } : {}),
     timeoutMs: positiveNumber(interpolate(test.timeoutMs, loaded.env, `tests.${test.id}.timeoutMs`), 600_000)
   });

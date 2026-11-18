@@ -3,11 +3,11 @@ import test from "node:test";
 import { execFile } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { stringify } from "yaml";
-import { compareBundles, publishReport } from "@openuji/journey-reporter";
+import { compareBundles, publishReport, readReport, writeReport } from "@openuji/journey-reporter";
 import type { SuiteResultBundle } from "@openuji/journey-plugin";
 import { runSuite } from "../src/index.js";
 
@@ -29,7 +29,7 @@ async function setup(baselineIds = ["task", "default"], candidateIds = ["task", 
   await writeFile(join(directory, "model.json"), JSON.stringify({ journeys: [...new Set([baselineIds[0], candidateIds[0]])] }));
   const save = async () => { for (const side of ["baseline", "candidate"] as const) await writeFile(join(directory, `${side}.yaml`), stringify(meshes[side])); };
   await save();
-  const bundle = (side: "baseline" | "candidate") => join(directory, `${side}-results/bundle.json`);
+  const bundle = (side: "baseline" | "candidate") => join(directory, `${side}-results/manifest.json`);
   const run = async () => { for (const side of ["baseline", "candidate"] as const) await runSuite(join(directory, `${side}.yaml`)); };
   return { directory, meshes, save, run, bundle, output: join(directory, "comparison") };
 }
@@ -40,16 +40,16 @@ test("saved suite runs pair by test and profile ID and publish isolated evidence
   assert.equal(result.ok, true);
   assert.deepEqual(result.pairings.map((pairing) => [pairing.baseline.test, pairing.candidate.profile]), [["task", "default"]]);
   assert.equal(result.subjects.baseline.label, "baseline system");
-  assert.equal(result.subjects.candidate.source, "../candidate-results/bundle.json");
+  assert.equal(result.subjects.candidate.source, "../candidate-results/manifest.json");
   for (const side of ["baseline", "candidate"] as const) assert.match(await readFile(join(suite.output, `subjects/${side}/task/fixture-evidence.txt`), "utf8"), /fixture/);
   // Self-contained: the page embeds its bundle and loads nothing else, so it also opens from disk.
   const page = await readFile(join(suite.output, "index.html"), "utf8");
-  assert.match(page, /window\.__JOURNEY_MESH_BUNDLE__=.*Release check/s);
-  assert.doesNotMatch(page, /(?:src|href)="\.?\/?assets\//);
-  assert.match(await readFile(join(suite.output, "bundle.json"), "utf8"), /Release check/);
+  assert.doesNotMatch(page, /__JOURNEY_MESH_BUNDLE__/);
+  assert.match(page, /(?:src|href)="\.\/assets\//);
+  assert.match(JSON.stringify(await readReport(suite.output)), /Release check/);
   const published = join(suite.directory, "project-path");
   await mkdir(published); await writeFile(join(published, "stale-private.env"), "not registered");
-  await publishReport(join(suite.output, "bundle.json"), published);
+  await publishReport(join(suite.output, "manifest.json"), published);
   await assert.rejects(access(join(published, "stale-private.env")));
   await access(join(published, "subjects/baseline/task/fixture-evidence.txt"));
   await access(join(published, "index.html"));
@@ -71,8 +71,8 @@ test("a failed subject keeps its evidence and a missing subject is reported with
   assert.equal(result.ok, false);
   assert.equal(result.subjects.baseline.bundle!.ok, false);
   assert.equal(result.subjects.candidate.bundle!.ok, true);
-  assert.match(await readFile(join(suite.output, "bundle.json"), "utf8"), /Fixture state failure/);
-  const missing = await compareBundles({ baseline: suite.bundle("baseline"), candidate: join(suite.directory, "never-ran/bundle.json"), outputDir: suite.output });
+  assert.match(JSON.stringify(await readReport(suite.output)), /Fixture state failure/);
+  const missing = await compareBundles({ baseline: suite.bundle("baseline"), candidate: join(suite.directory, "never-ran/manifest.json"), outputDir: suite.output });
   assert.equal(missing.subjects.candidate.bundle, null);
   assert.match(missing.subjects.candidate.errors[0].message, /ENOENT/);
   await access(join(suite.output, "index.html"));
@@ -80,9 +80,15 @@ test("a failed subject keeps its evidence and a missing subject is reported with
 
 test("saved publication refuses evidence paths outside its bundle and keeps the previous publication", async () => {
   const suite = await setup(); await suite.run();
-  const saved = JSON.parse(await readFile(suite.bundle("baseline"), "utf8")) as SuiteResultBundle;
+  const saved = await readReport(suite.bundle("baseline"), ["suite"]);
   (saved.tests[0].artifacts as unknown as object[]).push({ name: "escape", path: "/private", href: "../secret", contentType: "text/plain" });
-  await writeFile(suite.bundle("baseline"), JSON.stringify(saved));
+  const manifest = JSON.parse(await readFile(suite.bundle("baseline"), "utf8"));
+  const testIndex = JSON.parse(await readFile(join(dirname(suite.bundle("baseline")), manifest.tests.href), "utf8")).value;
+  const testManifest = JSON.parse(await readFile(join(dirname(suite.bundle("baseline")), testIndex[0].manifest.href), "utf8"));
+  const summaryPath = join(dirname(suite.bundle("baseline")), testManifest.summary.href);
+  const document = JSON.parse(await readFile(summaryPath, "utf8"));
+  document.value.artifacts = saved.tests[0].artifacts;
+  await writeFile(summaryPath, JSON.stringify(document));
   await mkdir(suite.output); await writeFile(join(suite.output, "retained.html"), "previous valid publication");
   await assert.rejects(compareBundles({ baseline: suite.bundle("baseline"), candidate: suite.bundle("candidate"), outputDir: suite.output }), /relative evidence/);
   await assert.rejects(publishReport(suite.bundle("baseline"), join(suite.directory, "copy")), /relative evidence/);
@@ -102,6 +108,6 @@ test("CLI preflights every subject before running, and compare exits nonzero for
   assert.match(compared.stdout, /PASS baseline \(baseline system\)/);
   Object.assign(suite.meshes.candidate.adapters.adapter.options, { fail: "task" }); await suite.save(); await suite.run();
   await assert.rejects(exec(process.execPath, [cli, "compare", suite.bundle("baseline"), suite.bundle("candidate"), "--output", suite.output]), (error: unknown) => (error as { code: number; stdout: string }).code === 1 && /FAIL candidate/.test((error as { stdout: string }).stdout));
-  const rendered = await exec(process.execPath, [cli, "render", join(suite.output, "bundle.json"), "--output", join(suite.directory, "published")]);
+  const rendered = await exec(process.execPath, [cli, "render", join(suite.output, "manifest.json"), "--output", join(suite.directory, "published")]);
   assert.match(rendered.stdout, /Report: .*published\/index\.html/);
 });

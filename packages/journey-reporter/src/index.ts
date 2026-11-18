@@ -5,10 +5,13 @@ export { compareMeasurements, inferPairings, validatePairings } from "./comparis
 export type { MeasurementDifference } from "./comparison.js";
 export { compareBundles } from "./compare-bundles.js";
 export type { CompareBundlesInput } from "./compare-bundles.js";
-export { publishReport, viewerHtml, writeReport, readSavedBundle } from "./publish.js";
+export { publishReport, viewerHtml, writeReport, readReport, reportDirectory } from "./publish.js";
+export { openReport } from "./report-data.js";
+export type { ReportManifest, ReportHandle } from "./report-data.js";
 export type { PublishedBundle } from "./publish.js";
 export { fileArtifactStore } from "./artifact-store.js";
 export { testFailures, testPassed } from "./outcome.js";
+export { selectJourneyMaps } from "./journey-maps.js";
 export { testDirectory, subjectDirectory, artifactHref } from "./paths.js";
 
 /** Reporters receive detached snapshots; a failure never changes execution history. */

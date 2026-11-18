@@ -5,7 +5,7 @@
 export { loadSuiteConfig, interpolate, JourneyConfigError } from "./config/load.js";
 export type { Environment, LoadedSuiteConfig } from "./config/load.js";
 export type {
-  AdapterConfig, ComponentConfig, EnvFileConfig, JourneyItemConfig, ProfileCombinationConfig, ServiceConfig, SuiteConfig, TestConfig
+  AdapterConfig, ComponentConfig, EnvFileConfig, JourneyItemConfig, ProfileCombinationConfig, ServiceConfig, ServiceOutputRef, SuiteConfig, TestConfig
 } from "./config/schema.js";
 export { prepareSuite, runSuite, validateSuite } from "./suite.js";
 export type { RunSuiteOptions } from "./suite.js";

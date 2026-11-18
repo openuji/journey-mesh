@@ -76,10 +76,10 @@ export type AndroidReportResource = Readonly<
 >;
 
 /** Explicit resources produce standalone HTML; omitted resources retain legacy bundle links. */
-export function renderAndroidAccessibilityReport(
+export function androidAccessibilityHtmlParts(
   report: AndroidAccessibilityReport,
   resources?: readonly AndroidReportResource[]
-): string {
+): import("@openuji/journey-plugin").HtmlDocumentParts {
   const escape = escapeHtml;
   const rows = report.items.map((item, index) => {
     const observation = item.observation;
@@ -114,8 +114,14 @@ export function renderAndroidAccessibilityReport(
       sections: artifacts.map((artifact) => artifact.section)
     };
   });
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escape(report.reportId)}</title>
+  const header = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escape(report.reportId)}</title>
 <style>body{font:1rem/1.5 system-ui;max-width:80rem;margin:2rem auto;padding:0 1rem}table{border-collapse:collapse;width:100%}th,td{text-align:left;vertical-align:top;border-bottom:1px solid #ccc;padding:.5rem}code,pre{overflow-wrap:anywhere}a{color:#164e9d}.evidence{margin-top:3rem;border-top:1px solid #ccc}pre{white-space:pre-wrap;max-height:24rem;overflow:auto}img{display:block;max-width:100%;height:auto}</style>
 <body><h1>Android accessibility evidence</h1><p>${escape(report.runId)} · ${escape(report.createdAt)}</p><ul>${report.limits.map((limit) => `<li>${escape(limit)}</li>`).join("")}</ul><p>${report.summary.findings} potential findings; ${report.summary.unassessed} unassessed checks.</p>
-<table><thead><tr><th scope="col">Profile / operation</th><th scope="col">Status</th><th scope="col">Evidence and checks</th></tr></thead><tbody>${rows.map((row) => row.row).join("")}</tbody></table>${rows.flatMap((row) => row.sections).join("")}</body></html>`;
+<table><thead><tr><th scope="col">Profile / operation</th><th scope="col">Status</th><th scope="col">Evidence and checks</th></tr></thead><tbody>`;
+  return { header, sections: rows.flatMap((row) => [row.row, ...row.sections]), footer: "</tbody></table></body></html>" };
+}
+
+export function renderAndroidAccessibilityReport(report: AndroidAccessibilityReport, resources?: readonly AndroidReportResource[]): string {
+  const parts = androidAccessibilityHtmlParts(report, resources);
+  return parts.header + parts.sections.join("") + parts.footer;
 }

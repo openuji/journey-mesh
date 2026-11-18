@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { fileArtifactStore, testDirectory } from "@openuji/journey-reporter";
 import type { JourneyReporter, SuiteResultBundle } from "@openuji/journey-plugin";
+import { reportFileLimit } from "@openuji/journey-plugin";
 import type { JourneyProgressSink } from "@openuji/journey-runner";
 import { JourneyConfigError, loadSuiteConfig } from "./config/load.js";
 import { compileTest } from "./compile.js";
@@ -33,21 +34,22 @@ export async function prepareSuite(path: string, options: RunSuiteOptions = {}):
   try {
     const outputDir = outputDirectory(loaded, options.outputDir);
     const load = pluginLoader(loaded.path, loaded.env);
-    const artifacts = fileArtifactStore(outputDir);
+    const maxFileBytes = reportFileLimit(config.report?.maxFileSizeMiB);
+    const artifacts = fileArtifactStore(outputDir, "", maxFileBytes);
     const suiteContext = (testId: string) => pluginContext({ configPath: loaded.path, env: loaded.env, testId, artifacts });
     const compiler = await (await load("model", config.model, "model", suiteContext("suite"))).create();
     const tests: AssembledTest[] = [];
     for (const test of selected) {
       current = test.id;
       const compiled = await compileTest(test, compiler, loaded.path, loaded.env);
-      tests.push(await assembleTest(test, compiled, { loaded, load, artifacts: fileArtifactStore(resolve(outputDir, testDirectory(test.id))) }));
+      tests.push(await assembleTest(test, compiled, { loaded, load, artifacts: fileArtifactStore(resolve(outputDir, testDirectory(test.id)), "", maxFileBytes) }));
     }
     current = undefined;
     const reporters: JourneyReporter[] = [];
     for (const [index, entry] of config.reporters.entries()) reporters.push(await (await load("reporter", entry, `reporters[${index}]`, suiteContext("suite"))).create());
     const keys = [...new Set(tests.flatMap((test) => test.services))];
-    const services = keys.length ? await loadServices(loaded, load, orderServices(config.services, keys), outputDir) : [];
-    return Object.freeze({ ...(config.label ? { label: config.label } : {}), outputDir, tests, services, reporters, artifacts });
+    const services = await loadServices(loaded, load, orderServices(config.services, keys), outputDir, true);
+    return Object.freeze({ ...(config.target ? { target: config.target } : {}), ...(config.label ? { label: config.label } : {}), outputDir, tests, services, reporters, artifacts });
   } catch (error) {
     if (error instanceof JourneyConfigError && error.testIds.length) throw error;
     throw new JourneyConfigError(error instanceof Error ? error.message : "Invalid journey test configuration", { testId: current, testIds });

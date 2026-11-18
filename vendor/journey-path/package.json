@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./registry": {
+      "types": "./src/data/parser.ts",
+      "default": "./src/data/parser.ts"
+    },
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"

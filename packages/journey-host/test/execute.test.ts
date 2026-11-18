@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,7 @@ import { stringify } from "yaml";
 import type { JourneyObserverComponent } from "@openuji/journey-plugin";
 import type { JourneyObserverOutput, JourneyMeasurement } from "@openuji/journey-core";
 import type { RunResult } from "@openuji/journey-runner";
+import { readReport } from "@openuji/journey-reporter";
 import { collectObserverOutputs, runSuite } from "../src/index.js";
 
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/${name}.mjs`, import.meta.url));
@@ -52,7 +53,7 @@ test("service provenance and artifacts reach the suite bundle with relative href
   // The model's drawable view is embedded in the bundle and referenced by each journey segment.
   assert.deepEqual(bundle.tests[0].segments, [{ id: "task", journeyId: "task", adapter: "adapter", view: "model.json" }]);
   assert.deepEqual(bundle.tests[0].views, { "model.json": { format: "fixture", document: { journeys: ["task"] } } });
-  const saved = JSON.parse(await readFile(join(directory, "results/bundle.json"), "utf8"));
+  const saved = await readReport(join(directory, "results"), ["suite"]);
   assert.deepEqual(saved.provenance, bundle.provenance);
   // Saved bundles are publishable: no local absolute path survives anywhere in them.
   const absolute: string[] = [];

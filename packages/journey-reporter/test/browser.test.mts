@@ -4,8 +4,9 @@ import { createServer } from "node:http";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { writeReport } from "../src/publish.js";
 import { compareBundles } from "../src/compare-bundles.js";
 import { testDirectory } from "../src/paths.js";
 import type { SuiteResultBundle, TestResultBundle } from "@openuji/journey-plugin";
@@ -25,7 +26,7 @@ function savedTest(side: string, id: string, index: number, failAt?: number): Te
   const operations = states.map((state, sequence) => ({ id: `${id}/alice/${state}`, sequence, kind: "state" as const, segment: "alice", actorId: "urn:user:alice", touchpointId: "urn:touchpoint:nextcloud-a", entry: { id: "entry", stateId: states[0] }, state: { id: state }, surface: { id: "surface" }, target: { expectedMatchCount: 1, bindings: [], observation: { stateId: state, surfaceId: "surface", expectedMatchCount: 1, bindings: [] } } }));
   const outcome = (sequence: number) => failAt === undefined || sequence < failAt ? { kind: "passed" as const } : { kind: "failed" as const, error: { name: "Error", message: "Share permissions did not open" } };
   return {
-    kind: "test", id, plan: { id: "plan", operations }, reportingErrors: [],
+    kind: "test", id, plan: { id: "plan", operations }, reportingErrors: [], report: { excludedPhaseIds: ["urn:phase:setup"] },
     segments: [
       { id: "login", journeyId: "urn:journey:alice-web-setup", adapter: "web", view: "setup" },
       { id: "alice", journeyId: "urn:journey:alice-federated-sharing", adapter: "web", view: "nc34" }
@@ -63,8 +64,8 @@ async function savedRun(root: string, side: string): Promise<string> {
     for (const profile of ["default", "keyboard"]) await writeFile(join(base, `${profile}.png`), png);
   }
   const suite: SuiteResultBundle = { kind: "suite", label: side === "baseline" ? "Nextcloud 34" : "PR 66147", ok: side === "baseline", generatedAt: "2026-11-17", errors: [], artifacts: [], tests };
-  await writeFile(join(directory, "bundle.json"), JSON.stringify(suite));
-  return join(directory, "bundle.json");
+  await writeReport(directory, suite);
+  return join(directory, "manifest.json");
 }
 
 test("comparison draws both journey maps with node metrics and links each subject to its own report", async () => {
@@ -94,7 +95,8 @@ test("comparison draws both journey maps with node metrics and links each subjec
     const node = (side: string, state: string) => pane(side).locator(`[data-node-id="urn:state:${state}"]`);
     await node("candidate", "alice-files-ready").waitFor();
     // The page embeds its bundle and journey maps: nothing but evidence is requested.
-    assert.ok(!requested.includes("bundle.json"));
+    assert.ok(requested.includes("manifest.json"));
+    assert.ok(!requested.some((name) => /observers\/\d+\/evidence/.test(name)));
     assert.equal(await pane("baseline").locator("[data-journey-map]").count(), 1);
     assert.equal(await pane("candidate").locator("[data-journey-map]").count(), 1);
     // A document made only of setup steps (the login) is preparation, not the scenario: it is not drawn.
@@ -135,16 +137,20 @@ test("comparison draws both journey maps with node metrics and links each subjec
     const sharing = page.locator('section[data-test="sharing"]');
     await sharing.getByRole("button", { name: "keyboard" }).click();
     await sharing.locator('.profile-switch button[aria-pressed="true"]', { hasText: "keyboard" }).waitFor();
-    // A suite report shows every test's map on one page.
+    // Every test stays on the suite page; offscreen maps load when displayed.
+    await sharing.locator("[data-journey-map]").waitFor();
+    const another = page.locator('section[data-test="another task"]');
+    await another.scrollIntoViewIfNeeded();
+    await another.locator("[data-journey-map]").waitFor();
     assert.equal(await page.locator("section.test-page [data-journey-map]").count(), 2);
     assert.match(page.url(), /profile=keyboard/);
     assert.equal(await sharing.getByText("Executed steps and outcomes").count(), 1);
     await page.screenshot({ path: "/tmp/journey-mesh-subject-desktop.png", fullPage: true });
 
-    // Published reports are self-contained: they open straight from disk, maps included.
-    await page.goto(pathToFileURL(join(output, "index.html")).href);
+    // Root and nested subject manifests both load under the hosting prefix.
+    await page.goto(`${origin}index.html`);
     await page.locator('article[data-subject=candidate] [data-node-id="urn:state:alice-share-permissions-open"][data-outcome=failed]').waitFor();
-    await page.goto(`${pathToFileURL(join(output, "subjects/baseline/index.html")).href}#test=another%20task&profile=keyboard`);
+    await page.goto(`${origin}subjects/baseline/index.html#test=another%20task&profile=keyboard`);
     await page.locator('section[data-test="another task"] .profile-switch button[aria-pressed="true"]', { hasText: "keyboard" }).waitFor();
     assert.deepEqual(errors, []);
   } finally { await browser.close(); await new Promise<void>((done) => server.close(() => done())); }

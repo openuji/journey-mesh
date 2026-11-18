@@ -29,7 +29,7 @@ export function contract<T>(id: string): Contract<T> {
 /** Infrastructure a test needs (a server stack, an emulator, an Appium server), managed independently of executions. */
 export type JourneyService = {
   readonly name: string;
-  up(input?: { signal?: AbortSignal }): Promise<void>;
+  up(input?: { signal?: AbortSignal; inputs?: Readonly<Record<string, unknown>> }): Promise<void | Readonly<Record<string, unknown>>>;
   down?(): Promise<void>;
   /** Identity of what the service provided, recorded in the suite bundle. Must not contain credentials. */
   provenance?(): unknown;
@@ -73,7 +73,10 @@ export type ObserverPlugin<S = unknown, O = unknown> = Plugin<"observer", S, Jou
 export type ModelPlugin<S = unknown> = Plugin<"model", S, JourneyModelCompiler>;
 export type ProfilePlugin<S = unknown> = Plugin<"profile", S, JourneyProfile>;
 export type EnvironmentPlugin<S = unknown> = Plugin<"environment", S, JourneyEnvironment>;
-export type ServicePlugin<S = unknown> = Plugin<"service", S, JourneyService>;
+export type ServicePlugin<S = unknown> = Plugin<"service", S, JourneyService> & {
+  readonly inputs?: Readonly<Record<string, Contract<unknown>>>;
+  readonly outputs?: Readonly<Record<string, Contract<unknown>>>;
+};
 export type ReporterPlugin<S = unknown> = Plugin<"reporter", S, JourneyReporter>;
 
 /** What a module exports as `journeyMeshPlugin`. */

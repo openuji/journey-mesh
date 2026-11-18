@@ -1,11 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useRef, type ReactNode } from "react";
 import type { ComparisonResultBundle, SuiteResultBundle, TestResultBundle } from "@openuji/journey-plugin";
 import { JourneyMap, MetricsLegend, metricKinds } from "./JourneyMap.js";
 import { compareMeasurements } from "../src/comparison.js";
-import { testPassed } from "../src/outcome.js";
 import { artifactHref, subjectDirectory, testDirectory } from "../src/paths.js";
+import type { ReportHandle, TestEntry } from "../src/report-data.js";
 
-export type ViewerBundle = SuiteResultBundle | ComparisonResultBundle;
 const operationLabel = (op: TestResultBundle["plan"]["operations"][number]) => op.kind === "state" ? op.state.label ?? op.state.id : op.transition.label ?? op.transition.id;
 const display = (value: number | boolean | string | null | undefined) => value == null ? "Unavailable" : typeof value === "boolean" ? value ? "Yes" : "No" : String(value);
 const testBase = (id: string, prefix = "") => `${prefix}${artifactHref(testDirectory(id))}/`;
@@ -22,7 +21,7 @@ const executionOutcome = (test: TestResultBundle | undefined, profile: string) =
 
 /** Links to the provider reports for people who need every finding: test-wide HTML written by reporters. */
 function ReportLinks({ test, base = "", children }: { test: TestResultBundle; base?: string; children?: ReactNode }) {
-  const reports = test.artifacts.filter((artifact) => artifact.contentType === "text/html" && !artifact.scope);
+  const reports = test.artifacts.filter((artifact) => artifact.contentType === "text/html" && !artifact.scope && !artifact.auxiliary);
   return reports.length || children ? <div className="report-links">
     {children}
     {reports.map((artifact) => <a key={artifact.href} href={base + artifactHref(artifact.href)} target="_blank" rel="noopener">Open {artifact.label ?? artifact.name}</a>)}
@@ -41,7 +40,7 @@ function TestDetails({ test, base, profile }: { test: TestResultBundle; base: st
   const execution = test.result.executions.find((item) => item.profileId === profile);
   const recorded = test.result.evidence.executions.find((item) => item.executionId === execution?.executionId);
   const measurements = test.outputs.flatMap((output) => output.measurements.filter((metric) => metric.scope.profileId === profile));
-  const artifacts = test.artifacts.filter((artifact) => !artifact.scope || artifact.scope.executionId === execution?.executionId);
+  const artifacts = test.artifacts.filter((artifact) => !artifact.auxiliary && (!artifact.scope || artifact.scope.executionId === execution?.executionId));
   const screenshots = artifacts.filter((artifact) => artifact.contentType === "image/png");
   const downloads = artifacts.filter((artifact) => artifact.contentType !== "image/png");
   const observerErrors = test.outputs.flatMap((output) => output.errors);
@@ -83,15 +82,8 @@ function useHash(): URLSearchParams {
 const testAnchor = (id: string) => `test-${testDirectory(id)}`;
 
 /** One test: the journey map with node metrics first, then links and collapsed details. */
-function TestSection({ test, params }: { test: TestResultBundle; params: URLSearchParams }) {
+function TestSection({ test, profile, select }: { test: TestResultBundle; profile: string; select: (profile: string) => void }) {
   const profiles = profilesOf(test);
-  const requested = params.get("test") === test.id ? params.get("profile") : null;
-  const [profile, setProfile] = useState(profiles.find((item) => item === requested) ?? profiles[0] ?? "");
-  useEffect(() => { if (requested && profiles.includes(requested)) setProfile(requested); }, [requested]);
-  const select = (next: string) => {
-    setProfile(next);
-    history.replaceState(null, "", profileHash(test.id, next));
-  };
   const base = testBase(test.id);
   const execution = test.result.executions.find((item) => item.profileId === profile);
   return <section className="test-page" id={testAnchor(test.id)} data-test={test.id}>
@@ -105,21 +97,55 @@ function TestSection({ test, params }: { test: TestResultBundle; params: URLSear
 }
 
 /** A suite run: every test's journey map on one page. */
-function Suite({ bundle }: { bundle: SuiteResultBundle }) {
+function useTest(report: ReportHandle | null, id: string, profile: string, enabled = true) {
+  const [test, setTest] = useState<TestResultBundle>();
+  const [error, setError] = useState<string>();
+  const [attempt, retry] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setTest(undefined); setError(undefined);
+    if (enabled && report && id) report.loadTest(id, profile || undefined).then((test) => { if (!cancelled) setTest(test); })
+      .catch((reason) => { if (!cancelled) setError(reason.message); });
+    return () => { cancelled = true; };
+  }, [report, id, profile, enabled, attempt]);
+  return { test, error, retry: () => retry(attempt + 1) };
+}
+
+function LazyTestSection({ report, entry, params }: { report: ReportHandle; entry: TestEntry; params: URLSearchParams }) {
+  const root = useRef<HTMLDivElement>(null);
+  const requested = params.get("test") === entry.id ? params.get("profile") : null;
+  const [visible, setVisible] = useState(params.get("test") === entry.id);
+  const [profile, setProfile] = useState(entry.profiles.find((id) => id === requested) ?? entry.profiles[0] ?? "");
+  useEffect(() => { if (requested && entry.profiles.includes(requested)) setProfile(requested); }, [requested]);
+  useEffect(() => {
+    const observer = new IntersectionObserver((items) => { if (items.some((item) => item.isIntersecting)) setVisible(true); }, { rootMargin: "300px" });
+    if (root.current) observer.observe(root.current);
+    return () => observer.disconnect();
+  }, []);
+  const { test, error, retry } = useTest(report, entry.id, profile, visible);
+  const select = (profile: string) => { setProfile(profile); history.replaceState(null, "", profileHash(entry.id, profile)); };
+  return <div ref={root}>
+    {test ? <TestSection test={test} profile={profile} select={select} /> : <section className="test-page" id={testAnchor(entry.id)} data-test={entry.id}>
+      <h2>{entry.id}</h2><p role="status">{error ?? "Loading test data…"}</p>{error && <button onClick={retry}>Retry loading test</button>}
+    </section>}
+  </div>;
+}
+
+function Suite({ bundle, report }: { bundle: SuiteResultBundle; report: ReportHandle }) {
   const params = useHash();
   const target = params.get("test");
   useEffect(() => { if (target) document.getElementById(testAnchor(target))?.scrollIntoView(); }, [target]);
   return <>
     <div className="run-summary"><Status outcome={bundle.ok ? "passed" : "failed"} /><time dateTime={bundle.generatedAt}>Generated {bundle.generatedAt}</time></div>
     <Errors items={bundle.errors} />
-    {bundle.tests.length > 1 && <nav className="test-index" aria-label="Tests">{bundle.tests.map((item) => <a key={item.id} href={profileHash(item.id)}>{item.id} <Status outcome={testPassed(item) ? "passed" : "failed"} /></a>)}</nav>}
-    {bundle.tests.map((test) => <TestSection key={test.id} test={test} params={params} />)}
-    <MetricsLegend kinds={new Set(bundle.tests.flatMap((test) => [...metricKinds(test)]))} />
+    {report.tests.length > 1 && <nav className="test-index" aria-label="Tests">{report.tests.map((item) => <a key={item.id} href={profileHash(item.id)}>{item.id} <Status outcome={item.ok ? "passed" : "failed"} /></a>)}</nav>}
+    {report.tests.map((entry) => <LazyTestSection key={entry.id} report={report} entry={entry} params={params} />)}
+    <MetricsLegend kinds={new Set(report.tests.flatMap((entry) => entry.metricKinds))} />
     {bundle.provenance && Object.keys(bundle.provenance).length > 0 && <details><summary>Tested system provenance</summary><pre>{JSON.stringify(bundle.provenance, null, 2)}</pre></details>}
   </>;
 }
 
-function Comparison({ bundle }: { bundle: ComparisonResultBundle }) {
+function Comparison({ bundle, report }: { bundle: ComparisonResultBundle; report: ReportHandle }) {
   const pairings = bundle.pairings.length ? bundle.pairings : [{ id: "unavailable", baseline: { test: "", profile: "" }, candidate: { test: "", profile: "" } }];
   const selections = pairings.map((pair) => ({
     ...pair,
@@ -131,11 +157,18 @@ function Comparison({ bundle }: { bundle: ComparisonResultBundle }) {
   const selected = selections.find((pair) => pair.id === selectedId) ?? selections[0];
   const scenarios = [...new Map(selections.map((pair) => [pair.scenario, pair])).values()];
   const profiles = selections.filter((pair) => pair.scenario === selected.scenario);
-  const rows = compareMeasurements(bundle).filter((row) => row.pairing === selected.id);
+  const baseline = useTest(report.subjects.baseline, selected.baseline.test, selected.baseline.profile);
+  const candidate = useTest(report.subjects.candidate, selected.candidate.test, selected.candidate.profile);
+  const loaded = { baseline, candidate };
+  const selectedBundle: ComparisonResultBundle = { ...bundle, subjects: Object.fromEntries((["baseline", "candidate"] as const).map((side) => {
+    const subject = bundle.subjects[side];
+    return [side, { ...subject, bundle: subject.bundle ? { ...subject.bundle, tests: loaded[side].test ? [loaded[side].test] : [] } : null }];
+  })) as ComparisonResultBundle["subjects"] };
+  const rows = compareMeasurements(selectedBundle).filter((row) => row.pairing === selected.id);
   const sides = (["baseline", "candidate"] as const).map((side) => {
     const subject = bundle.subjects[side];
     const selection = selected[side];
-    return { side, subject, selection, test: subject.bundle?.tests.find((item) => item.id === selection.test), label: subject.label ?? subject.bundle?.label ?? (side === "baseline" ? "Baseline" : "Candidate") };
+    return { side, subject, selection, test: loaded[side].test, error: loaded[side].error, retry: loaded[side].retry, label: subject.label ?? subject.bundle?.label ?? (side === "baseline" ? "Baseline" : "Candidate") };
   });
   const kinds = new Set(sides.flatMap(({ test }) => test ? [...metricKinds(test)] : []));
   return <>
@@ -150,7 +183,7 @@ function Comparison({ bundle }: { bundle: ComparisonResultBundle }) {
     </div>
     <p id="selection-status" role="status">{selected.scenarioLabel} / {selected.profileLabel} · baseline and candidate</p>
     <section data-comparison-pair={selected.id} key={selected.id}>
-      <div className="subjects" aria-label="Baseline and candidate journey maps">{sides.map(({ side, subject, selection, test, label }) => {
+      <div className="subjects" aria-label="Baseline and candidate journey maps">{sides.map(({ side, subject, selection, test, label, error, retry }) => {
         const root = `${subjectDirectory(side)}/`;
         return <article className="subject" key={side} data-subject={side} data-test={selection.test} data-profile={selection.profile}>
           <div className="subject-heading">
@@ -163,7 +196,7 @@ function Comparison({ bundle }: { bundle: ComparisonResultBundle }) {
             <ReportLinks test={test} base={testBase(test.id, root)}>
               <a className="details-link" href={`${root}index.html${profileHash(test.id, selection.profile)}`}>Open {label} details</a>
             </ReportLinks>
-          </> : <p className="empty">The subject did not produce an execution bundle.</p>}
+          </> : <><p className="empty" role="status">{error ?? (subject.bundle ? "Loading execution data…" : "The subject did not produce an execution report.")}</p>{error && <button onClick={retry}>Retry loading execution</button>}</>}
         </article>;
       })}</div>
       <MetricsLegend kinds={kinds} />
@@ -179,13 +212,14 @@ function Comparison({ bundle }: { bundle: ComparisonResultBundle }) {
   </>;
 }
 
-export function Report({ bundle }: { bundle: ViewerBundle }) {
+export function Report({ report }: { report: ReportHandle }) {
+  const bundle = report.bundle;
   const title = bundle.kind === "comparison" ? bundle.title : bundle.label ?? "Journey Mesh results";
   useEffect(() => { document.title = title; }, [title]);
   return <>
-    <header className="page-header"><strong>Journey Mesh</strong><a href="bundle.json" download>Download result bundle</a></header>
+    <header className="page-header"><strong>Journey Mesh</strong><a href="manifest.json" download>Download manifest</a></header>
     <main className="page"><p className="section-label">{bundle.kind === "comparison" ? "Journey comparison" : "Journey run"}</p><h1>{title}</h1>
-      {bundle.kind === "comparison" ? <Comparison bundle={bundle} /> : <Suite bundle={bundle} />}
+      {bundle.kind === "comparison" ? <Comparison bundle={bundle} report={report} /> : <Suite bundle={bundle} report={report} />}
     </main>
     <footer className="page-footer">Execution outcomes and observer evidence · Journey Mesh</footer>
   </>;

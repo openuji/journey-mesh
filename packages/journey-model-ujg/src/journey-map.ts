@@ -7,6 +7,7 @@ import type { UjgDocument, UjgNode } from "./index.js";
  */
 export type JourneyMapDocument = {
   touchpoints?: Record<string, Fields>;
+  users?: Record<string, Fields>;
   artifacts?: Record<string, Fields>;
   effects?: Record<string, Fields>;
   locales?: Record<string, Fields>;
@@ -60,7 +61,7 @@ export function toJourneyMapDocument(document: UjgDocument): JourneyMapDocument 
     const exits = refs(journey, "exitRefs");
     const transitions = refs(journey, "transitionRefs").map((ref) => {
       const transition = node(ref, id);
-      const surface = surfaces.get(ref);
+      const surface = surfaces.get(typeof transition.commandRef === "string" ? transition.commandRef : ref);
       return { id: ref, ...fields(transition), ...(surface ? { surface } : {}) };
     });
     return {
@@ -81,7 +82,7 @@ export function toJourneyMapDocument(document: UjgDocument): JourneyMapDocument 
     states: Object.fromEntries(roots.map((composite) => [composite["@id"], state(composite["@id"], "Document")])),
     ...(index ? { journeyEntryIndex: { id: index["@id"], ...fields(index) } } : {})
   };
-  for (const [key, type] of [["touchpoints", "Touchpoint"], ["artifacts", "Artifact"], ["effects", "Effect"], ["locales", "Locale"], ["messageMeta", "MessageMeta"], ["messages", "Message"], ["phases", "Phase"], ["steps", "Step"]] as const) {
+  for (const [key, type] of [["touchpoints", "Touchpoint"], ["users", "Persona"], ["artifacts", "Artifact"], ["effects", "Effect"], ["locales", "Locale"], ["messageMeta", "MessageMeta"], ["messages", "Message"], ["phases", "Phase"], ["steps", "Step"]] as const) {
     const values = keyed(type);
     if (values) result[key] = values;
   }

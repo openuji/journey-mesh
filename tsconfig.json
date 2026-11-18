@@ -51,6 +51,12 @@
     },
     {
       "path": "packages/journey-reporter/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-service-git"
+    },
+    {
+      "path": "packages/journey-environment-http"
     }
   ]
 }

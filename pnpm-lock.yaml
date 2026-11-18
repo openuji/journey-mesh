@@ -29,6 +29,9 @@ importers:
       '@openuji/journey-driver-web':
         specifier: workspace:*
         version: link:packages/journey-driver-web
+      '@openuji/journey-environment-http':
+        specifier: workspace:*
+        version: link:packages/journey-environment-http
       '@openuji/journey-execution-model':
         specifier: workspace:*
         version: link:packages/journey-execution-model
@@ -56,6 +59,9 @@ importers:
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:packages/journey-runner
+      '@openuji/journey-service-git':
+        specifier: workspace:*
+        version: link:packages/journey-service-git
       '@types/node':
         specifier: ^22.13.14
         version: 22.20.1
@@ -251,6 +257,9 @@ importers:
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner
+      '@openuji/journey-service-git':
+        specifier: workspace:*
+        version: link:../journey-service-git
     devDependencies:
       '@openuji/journey-reporter':
         specifier: workspace:*
@@ -274,6 +283,22 @@ importers:
       tsx:
         specifier: ^4.20.3
         version: 4.23.1
+
+  packages/journey-environment-http:
+    dependencies:
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
+      '@openuji/journey-runner':
+        specifier: workspace:*
+        version: link:../journey-runner
+    devDependencies:
+      tsx:
+        specifier: ^4.20.3
+        version: 4.23.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
 
   packages/journey-execution-model:
     dependencies:
@@ -478,6 +503,19 @@ importers:
       '@openuji/journey-core':
         specifier: workspace:*
         version: link:../journey-core
+      tsx:
+        specifier: ^4.20.3
+        version: 4.23.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
+  packages/journey-service-git:
+    dependencies:
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
+    devDependencies:
       tsx:
         specifier: ^4.20.3
         version: 4.23.1

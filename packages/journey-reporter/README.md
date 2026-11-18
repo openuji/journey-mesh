@@ -1,42 +1,53 @@
 # Journey reporter
 
-Everything that happens to a saved result bundle: publishing it, comparing two
-of them, and the report viewer that renders them. Nothing here executes journeys
-or loads plugins.
+Publishing, comparison, and viewing of saved Journey Mesh results. These operations
+load saved data and registered evidence; they do not execute journeys or plugins.
 
-- `writeReport(dir, bundle)` writes `bundle.json` and a self-contained
-  `index.html` (viewer script, styles and bundle inlined), so a report opens from
-  disk as well as over HTTP. The host calls it once per output directory;
-  reporters never write `bundle.json`.
-- `publishReport(bundle.json, dir)` republishes a saved suite or comparison with
-  only its registered evidence and the viewer, replacing `dir` atomically
-  (`journey-mesh render`).
-- `compareBundles({ baseline, candidate, outputDir, pairings?, title? })` compares
-  two saved suite runs (`journey-mesh compare`). Executions pair by equal test and
-  profile IDs unless explicit pairings are given. Each subject's evidence is
-  copied to `subjects/<baseline|candidate>/`.
-- `testPassed` / `testFailures` are the single pass rule used by the host, the
-  CLI and the viewer.
-- `fileArtifactStore(root, prefix?)` is the file-backed `JourneyArtifactStore`.
-  Artifacts are registered with relative hrefs only.
+- `writeReport(dir, bundle)` publishes a complete directory: `manifest.json`,
+  semantic JSON chunks, linked evidence, and the Vite viewer. It replaces stale
+  output atomically after the new report succeeds.
+- `readReport(dirOrManifest, kinds?)` reconstructs a logical suite or comparison.
+  Provider audit documents remain linked artifacts. `openReport(reader)` loads
+  only the index and provides `loadTest(id, profile?, includeEvidence?)` for lazy
+  consumers. The HTTP viewer does not load provider evidence for maps or metrics.
+- `publishReport(dirOrManifest, outputDir?)` republishes only registered evidence
+  and report data; omitted output means republish in place.
+- `compareBundles({baseline, candidate, outputDir, pairings?, title?})` accepts
+  report directories or manifests. Subjects are complete reports under
+  `subjects/<baseline|candidate>/`; the comparison references their manifests.
+- `testPassed` and `testFailures` provide the shared pass policy.
+- `fileArtifactStore(root, prefix?, maxFileBytes?)` enforces the resolved file
+  limit for every write. `writeJsonDocument` / `readJsonDocument` and
+  `writeHtmlPages` from `@openuji/journey-plugin` provide bounded structured
+  storage and provider pages without provider-specific logic in the host.
 
-`web/` is the Vite/React viewer. A suite page shows every test's journey map
-(`#test=<id>&profile=<id>` scrolls to one and selects the profile). The map
-(`web/JourneyMap.tsx`) draws each segment's embedded model view (`journey-map`,
-projected from the executed JSON-LD) with the vendored journey-path component,
-filtered to the journeys that ran, with outcomes, observer `nodes` metrics and scoped screenshots
-on the states, a metrics legend, and links to test-wide provider reports.
-Comparisons draw both subjects' maps and link each to its report under
-`subjects/<side>/`. Models without a drawable view fall back to a linear path
-projected from the plan (`src/journey-path.ts`).
+Configure the suite's policy in the mesh:
 
-```sh
-pnpm build                                   # builds dist/app, required before publishing
-journey-mesh compare a/bundle.json b/bundle.json --output comparison
-journey-mesh report comparison
+```yaml
+report:
+  maxFileSizeMiB: 5
+  excludedPhaseIds: [urn:phase:setup]
 ```
 
-For development against an existing report:
+The default is 5 MiB (5,242,880 bytes). Positive fractional MiB values are allowed.
+Test-level report settings control phase visibility, not storage. Republishing
+uses the saved byte limit; comparisons use the smaller limit of available
+subjects. Structured JSON is repacked when necessary. Opaque files, including
+existing HTML pages and binary assets, must fit the destination limit.
+
+All viewing uses HTTP; deploy the directory to a static host or run:
+
+```sh
+pnpm build
+journey-mesh compare baseline-results candidate-results --output comparison
+journey-mesh report comparison
+journey-mesh render comparison/manifest.json --output published
+```
+
+Legacy `bundle.json` inputs are rejected. Regenerate those runs to use the new
+format. For schema details see [report storage](../../docs/report-storage.md).
+
+For viewer development against a generated report:
 
 ```sh
 JOURNEY_REPORT_DIRECTORY=/absolute/path/to/report pnpm --filter @openuji/journey-reporter dev

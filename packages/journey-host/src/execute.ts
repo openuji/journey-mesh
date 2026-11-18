@@ -1,6 +1,9 @@
+import { sourceIdentity } from "@openuji/journey-plugin";
+import { startService } from "./services.js";
+import type { ServiceOutputRef } from "./config/schema.js";
 import { immutableSnapshot, type JourneyObserverOutput } from "@openuji/journey-core";
 import type { JourneyArtifactStore, JourneyObserverComponent, JourneyReporter, JourneyService, SuiteResultBundle, TestResultBundle } from "@openuji/journey-plugin";
-import { reportJourneyResult, testPassed, writeReport } from "@openuji/journey-reporter";
+import { reportJourneyResult, selectJourneyMaps, testPassed, writeReport } from "@openuji/journey-reporter";
 import { errorToJourneyRunError, runJourney, type JourneyProgressSink, type JourneyRunError, type RunResult } from "@openuji/journey-runner";
 import type { AssembledTest } from "./assemble.js";
 import type { LoadedService } from "./services.js";
@@ -8,6 +11,7 @@ import type { LoadedService } from "./services.js";
 /** A suite ready to run: every selected test passed preflight and no resource has been allocated. */
 export type PreparedSuite = Readonly<{
   label?: string;
+  target?: ServiceOutputRef;
   outputDir: string;
   tests: readonly AssembledTest[];
   /** Services the selected tests need, dependencies first. */
@@ -72,7 +76,9 @@ async function executeTest(test: AssembledTest, options: ExecuteOptions): Promis
     clearTimeout(timer); options.signal?.removeEventListener("abort", abort);
   }
   const { outputs, errors } = await collectObserverOutputs(test.observers, result);
-  const bundle: TestResultBundle = immutableSnapshot({ kind: "test", id: test.id, ...journeySegments(test), plan: test.plan, result, outputs, reportingErrors: errors, artifacts: test.artifacts.files });
+  const draft: TestResultBundle = immutableSnapshot({ kind: "test", id: test.id, ...(test.report ? { report: test.report } : {}), ...journeySegments(test), plan: test.plan, result, outputs, reportingErrors: errors, artifacts: test.artifacts.files });
+  errors.push(...selectJourneyMaps(draft).errors);
+  const bundle = immutableSnapshot({ ...draft, reportingErrors: errors });
   errors.push(...await reportJourneyResult({ bundle, reporters: test.reporters, artifacts: test.artifacts }));
   return immutableSnapshot({ ...bundle, reportingErrors: errors, artifacts: test.artifacts.files });
 }
@@ -85,15 +91,19 @@ export async function executeSuite(prepared: PreparedSuite, options: ExecuteOpti
   const tests: TestResultBundle[] = [];
   const errors: JourneyRunError[] = [];
   const started: JourneyService[] = [];
+  const values = new Map<string, Readonly<Record<string, unknown>>>();
+  let target: SuiteResultBundle["target"];
   let ready = true;
   try {
-    for (const { service } of prepared.services) {
+    for (const entry of prepared.services) {
+      const { service } = entry;
       options.signal?.throwIfAborted();
       // Include partially started services in cleanup.
       started.push(service);
-      await service.up({ signal: options.signal });
+      await startService(entry, values, options.signal);
       options.signal?.throwIfAborted();
     }
+    if (prepared.target) target = sourceIdentity(values.get(prepared.target.service)?.[prepared.target.output]);
   } catch (error) { ready = false; errors.push(errorToJourneyRunError(error)); }
   try {
     for (const test of prepared.tests) {
@@ -110,7 +120,7 @@ export async function executeSuite(prepared: PreparedSuite, options: ExecuteOpti
   if (options.signal?.aborted) errors.push(errorToJourneyRunError(options.signal.reason ?? new Error("Suite cancelled")));
   const ok = !errors.length && !options.signal?.aborted && tests.length === prepared.tests.length && tests.every(testPassed);
   const draft: SuiteResultBundle = immutableSnapshot({
-    kind: "suite", ...(prepared.label ? { label: prepared.label } : {}), ok, generatedAt: new Date().toISOString(),
+    kind: "suite", storage: { maxFileBytes: prepared.artifacts.maxFileBytes }, ...(target ? { target } : {}), ...(prepared.label ? { label: prepared.label } : {}), ok, generatedAt: new Date().toISOString(),
     tests, errors, provenance, artifacts: artifacts()
   });
   errors.push(...await reportJourneyResult({ bundle: draft, reporters: prepared.reporters, artifacts: prepared.artifacts }));

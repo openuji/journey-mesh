@@ -10,32 +10,25 @@ import {
   profileIdForItem,
   safeFileSegment
 } from "../shared/strings.js";
+import type { HtmlDocumentParts } from "@openuji/journey-plugin";
 import { metadataTable, reportStyles, trustedHtml } from "./html-fragments.js";
 
 export function renderAxePathAuditHtml(report: AxePathAuditReport): string {
-  return [
-    "<!doctype html>",
-    '<html lang="en">',
-    "<head>",
-    '<meta charset="utf-8">',
-    `<title>${escapeHtml(report.reportId)} axe path report</title>`,
-    reportStyles(),
-    "</head>",
-    "<body>",
-    "<main>",
+  const parts = axePathHtmlParts(report);
+  return parts.header + parts.sections.join("") + parts.footer;
+}
+
+export function axePathHtmlParts(report: AxePathAuditReport): HtmlDocumentParts {
+  const header = ["<!doctype html>", '<html lang="en"><head><meta charset="utf-8">',
+    `<title>${escapeHtml(report.reportId)} axe path report</title>`, reportStyles(), "</head><body><main>",
     `<h1>${escapeHtml(report.reportId)} axe path report</h1>`,
-    metadataTable([
-      ["Created", report.createdAt],
-      ["Report format", report.format],
-      ["WCAG tags", report.wcagTags.join(", ")],
-      ["Metadata", JSON.stringify(report.metadata, null, 2)]
-    ]),
-    renderPathSummary(report.summary),
-    renderPathItemsByProfile(report.items),
-    "</main>",
-    "</body>",
-    "</html>"
-  ].join("\n");
+    metadataTable([["Created", report.createdAt], ["Report format", report.format], ["WCAG tags", report.wcagTags.join(", ")],
+      ["Metadata", JSON.stringify(report.metadata)]]), renderPathSummary(report.summary)].join("\n");
+  const sections = groupPathItemsByProfile(report.items).flatMap(({ profileId, profileItems }) => [
+    `<section class="profile-group" id="profile-${escapeAttribute(safeFileSegment(profileId))}"><h2>${escapeHtml(profileId)}</h2>${renderPathSummary(summarizePathItems(profileItems))}</section>`,
+    ...profileItems.map(renderPathItem)
+  ]);
+  return { header, sections, footer: "</main></body></html>" };
 }
 
 function renderPathSummary(summary: AxePathAuditSummary): string {
@@ -76,24 +69,7 @@ function renderPathItem(item: AxePathAuditItem): string {
       ["Metadata", JSON.stringify(item.metadata, null, 2)]
     ]),
     renderSourceScreenshot(item),
-    renderPathFindings(item),
     "</details>"
-  ].join("\n");
-}
-
-function renderPathItemsByProfile(items: readonly AxePathAuditItem[]): string {
-  const profiles = groupPathItemsByProfile(items);
-  return [
-    "<section>",
-    "<h2>Path Items</h2>",
-    ...profiles.map(({ profileId, profileItems }) => [
-      `<section class="profile-group" id="profile-${escapeAttribute(safeFileSegment(profileId))}">`,
-      `<h3>${escapeHtml(profileId)}</h3>`,
-      renderPathSummary(summarizePathItems(profileItems)),
-      profileItems.map(renderPathItem).join("\n"),
-      "</section>"
-    ].join("\n")),
-    "</section>"
   ].join("\n");
 }
 
@@ -114,22 +90,9 @@ function renderSourceScreenshot(item: AxePathAuditItem): string {
     "<section>",
     "<h4>Source Screenshot</h4>",
     item.sourceScreenshotHref
-      ? `<p><a href="${escapeAttribute(item.sourceScreenshotHref)}">${escapeHtml(item.sourceScreenshotHref)}</a></p><img src="${escapeAttribute(item.sourceScreenshotHref)}" alt="Source screenshot">`
+      ? `<p><a href="${escapeAttribute(item.sourceScreenshotHref)}">${escapeHtml(item.sourceScreenshotHref)}</a></p><img loading="lazy" src="${escapeAttribute(item.sourceScreenshotHref)}" alt="Source screenshot">`
       : "",
     item.sourceScreenshotError ? `<p>${escapeHtml(item.sourceScreenshotError)}</p>` : "",
     "</section>"
   ].join("\n");
-}
-
-function renderPathFindings(item: AxePathAuditItem): string {
-  if (!item.findings) return "";
-  return [...item.findings.violations, ...item.findings.incomplete].map((finding) => [
-    '<article class="finding">',
-    `<h4>${escapeHtml(finding.scanId)} ${escapeHtml(finding.type)}: ${escapeHtml(finding.ruleId)}</h4>`,
-    `<p>${escapeHtml(finding.help)}</p>`,
-    finding.nodes.map((node) =>
-      `<p><a href="${escapeAttribute(node.htmlHref)}">${escapeHtml(node.target.join(", "))}</a></p>`
-    ).join("\n"),
-    "</article>"
-  ].join("\n")).join("\n");
 }

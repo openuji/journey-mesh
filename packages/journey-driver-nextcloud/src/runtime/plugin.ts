@@ -1,8 +1,10 @@
+import { managedStackContract, serverBuildContract, type ServerBuild } from "./contracts.js";
+import { sourceIdentityContract } from "@openuji/journey-plugin";
 import { defineServicePlugin, knownOptions, optionsObject, requiredString } from "@openuji/journey-plugin";
 import { nextcloudStackRuntime, validateStackOptions, type StackBuild, type StackOptions, type PinnedSource } from "./stack.js";
 
 function settings(options: Record<string, unknown>, resolvePath: (path: string) => string): StackOptions {
-  knownOptions(options, ["project", "composeFiles", "image", "expectedVersion", "environment", "directory", "services", "enabledApps", "build"]);
+  knownOptions(options, ["project", "composeFiles", "image", "expectedVersion", "environment", "directory", "services", "enabledApps", "systemConfig", "build"]);
   const strings = (value: unknown, name: string): string[] => {
     if (!Array.isArray(value)) throw new Error(`${name} must be an array`);
     return value.map((entry) => requiredString(entry, name));
@@ -30,6 +32,7 @@ function settings(options: Record<string, unknown>, resolvePath: (path: string) 
       return [name, { baseURL: requiredString(service.baseURL, `${name}.baseURL`), username: requiredString(service.username, `${name}.username`), password: requiredString(service.password, `${name}.password`) }];
     })),
     enabledApps: strings(options.enabledApps ?? [], "enabledApps"),
+    ...(options.systemConfig === undefined ? {} : { systemConfig: optionsObject(options.systemConfig, "systemConfig") as Record<string, string | boolean | number> }),
     ...(build ? { build: { ...source(build), directory: resolvePath(requiredString(build.directory, "build.directory")), dockerfile: resolvePath(requiredString(build.dockerfile, "build.dockerfile")), apps: ((build.apps ?? []) as unknown[]).map((raw) => { const app = optionsObject(raw, "app"); knownOptions(app, ["id", "version", "repository", "sha"]); return { ...pin(app), id: requiredString(app.id, "app.id"), version: requiredString(app.version, "app.version") }; }) } satisfies StackBuild } : {})
   };
   validateStackOptions(config); return config;
@@ -39,7 +42,33 @@ function settings(options: Record<string, unknown>, resolvePath: (path: string) 
  * `sha` or a `pullRequest` number, which is resolved to the pull request's current head when the stack starts.
  */
 export const journeyMeshPlugin = defineServicePlugin({
-  kind: "service",
+  kind: "service", outputs: { stack: managedStackContract },
   parse(options, context) { return settings(options, context.resolvePath); },
   create(settings, context) { return nextcloudStackRuntime(settings, context.artifacts); }
+});
+
+/** Image identity comes from the composed server build, never a second source declaration. */
+export const builtStackPlugin = defineServicePlugin({
+  kind: "service", inputs: { image: serverBuildContract }, outputs: { stack: managedStackContract, identity: sourceIdentityContract },
+  parse(options, context) {
+    if (options.image !== undefined || options.build !== undefined || options.expectedVersion !== undefined) throw new Error("A built stack takes its image and version from inputs.image");
+    return settings({ ...options, image: "journey/pending", expectedVersion: "pending" }, context.resolvePath);
+  },
+  create(config, context) {
+    let runtime: ReturnType<typeof nextcloudStackRuntime> | undefined;
+    return {
+      name: `nextcloud-stack:${config.project}`,
+      provenance: () => runtime?.provenance?.(),
+      async up(input) {
+        const image = input?.inputs?.image as ServerBuild | undefined;
+        if (!image?.identity.version) throw new Error("Missing built server image or version");
+        runtime = nextcloudStackRuntime({ ...config, image: image.image, expectedVersion: image.identity.version, sourceIdentity: image.identity }, context.artifacts);
+        return runtime.up(input);
+      },
+      async down() {
+        if (runtime) await runtime.down?.();
+        else await nextcloudStackRuntime(config, context.artifacts).down?.();
+      }
+    };
+  }
 });
