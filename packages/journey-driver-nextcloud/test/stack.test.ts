@@ -43,6 +43,15 @@ test("identity mismatch fails verification rather than publishing a successful d
   assert.equal(artifacts.files.length, 0);
 });
 
+test("declared system settings preserve boolean and integer types", async () => {
+  const { options, artifacts, calls, execute } = await fixture();
+  const runtime = nextcloudStackRuntime({ ...options, systemConfig: { "fixture.enabled": false, "fixture.limit": 3 } }, artifacts, execute);
+  await runtime.up(); await runtime.down!();
+  assert.ok(calls.some((args) => args.includes("fixture.enabled") && args.includes("--type=boolean") && args.includes("--value=false")));
+  assert.ok(calls.some((args) => args.includes("fixture.limit") && args.includes("--type=integer") && args.includes("--value=3")));
+  assert.throws(() => validateStackOptions({ ...options, systemConfig: { invalid: 0.5 } }), /systemConfig/);
+});
+
 test("untrusted source pins and shared service origins are rejected before allocation", async () => {
   const { options } = await fixture();
   assert.throws(() => validateStackOptions({ ...options, build: { repository: "https://example.test/source.git", sha: "main", directory: "/source", dockerfile: "/Dockerfile", apps: [] } }), /exact commit/);

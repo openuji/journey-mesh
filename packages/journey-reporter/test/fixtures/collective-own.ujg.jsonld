@@ -1,0 +1,1632 @@
+{
+  "@context": [
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/core.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/graph.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/surface.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/phase.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/l10n.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/observability.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/entry-binding.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/effect.context.jsonld"
+  ],
+  "@type": "UJGDocument",
+  "@id": "urn:document:collective-own",
+  "nodes": [
+    {
+      "@type": "JourneyEntryIndex",
+      "@id": "urn:document:collective-own:entries",
+      "entryRefs": [
+        "urn:journey:collective-own:login:entry",
+        "urn:journey:collective-own:sharing:entry"
+      ]
+    },
+    {
+      "@type": "Locale",
+      "@id": "urn:locale:en",
+      "localeCode": "en"
+    },
+    {
+      "@type": "Phase",
+      "@id": "urn:phase:setup",
+      "label": "Setup",
+      "order": 0
+    },
+    {
+      "@type": "Phase",
+      "@id": "urn:phase:sharing",
+      "label": "Sharing",
+      "order": 1
+    },
+    {
+      "@type": "InputModality",
+      "@id": "observability:pointer"
+    },
+    {
+      "@type": "InputModalityProfile",
+      "@id": "urn:profile:pointer",
+      "inputModalityRefs": [
+        "observability:pointer"
+      ]
+    },
+    {
+      "@type": "InputModality",
+      "@id": "observability:keyboard-enter"
+    },
+    {
+      "@type": "InputModalityProfile",
+      "@id": "urn:profile:keyboard-enter",
+      "inputModalityRefs": [
+        "observability:keyboard-enter"
+      ]
+    },
+    {
+      "@type": "InputModality",
+      "@id": "observability:keyboard-text-entry"
+    },
+    {
+      "@type": "InputModalityProfile",
+      "@id": "urn:profile:keyboard-text-entry",
+      "inputModalityRefs": [
+        "observability:keyboard-text-entry"
+      ]
+    },
+    {
+      "@type": "ObservationEvent",
+      "@id": "urn:observation-event:presence"
+    },
+    {
+      "@type": "ObservationEvent",
+      "@id": "urn:event:observe"
+    },
+    {
+      "@type": "ObservationEvent",
+      "@id": "urn:event:click",
+      "requiredInputModalityProfileRefs": [
+        "urn:profile:pointer",
+        "urn:profile:keyboard-enter"
+      ]
+    },
+    {
+      "@type": "ObservationEvent",
+      "@id": "urn:event:type",
+      "requiredInputModalityProfileRefs": [
+        "urn:profile:keyboard-text-entry"
+      ]
+    },
+    {
+      "@type": "CompositeState",
+      "@id": "urn:composite:collective-own:login",
+      "label": "Journey collective-own login",
+      "subjourneyRefs": [
+        "urn:journey:collective-own:login"
+      ]
+    },
+    {
+      "@type": "Journey",
+      "@id": "urn:journey:collective-own:login",
+      "label": "Journey collective-own login",
+      "entryRefs": [
+        "urn:journey:collective-own:login:entry"
+      ],
+      "defaultEntryRef": "urn:journey:collective-own:login:entry",
+      "stateRefs": [
+        "urn:journey:collective-own:login:state:0",
+        "urn:journey:collective-own:login:state:1",
+        "urn:journey:collective-own:login:state:2",
+        "urn:journey:collective-own:login:state:3"
+      ],
+      "transitionRefs": [
+        "urn:journey:collective-own:login:transition:0",
+        "urn:journey:collective-own:login:transition:1",
+        "urn:journey:collective-own:login:transition:2"
+      ]
+    },
+    {
+      "@type": "JourneyEntry",
+      "@id": "urn:journey:collective-own:login:entry",
+      "stateRef": "urn:journey:collective-own:login:state:0"
+    },
+    {
+      "@type": "EntryBinding",
+      "@id": "urn:journey:collective-own:login:binding",
+      "entryRef": "urn:journey:collective-own:login:entry",
+      "value": "login"
+    },
+    {
+      "@type": "Step",
+      "@id": "urn:journey:collective-own:login:step",
+      "order": 0,
+      "compositeStateRef": "urn:composite:collective-own:login",
+      "phaseRef": "urn:phase:setup",
+      "label": "Sign in"
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:login:state:0",
+      "label": "Ready"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:login:state:0:surface",
+      "graphNodeRef": "urn:journey:collective-own:login:state:0"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:2:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:2:name:en",
+      "messageMetaRef": "urn:locator:collective-own:2:name",
+      "localeRef": "urn:locale:en",
+      "value": "Account name or email"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:2:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:2",
+      "role": "textbox",
+      "accessibleNameRef": "urn:locator:collective-own:2:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:2:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:1",
+      "observeSurfaceRef": "urn:journey:collective-own:login:state:0:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:2"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:login:state:1",
+      "label": "Username entered"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:login:state:1:surface",
+      "graphNodeRef": "urn:journey:collective-own:login:state:1"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:4",
+      "extensions": {
+        "urn:openuji:playwright:css": "input[type=\"password\"]"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:3",
+      "observeSurfaceRef": "urn:journey:collective-own:login:state:1:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:4"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:login:transition:0:command",
+      "label": "Username entered"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:login:transition:0",
+      "from": "urn:journey:collective-own:login:state:0",
+      "to": "urn:journey:collective-own:login:state:1",
+      "commandRef": "urn:journey:collective-own:login:transition:0:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:login:transition:0:surface",
+      "graphNodeRef": "urn:journey:collective-own:login:transition:0:command"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:6:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:6:name:en",
+      "messageMetaRef": "urn:locator:collective-own:6:name",
+      "localeRef": "urn:locale:en",
+      "value": "Account name or email"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:6:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:6",
+      "role": "textbox",
+      "accessibleNameRef": "urn:locator:collective-own:6:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:6:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:5",
+      "observeSurfaceRef": "urn:journey:collective-own:login:transition:0:surface",
+      "observationEventRef": "urn:event:type",
+      "locatorRefs": [
+        "urn:locator:collective-own:6"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:login:state:2",
+      "label": "Password entered"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:login:state:2:surface",
+      "graphNodeRef": "urn:journey:collective-own:login:state:2"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:8:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:8:name:en",
+      "messageMetaRef": "urn:locator:collective-own:8:name",
+      "localeRef": "urn:locale:en",
+      "value": "Log in"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:8:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:8",
+      "role": "button",
+      "accessibleNameRef": "urn:locator:collective-own:8:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:8:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:7",
+      "observeSurfaceRef": "urn:journey:collective-own:login:state:2:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:8"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:login:transition:1:command",
+      "label": "Password entered"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:login:transition:1",
+      "from": "urn:journey:collective-own:login:state:1",
+      "to": "urn:journey:collective-own:login:state:2",
+      "commandRef": "urn:journey:collective-own:login:transition:1:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:login:transition:1:surface",
+      "graphNodeRef": "urn:journey:collective-own:login:transition:1:command"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:10",
+      "extensions": {
+        "urn:openuji:playwright:css": "input[type=\"password\"]"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:9",
+      "observeSurfaceRef": "urn:journey:collective-own:login:transition:1:surface",
+      "observationEventRef": "urn:event:type",
+      "locatorRefs": [
+        "urn:locator:collective-own:10"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:login:state:3",
+      "label": "Authenticated"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:login:state:3:surface",
+      "graphNodeRef": "urn:journey:collective-own:login:state:3"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:12",
+      "extensions": {
+        "urn:openuji:playwright:css": "#content"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:11",
+      "observeSurfaceRef": "urn:journey:collective-own:login:state:3:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:12"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:login:transition:2:command",
+      "label": "Authenticated"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:login:transition:2",
+      "from": "urn:journey:collective-own:login:state:2",
+      "to": "urn:journey:collective-own:login:state:3",
+      "commandRef": "urn:journey:collective-own:login:transition:2:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:login:transition:2:surface",
+      "graphNodeRef": "urn:journey:collective-own:login:transition:2:command"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:14:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:14:name:en",
+      "messageMetaRef": "urn:locator:collective-own:14:name",
+      "localeRef": "urn:locale:en",
+      "value": "Log in"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:14:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:14",
+      "role": "button",
+      "accessibleNameRef": "urn:locator:collective-own:14:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:14:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:13",
+      "observeSurfaceRef": "urn:journey:collective-own:login:transition:2:surface",
+      "observationEventRef": "urn:event:click",
+      "locatorRefs": [
+        "urn:locator:collective-own:14"
+      ]
+    },
+    {
+      "@type": "CompositeState",
+      "@id": "urn:composite:collective-own:sharing",
+      "label": "Journey collective-own sharing",
+      "subjourneyRefs": [
+        "urn:journey:collective-own:sharing"
+      ]
+    },
+    {
+      "@type": "Journey",
+      "@id": "urn:journey:collective-own:sharing",
+      "label": "Journey collective-own sharing",
+      "entryRefs": [
+        "urn:journey:collective-own:sharing:entry"
+      ],
+      "defaultEntryRef": "urn:journey:collective-own:sharing:entry",
+      "stateRefs": [
+        "urn:journey:collective-own:sharing:state:0",
+        "urn:journey:collective-own:sharing:state:1",
+        "urn:journey:collective-own:sharing:state:2",
+        "urn:journey:collective-own:sharing:state:3",
+        "urn:journey:collective-own:sharing:state:4",
+        "urn:journey:collective-own:sharing:state:5",
+        "urn:journey:collective-own:sharing:state:6",
+        "urn:journey:collective-own:sharing:state:7",
+        "urn:journey:collective-own:sharing:state:8",
+        "urn:journey:collective-own:sharing:state:9",
+        "urn:journey:collective-own:sharing:state:10",
+        "urn:journey:collective-own:sharing:state:11",
+        "urn:journey:collective-own:sharing:state:12",
+        "urn:journey:collective-own:sharing:state:13"
+      ],
+      "transitionRefs": [
+        "urn:journey:collective-own:sharing:transition:0",
+        "urn:journey:collective-own:sharing:transition:1",
+        "urn:journey:collective-own:sharing:transition:2",
+        "urn:journey:collective-own:sharing:transition:3",
+        "urn:journey:collective-own:sharing:transition:4",
+        "urn:journey:collective-own:sharing:transition:5",
+        "urn:journey:collective-own:sharing:transition:6",
+        "urn:journey:collective-own:sharing:transition:7",
+        "urn:journey:collective-own:sharing:transition:8",
+        "urn:journey:collective-own:sharing:transition:9",
+        "urn:journey:collective-own:sharing:transition:10",
+        "urn:journey:collective-own:sharing:transition:11",
+        "urn:journey:collective-own:sharing:transition:12"
+      ]
+    },
+    {
+      "@type": "JourneyEntry",
+      "@id": "urn:journey:collective-own:sharing:entry",
+      "stateRef": "urn:journey:collective-own:sharing:state:0"
+    },
+    {
+      "@type": "EntryBinding",
+      "@id": "urn:journey:collective-own:sharing:binding",
+      "entryRef": "urn:journey:collective-own:sharing:entry",
+      "value": "collectives"
+    },
+    {
+      "@type": "Step",
+      "@id": "urn:journey:collective-own:sharing:step",
+      "order": 0,
+      "compositeStateRef": "urn:composite:collective-own:sharing",
+      "phaseRef": "urn:phase:sharing",
+      "label": "Sharing"
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:sharing:state:0",
+      "label": "Ready"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:state:0:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:state:0"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:16",
+      "extensions": {
+        "urn:openuji:playwright:css": "#app-navigation-vue"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:15",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:state:0:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:16"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:sharing:state:1",
+      "label": "Collective selector opened"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:state:1:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:state:1"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:18",
+      "extensions": {
+        "urn:openuji:playwright:css": ".collective-selector-list"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:17",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:state:1:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:18"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:sharing:transition:0:command",
+      "label": "Collective selector opened"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:sharing:transition:0",
+      "from": "urn:journey:collective-own:sharing:state:0",
+      "to": "urn:journey:collective-own:sharing:state:1",
+      "commandRef": "urn:journey:collective-own:sharing:transition:0:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:transition:0:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:transition:0:command"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:20",
+      "extensions": {
+        "urn:openuji:playwright:css": ".collective-selector-trigger"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:19",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:transition:0:surface",
+      "observationEventRef": "urn:event:click",
+      "locatorRefs": [
+        "urn:locator:collective-own:20"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:sharing:state:2",
+      "label": "Collective opened"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:state:2:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:state:2"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:22",
+      "extensions": {
+        "urn:openuji:playwright:css": "[data-cy-collectives=\"reader\"] .ProseMirror:visible, [data-cy-collectives=\"editor\"] .ProseMirror:visible"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:21",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:state:2:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:22"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:sharing:transition:1:command",
+      "label": "Collective opened"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:sharing:transition:1",
+      "from": "urn:journey:collective-own:sharing:state:1",
+      "to": "urn:journey:collective-own:sharing:state:2",
+      "commandRef": "urn:journey:collective-own:sharing:transition:1:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:transition:1:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:transition:1:command"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:24",
+      "extensions": {
+        "urn:openuji:playwright:css": ".collective-selector-list a:has-text(\"Journey collective-own\")"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:23",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:transition:1:surface",
+      "observationEventRef": "urn:event:click",
+      "locatorRefs": [
+        "urn:locator:collective-own:24"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:sharing:state:3",
+      "label": "Sidebar opened"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:state:3:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:state:3"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:26",
+      "extensions": {
+        "urn:openuji:playwright:css": ".app-sidebar"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:25",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:state:3:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:26"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:sharing:transition:2:command",
+      "label": "Sidebar opened"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:sharing:transition:2",
+      "from": "urn:journey:collective-own:sharing:state:2",
+      "to": "urn:journey:collective-own:sharing:state:3",
+      "commandRef": "urn:journey:collective-own:sharing:transition:2:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:transition:2:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:transition:2:command"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:28:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:28:name:en",
+      "messageMetaRef": "urn:locator:collective-own:28:name",
+      "localeRef": "urn:locale:en",
+      "value": "Open sidebar"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:28:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:28",
+      "role": "button",
+      "accessibleNameRef": "urn:locator:collective-own:28:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:28:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:27",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:transition:2:surface",
+      "observationEventRef": "urn:event:click",
+      "locatorRefs": [
+        "urn:locator:collective-own:28"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:sharing:state:4",
+      "label": "Sharing loaded"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:state:4:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:state:4"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:30",
+      "extensions": {
+        "urn:openuji:playwright:css": ".external-shares-list"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:29",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:state:4:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:30"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:sharing:transition:3:command",
+      "label": "Sharing loaded"
+    },
+    {
+      "@type": "Effect",
+      "@id": "urn:journey:collective-own:sharing:transition:3:effect",
+      "label": "Sharing loaded"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:sharing:transition:3",
+      "from": "urn:journey:collective-own:sharing:state:3",
+      "to": "urn:journey:collective-own:sharing:state:4",
+      "commandRef": "urn:journey:collective-own:sharing:transition:3:command",
+      "effectRef": "urn:journey:collective-own:sharing:transition:3:effect"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:transition:3:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:transition:3:command"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:32:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:32:name:en",
+      "messageMetaRef": "urn:locator:collective-own:32:name",
+      "localeRef": "urn:locale:en",
+      "value": "Sharing"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:32:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:32",
+      "role": "tab",
+      "accessibleNameRef": "urn:locator:collective-own:32:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:32:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:31",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:transition:3:surface",
+      "observationEventRef": "urn:event:click",
+      "locatorRefs": [
+        "urn:locator:collective-own:32"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:sharing:state:5",
+      "label": "Own actions opened"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:state:5:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:state:5"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:34:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:34:name:en",
+      "messageMetaRef": "urn:locator:collective-own:34:name",
+      "localeRef": "urn:locale:en",
+      "value": "Customize link"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:34:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:34",
+      "role": "menuitem",
+      "accessibleNameRef": "urn:locator:collective-own:34:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:34:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:33",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:state:5:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:34"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:sharing:transition:4:command",
+      "label": "Own actions opened"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:sharing:transition:4",
+      "from": "urn:journey:collective-own:sharing:state:4",
+      "to": "urn:journey:collective-own:sharing:state:5",
+      "commandRef": "urn:journey:collective-own:sharing:transition:4:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:transition:4:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:transition:4:command"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:36",
+      "extensions": {
+        "urn:openuji:playwright:css": ".sharing-entry:has(.sharing-entry__title:text-is(\"Share link\")) .sharing-entry__actions button"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:35",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:transition:4:surface",
+      "observationEventRef": "urn:event:click",
+      "locatorRefs": [
+        "urn:locator:collective-own:36"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:sharing:state:6",
+      "label": "Own settings opened"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:state:6:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:state:6"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:38:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:38:name:en",
+      "messageMetaRef": "urn:locator:collective-own:38:name",
+      "localeRef": "urn:locale:en",
+      "value": "Share label"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:38:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:38",
+      "role": "textbox",
+      "accessibleNameRef": "urn:locator:collective-own:38:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:38:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:37",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:state:6:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:38"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:sharing:transition:5:command",
+      "label": "Own settings opened"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:sharing:transition:5",
+      "from": "urn:journey:collective-own:sharing:state:5",
+      "to": "urn:journey:collective-own:sharing:state:6",
+      "commandRef": "urn:journey:collective-own:sharing:transition:5:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:transition:5:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:transition:5:command"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:40:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:40:name:en",
+      "messageMetaRef": "urn:locator:collective-own:40:name",
+      "localeRef": "urn:locale:en",
+      "value": "Customize link"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:40:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:40",
+      "role": "menuitem",
+      "accessibleNameRef": "urn:locator:collective-own:40:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:40:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:39",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:transition:5:surface",
+      "observationEventRef": "urn:event:click",
+      "locatorRefs": [
+        "urn:locator:collective-own:40"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:sharing:state:7",
+      "label": "Own label edited"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:state:7:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:state:7"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:42:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:42:name:en",
+      "messageMetaRef": "urn:locator:collective-own:42:name",
+      "localeRef": "urn:locale:en",
+      "value": "Update share"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:42:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:42",
+      "role": "button",
+      "accessibleNameRef": "urn:locator:collective-own:42:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:42:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:41",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:state:7:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:42"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:sharing:transition:6:command",
+      "label": "Own label edited"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:sharing:transition:6",
+      "from": "urn:journey:collective-own:sharing:state:6",
+      "to": "urn:journey:collective-own:sharing:state:7",
+      "commandRef": "urn:journey:collective-own:sharing:transition:6:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:transition:6:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:transition:6:command"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:44:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:44:name:en",
+      "messageMetaRef": "urn:locator:collective-own:44:name",
+      "localeRef": "urn:locale:en",
+      "value": "Share label"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:44:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:44",
+      "role": "textbox",
+      "accessibleNameRef": "urn:locator:collective-own:44:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:44:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:43",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:transition:6:surface",
+      "observationEventRef": "urn:event:type",
+      "locatorRefs": [
+        "urn:locator:collective-own:44"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:sharing:state:8",
+      "label": "Own update saved"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:state:8:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:state:8"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:46",
+      "extensions": {
+        "urn:openuji:playwright:css": ".sharing-entry:has(.sharing-entry__title:text-is(\"Newsletter\"))"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:45",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:state:8:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:46"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:sharing:transition:7:command",
+      "label": "Own update saved"
+    },
+    {
+      "@type": "Effect",
+      "@id": "urn:journey:collective-own:sharing:transition:7:effect",
+      "label": "Own update saved"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:sharing:transition:7",
+      "from": "urn:journey:collective-own:sharing:state:7",
+      "to": "urn:journey:collective-own:sharing:state:8",
+      "commandRef": "urn:journey:collective-own:sharing:transition:7:command",
+      "effectRef": "urn:journey:collective-own:sharing:transition:7:effect"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:transition:7:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:transition:7:command"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:48:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:48:name:en",
+      "messageMetaRef": "urn:locator:collective-own:48:name",
+      "localeRef": "urn:locale:en",
+      "value": "Update share"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:48:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:48",
+      "role": "button",
+      "accessibleNameRef": "urn:locator:collective-own:48:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:48:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:47",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:transition:7:surface",
+      "observationEventRef": "urn:event:click",
+      "locatorRefs": [
+        "urn:locator:collective-own:48"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:sharing:state:9",
+      "label": "Own actions reopened"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:state:9:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:state:9"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:50:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:50:name:en",
+      "messageMetaRef": "urn:locator:collective-own:50:name",
+      "localeRef": "urn:locale:en",
+      "value": "Add another link"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:50:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:50",
+      "role": "menuitem",
+      "accessibleNameRef": "urn:locator:collective-own:50:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:50:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:49",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:state:9:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:50"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:sharing:transition:8:command",
+      "label": "Own actions reopened"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:sharing:transition:8",
+      "from": "urn:journey:collective-own:sharing:state:8",
+      "to": "urn:journey:collective-own:sharing:state:9",
+      "commandRef": "urn:journey:collective-own:sharing:transition:8:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:transition:8:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:transition:8:command"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:52",
+      "extensions": {
+        "urn:openuji:playwright:css": ".sharing-entry:has(.sharing-entry__title:text-is(\"Newsletter\")) .sharing-entry__actions button"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:51",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:transition:8:surface",
+      "observationEventRef": "urn:event:click",
+      "locatorRefs": [
+        "urn:locator:collective-own:52"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:sharing:state:10",
+      "label": "Own link created"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:state:10:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:state:10"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:54",
+      "extensions": {
+        "urn:openuji:playwright:css": ".external-shares-list"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:53",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:state:10:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:54"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:sharing:transition:9:command",
+      "label": "Own link created"
+    },
+    {
+      "@type": "Effect",
+      "@id": "urn:journey:collective-own:sharing:transition:9:effect",
+      "label": "Own link created"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:sharing:transition:9",
+      "from": "urn:journey:collective-own:sharing:state:9",
+      "to": "urn:journey:collective-own:sharing:state:10",
+      "commandRef": "urn:journey:collective-own:sharing:transition:9:command",
+      "effectRef": "urn:journey:collective-own:sharing:transition:9:effect"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:transition:9:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:transition:9:command"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:56:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:56:name:en",
+      "messageMetaRef": "urn:locator:collective-own:56:name",
+      "localeRef": "urn:locale:en",
+      "value": "Add another link"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:56:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:56",
+      "role": "menuitem",
+      "accessibleNameRef": "urn:locator:collective-own:56:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:56:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:55",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:transition:9:surface",
+      "observationEventRef": "urn:event:click",
+      "locatorRefs": [
+        "urn:locator:collective-own:56"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:sharing:state:11",
+      "label": "Link actions opened"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:state:11:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:state:11"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:58:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:58:name:en",
+      "messageMetaRef": "urn:locator:collective-own:58:name",
+      "localeRef": "urn:locale:en",
+      "value": "Generate QR code"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:58:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:58",
+      "role": "menuitem",
+      "accessibleNameRef": "urn:locator:collective-own:58:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:58:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:57",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:state:11:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:58"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:sharing:transition:10:command",
+      "label": "Link actions opened"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:sharing:transition:10",
+      "from": "urn:journey:collective-own:sharing:state:10",
+      "to": "urn:journey:collective-own:sharing:state:11",
+      "commandRef": "urn:journey:collective-own:sharing:transition:10:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:transition:10:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:transition:10:command"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:60",
+      "extensions": {
+        "urn:openuji:playwright:css": ".sharing-entry:has(.sharing-entry__title:text-is(\"Newsletter\")) .sharing-entry__actions button"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:59",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:transition:10:surface",
+      "observationEventRef": "urn:event:click",
+      "locatorRefs": [
+        "urn:locator:collective-own:60"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:sharing:state:12",
+      "label": "Revocation ready"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:state:12:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:state:12"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:62:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:62:name:en",
+      "messageMetaRef": "urn:locator:collective-own:62:name",
+      "localeRef": "urn:locale:en",
+      "value": "Unshare"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:62:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:62",
+      "role": "menuitem",
+      "accessibleNameRef": "urn:locator:collective-own:62:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:62:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:61",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:state:12:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:62"
+      ],
+      "expectedMatchCount": 1
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:sharing:transition:11:command",
+      "label": "Revocation ready"
+    },
+    {
+      "@type": "Effect",
+      "@id": "urn:journey:collective-own:sharing:transition:11:effect",
+      "label": "Revocation ready"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:sharing:transition:11",
+      "from": "urn:journey:collective-own:sharing:state:11",
+      "to": "urn:journey:collective-own:sharing:state:12",
+      "commandRef": "urn:journey:collective-own:sharing:transition:11:command",
+      "effectRef": "urn:journey:collective-own:sharing:transition:11:effect"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:transition:11:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:transition:11:command"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:64:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:64:name:en",
+      "messageMetaRef": "urn:locator:collective-own:64:name",
+      "localeRef": "urn:locale:en",
+      "value": "Unshare"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:64:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:64",
+      "role": "menuitem",
+      "accessibleNameRef": "urn:locator:collective-own:64:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:64:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:63",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:transition:11:surface",
+      "observationEventRef": "urn:event:observe",
+      "locatorRefs": [
+        "urn:locator:collective-own:64"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:journey:collective-own:sharing:state:13",
+      "label": "Link revoked"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:state:13:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:state:13"
+    },
+    {
+      "@type": "CustomLocator",
+      "@id": "urn:locator:collective-own:66",
+      "extensions": {
+        "urn:openuji:playwright:css": ".sharing-entry:has(.sharing-entry__title:text-is(\"Newsletter\"))"
+      }
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:65",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:state:13:surface",
+      "observationEventRef": "urn:observation-event:presence",
+      "locatorRefs": [
+        "urn:locator:collective-own:66"
+      ],
+      "expectedMatchCount": 0
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:journey:collective-own:sharing:transition:12:command",
+      "label": "Link revoked"
+    },
+    {
+      "@type": "Effect",
+      "@id": "urn:journey:collective-own:sharing:transition:12:effect",
+      "label": "Link revoked"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:journey:collective-own:sharing:transition:12",
+      "from": "urn:journey:collective-own:sharing:state:12",
+      "to": "urn:journey:collective-own:sharing:state:13",
+      "commandRef": "urn:journey:collective-own:sharing:transition:12:command",
+      "effectRef": "urn:journey:collective-own:sharing:transition:12:effect"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:journey:collective-own:sharing:transition:12:surface",
+      "graphNodeRef": "urn:journey:collective-own:sharing:transition:12:command"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:locator:collective-own:68:name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:locator:collective-own:68:name:en",
+      "messageMetaRef": "urn:locator:collective-own:68:name",
+      "localeRef": "urn:locale:en",
+      "value": "Unshare"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:locator:collective-own:68:exact",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:collective-own:68",
+      "role": "menuitem",
+      "accessibleNameRef": "urn:locator:collective-own:68:name",
+      "accessibleFeatureRefs": [
+        "urn:locator:collective-own:68:exact"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:binding:collective-own:67",
+      "observeSurfaceRef": "urn:journey:collective-own:sharing:transition:12:surface",
+      "observationEventRef": "urn:event:click",
+      "locatorRefs": [
+        "urn:locator:collective-own:68"
+      ]
+    },
+    {
+      "@type": "Touchpoint",
+      "@id": "urn:touchpoint:collectives",
+      "journeyRefs": [
+        "urn:journey:collective-own:login",
+        "urn:journey:collective-own:sharing"
+      ],
+      "label": "Nextcloud Collectives"
+    },
+    {
+      "@type": "Persona",
+      "@id": "urn:user:alice",
+      "label": "Alice Journey",
+      "touchpointRefs": [
+        "urn:touchpoint:collectives"
+      ]
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import type { SourceIdentity } from "@openuji/journey-plugin";
 import { dirname, resolve } from "node:path";
 import type { JourneyArtifactStore, JourneyService } from "@openuji/journey-plugin";
 
@@ -17,7 +18,9 @@ export type StackOptions = Readonly<{
   environment: Readonly<Record<string, string>>; directory: string;
   services: Readonly<Record<string, { baseURL: string; username: string; password: string }>>;
   enabledApps: readonly string[];
+  systemConfig?: Readonly<Record<string, string | boolean | number>>;
   build?: StackBuild;
+  sourceIdentity?: SourceIdentity;
 }>;
 export type StackExecutor = (command: string, args: readonly string[], options: { cwd: string; env: Record<string, string | undefined>; signal?: AbortSignal }) => Promise<string>;
 export const executeStackCommand: StackExecutor = (command, args, options) => new Promise((accept, reject) => {
@@ -30,6 +33,9 @@ export const executeStackCommand: StackExecutor = (command, args, options) => ne
 });
 
 export function validateStackOptions(options: StackOptions): void {
+  for (const [key, value] of Object.entries(options.systemConfig ?? {})) {
+    if (!/^[A-Za-z0-9_.-]+$/.test(key) || !(typeof value === "string" || typeof value === "boolean" || Number.isSafeInteger(value))) throw new Error("Invalid systemConfig entry");
+  }
   if (!/^[a-z0-9][a-z0-9_-]*$/.test(options.project)) throw new Error("Invalid Compose project name");
   if (!options.composeFiles.length || !Object.keys(options.services).length) throw new Error("Compose files and services are required");
   const urls = new Set<string>();
@@ -68,7 +74,7 @@ export function nextcloudStackRuntime(options: StackOptions, artifacts: JourneyA
   const env: Record<string, string | undefined> = { ...process.env, ...options.environment, NEXTCLOUD_IMAGE: options.image, NEXTCLOUD_STACK_ENV_FILE: envFile };
   // A pull request's image tag and version are only known once its head commit has been fetched.
   let image = options.image;
-  let sourceSha: string | null = null;
+  let sourceSha: string | null = options.sourceIdentity?.sourceSha ?? null;
   let pullRequest: number | null = null;
   const compose = ["compose", "--project-name", options.project, "--env-file", envFile, ...options.composeFiles.flatMap((file) => ["-f", file])];
   let identity: unknown = null;
@@ -146,13 +152,17 @@ export function nextcloudStackRuntime(options: StackOptions, artifacts: JourneyA
         await occ(service, "app:disable", "firstrunwizard").catch(() => {});
         for (const [key, value] of Object.entries({ "trusted_domains 0": url.hostname, "trusted_domains 1": url.host, "trusted_domains 2": service, "overwritehost": url.host, "overwriteprotocol": url.protocol.slice(0, -1), "overwrite.cli.url": url.origin })) await occ(service, "config:system:set", ...key.split(" "), `--value=${value}`);
         await occ(service, "config:system:set", "allow_local_remote_servers", "--type=boolean", "--value=true");
+        for (const [key, value] of Object.entries(options.systemConfig ?? {})) {
+          const type = typeof value === "boolean" ? "boolean" : typeof value === "number" ? "integer" : "string";
+          await occ(service, "config:system:set", key, `--type=${type}`, `--value=${value}`);
+        }
         for (const key of ["incoming_server2server_share_enabled", "outgoing_server2server_share_enabled"]) await occ(service, "config:app:set", "files_sharing", key, "--value=yes");
         const exists = await occ(service, "user:info", account.username).then(() => true).catch(() => false);
         if (!exists) await docker("exec", "-T", "-e", `OC_PASS=${account.password}`, "-u", "www-data", service, "php", "occ", "user:add", "--password-from-env", account.username);
-        if (options.build) {
+        if (options.build || options.sourceIdentity) {
           const sha = await docker("exec", "-T", service, "cat", "/var/www/html/.journey-source-sha");
           if (sha !== sourceSha) throw new Error(`${service}: installed source SHA mismatch`);
-          for (const app of options.build.apps) {
+          for (const app of options.build?.apps ?? []) {
             await docker("exec", "-T", service, "cp", "-a", `/usr/src/nextcloud/custom_apps/${app.id}`, "/var/www/html/custom_apps/");
             await docker("exec", "-T", service, "chown", "-R", "www-data:www-data", `/var/www/html/custom_apps/${app.id}`);
           }
@@ -168,6 +178,8 @@ export function nextcloudStackRuntime(options: StackOptions, artifacts: JourneyA
       }
       identity = { project: options.project, image, ...(pullRequest === null ? {} : { pullRequest }), verifiedAt: new Date().toISOString(), services };
       await artifacts.write({ name: `${options.project}.identity.json`, data: JSON.stringify(identity, null, 2), contentType: "application/json" });
+      return { stack: { project: options.project, composeFiles: options.composeFiles, envFile, services: Object.keys(options.services) },
+        ...(options.sourceIdentity ? { identity: options.sourceIdentity } : {}) };
     },
     async down() {
       if (attemptedUp && !ownsStack) return;

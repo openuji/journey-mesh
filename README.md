@@ -180,6 +180,28 @@ may return `nodes` (per operation: `axe` page/surface counts, `native` findings
 and passes, or `skipped`); its full evidence stays in `evidence` for its
 reporter.
 
+Report visibility is explicit in the mesh:
+
+```yaml
+report:
+  excludedPhaseIds:
+    - urn:phase:setup
+```
+
+The suite setting is inherited by each test. A test may replace it with its own
+`report` setting; `excludedPhaseIds: []` shows every selected journey. Without a
+setting, no phases are excluded. Filtering applies to each journey's modeled
+phase, including when setup and scenario share a document. It changes only the
+map: execution, evidence, and observer policies remain intact. The resolved
+setting is saved in the test bundle so re-publishing needs no mesh or model file.
+
+The UJG map projection preserves `Persona` nodes as renderer users and retains
+touchpoint relationships. Catalogue documents provide a `JourneyEntryIndex`
+containing the entries to discover; that index introduces no execution order or
+transitions. Invalid map views produce reporting errors and make the suite fail
+without rewriting execution outcomes. The viewer shows the error instead of
+silently replacing the model with an execution-plan diagram.
+
 ### Component responsibilities
 
 | Component | Responsibility | When needed |
@@ -235,6 +257,8 @@ journey-mesh render bundle.json [--output <dir>]
 journey-mesh report <dir>
 journey-mesh services up|down mesh.yaml [--service <key>]
 ```
+
+See [service composition](docs/service-composition.md) to declare a PR source once and compose reusable source, build, and installation routines through named service inputs/outputs. The suite `target` selects the verified installed identity. The [HTTP environment plugin](packages/journey-environment-http/README.md) supplies declarative fixtures and read-only checks of model-declared effects.
 
 ### Writing a plugin
 

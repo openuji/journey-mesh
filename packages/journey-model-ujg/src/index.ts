@@ -213,7 +213,7 @@ function operationForPathItem({
       transition: transitionRef(transition),
       from: activation.from,
       to: activation.to,
-      surface: surfaceRef(requireSingleSurfaceForGraphNode(index, transition["@id"])),
+      surface: surfaceRef(requireSingleSurfaceForGraphNode(index, optionalString(transition.commandRef) ?? transition["@id"])),
       activation,
       effects
     } satisfies TransitionPlanOperation;
@@ -384,7 +384,7 @@ function resolveTransitionActivation(
   transitionId: string
 ): ResolvedTransitionActivation {
   const transition = requireNode(index, transitionId, "Transition");
-  const surface = requireSingleSurfaceForGraphNode(index, transitionId);
+  const surface = requireSingleSurfaceForGraphNode(index, optionalString(transition.commandRef) ?? transitionId);
   const eventId = requireSingleActivationEventId(index, surface["@id"]);
   const event = requireNode(index, eventId, "ObservationEvent");
   const from = graphVertexRef(

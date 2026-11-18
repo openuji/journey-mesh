@@ -25,7 +25,7 @@ function savedTest(side: string, id: string, index: number, failAt?: number): Te
   const operations = states.map((state, sequence) => ({ id: `${id}/alice/${state}`, sequence, kind: "state" as const, segment: "alice", actorId: "urn:user:alice", touchpointId: "urn:touchpoint:nextcloud-a", entry: { id: "entry", stateId: states[0] }, state: { id: state }, surface: { id: "surface" }, target: { expectedMatchCount: 1, bindings: [], observation: { stateId: state, surfaceId: "surface", expectedMatchCount: 1, bindings: [] } } }));
   const outcome = (sequence: number) => failAt === undefined || sequence < failAt ? { kind: "passed" as const } : { kind: "failed" as const, error: { name: "Error", message: "Share permissions did not open" } };
   return {
-    kind: "test", id, plan: { id: "plan", operations }, reportingErrors: [],
+    kind: "test", id, plan: { id: "plan", operations }, reportingErrors: [], report: { excludedPhaseIds: ["urn:phase:setup"] },
     segments: [
       { id: "login", journeyId: "urn:journey:alice-web-setup", adapter: "web", view: "setup" },
       { id: "alice", journeyId: "urn:journey:alice-federated-sharing", adapter: "web", view: "nc34" }

@@ -4,6 +4,7 @@ import type { JourneyNodeMetrics } from "@openuji/journey-core";
 import type { JourneySegment, TestResultBundle } from "@openuji/journey-plugin";
 import { artifactHref } from "../src/paths.js";
 import { JourneyPathView } from "./JourneyPathView.js";
+import { selectJourneyMaps } from "../src/journey-maps.js";
 
 type Outcome = "passed" | "failed" | "unexecuted";
 type MapInput = { test: TestResultBundle; profile: string; base: string; label: string };
@@ -24,7 +25,7 @@ function executionView(test: TestResultBundle, profile: string, base: string, se
     const screenshot = test.artifacts.find((artifact) => artifact.contentType === "image/png" && !!artifact.scope && artifact.scope.executionId === execution?.executionId && artifact.scope.operationId === operation.id);
     preview[id] = {
       id,
-      ...(metrics?.kind === "skipped" ? { status: "skipped" as const } : metrics ? { status: "audited" as const, metrics } : {}),
+      ...(metrics && metrics.kind !== "skipped" ? { status: "audited" as const, metrics } : { status: "skipped" as const }),
       ...(screenshot ? { sourceScreenshotHref: base + artifactHref(screenshot.href) } : {})
     };
   }
@@ -43,12 +44,11 @@ function TouchpointChip({ label, platforms }: { label: string; platforms: readon
 
 const platformLabel = (adapter: string) => adapter.charAt(0).toUpperCase() + adapter.slice(1);
 
-function JourneyDocument({ registry, segments, touchpointLabels, block = false, ...input }: MapInput & { registry: Registry; segments: readonly JourneySegment[]; touchpointLabels: ReadonlyMap<string, string>; block?: boolean }) {
+function JourneyDocument({ registry, segments, rootStartIds, touchpointLabels, block = false, ...input }: MapInput & { registry: Registry; segments: readonly JourneySegment[]; rootStartIds: string[]; touchpointLabels: ReadonlyMap<string, string>; block?: boolean }) {
   const root = useRef<HTMLDivElement>(null);
   const { test, profile, base, label } = input;
   const segmentIds = useMemo(() => new Set(segments.map((segment) => segment.id)), [segments]);
-  const journeyIds = new Set(segments.map((segment) => segment.journeyId));
-  const starts = registry.getRootStartOptions().filter((start) => journeyIds.has(registry.states.get(start.stateRef)?.subjourney?.id ?? ""));
+  const starts = registry.getRootStartOptions().filter((start) => rootStartIds.includes(start.id));
   const { preview, outcomes } = useMemo(() => executionView(test, profile, base, segmentIds), [test, profile, base, segmentIds]);
   const controls: Record<string, ReactNode> = {};
   for (const start of starts) {
@@ -74,38 +74,22 @@ function JourneyDocument({ registry, segments, touchpointLabels, block = false, 
   </div>;
 }
 
-/** A document whose every step is in the setup phase (a login) is preparation, not the scenario: it is not drawn. */
-const setupPhase = "urn:phase:setup";
-const isSetupOnly = (document: unknown) => {
-  const steps = Object.values((document as { steps?: Record<string, { phaseRef?: string }> }).steps ?? {});
-  return steps.length > 0 && steps.every((step) => step.phaseRef === setupPhase);
-};
-
-/** Registries for the test's embedded journey maps; a view the renderer rejects is left out. */
-function useRegistries(test: TestResultBundle): readonly (readonly [Registry, readonly JourneySegment[]])[] {
-  return useMemo(() => {
-    const byView = new Map<string, JourneySegment[]>();
-    for (const segment of test.segments ?? []) {
-      if (!segment.view || test.views?.[segment.view]?.format !== "journey-map" || isSetupOnly(test.views[segment.view].document)) continue;
-      byView.set(segment.view, [...(byView.get(segment.view) ?? []), segment]);
-    }
-    return [...byView].flatMap(([key, segments]) => {
-      try { return [[new Registry(structuredClone(test.views[key].document) as UJGDocument), segments] as const]; }
-      catch { return []; }
-    });
-  }, [test]);
-}
-
 /** The journey map of one execution: the model's own journey documents with outcomes and observer metrics on each node. */
 export function JourneyMap(input: MapInput) {
-  const maps = useRegistries(input.test);
+  const { maps, errors } = useMemo(() => {
+    const selected = selectJourneyMaps(input.test);
+    return { ...selected, maps: selected.maps.map((map) => ({ ...map, registry: new Registry(structuredClone(input.test.views[map.view].document) as UJGDocument) })) };
+  }, [input.test]);
   // A document without touchpoint labels (e.g. a setup fragment) borrows them from the test's other documents.
-  const touchpointLabels = useMemo(() => new Map(maps.flatMap(([registry]) => [...registry.touchpoints].flatMap(([id, touchpoint]) => touchpoint.label ? [[id, touchpoint.label] as const] : []))), [maps]);
-  if (!maps.length) return <JourneyPathView {...input} />;
+  const touchpointLabels = useMemo(() => new Map(maps.flatMap(({ registry }) => [...registry.touchpoints].flatMap(([id, touchpoint]) => touchpoint.label ? [[id, touchpoint.label] as const] : []))), [maps]);
+  const hasMap = Object.values(input.test.views ?? {}).some((view) => view.format === "journey-map");
+  if (!maps.length && !errors.length && !hasMap) return <JourneyPathView {...input} />;
   return <div className="journey-map" data-journey-map={input.profile}>
-    {maps.map(([registry, segments]) => <ResponsiveJourneyPath breakpoint={900} key={segments[0].view}>
-      <JourneyDocument {...input} registry={registry} segments={segments} touchpointLabels={touchpointLabels} />
+    {errors.length > 0 && <div role="alert"><p>Journey map could not be rendered.</p><ul className="errors">{errors.map((error) => <li key={error.message}>{error.message}</li>)}</ul></div>}
+    {maps.map(({ registry, segments, rootStartIds, view }) => <ResponsiveJourneyPath breakpoint={900} key={view}>
+      <JourneyDocument {...input} registry={registry} segments={segments} rootStartIds={rootStartIds} touchpointLabels={touchpointLabels} />
     </ResponsiveJourneyPath>)}
+    {!maps.length && !errors.length && <p className="empty">All selected journeys are excluded from this report by its phase settings.</p>}
   </div>;
 }
 

@@ -9,6 +9,7 @@ export { publishReport, viewerHtml, writeReport, readSavedBundle } from "./publi
 export type { PublishedBundle } from "./publish.js";
 export { fileArtifactStore } from "./artifact-store.js";
 export { testFailures, testPassed } from "./outcome.js";
+export { selectJourneyMaps } from "./journey-maps.js";
 export { testDirectory, subjectDirectory, artifactHref } from "./paths.js";
 
 /** Reporters receive detached snapshots; a failure never changes execution history. */

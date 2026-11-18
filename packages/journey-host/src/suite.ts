@@ -46,8 +46,8 @@ export async function prepareSuite(path: string, options: RunSuiteOptions = {}):
     const reporters: JourneyReporter[] = [];
     for (const [index, entry] of config.reporters.entries()) reporters.push(await (await load("reporter", entry, `reporters[${index}]`, suiteContext("suite"))).create());
     const keys = [...new Set(tests.flatMap((test) => test.services))];
-    const services = keys.length ? await loadServices(loaded, load, orderServices(config.services, keys), outputDir) : [];
-    return Object.freeze({ ...(config.label ? { label: config.label } : {}), outputDir, tests, services, reporters, artifacts });
+    const services = keys.length ? await loadServices(loaded, load, orderServices(config.services, keys), outputDir, true) : [];
+    return Object.freeze({ ...(config.target ? { target: config.target } : {}), ...(config.label ? { label: config.label } : {}), outputDir, tests, services, reporters, artifacts });
   } catch (error) {
     if (error instanceof JourneyConfigError && error.testIds.length) throw error;
     throw new JourneyConfigError(error instanceof Error ? error.message : "Invalid journey test configuration", { testId: current, testIds });

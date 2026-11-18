@@ -3,9 +3,25 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { JourneyArtifact, SuiteResultBundle, ComparisonResultBundle } from "@openuji/journey-plugin";
 import { subjectDirectory, testDirectory } from "./paths.js";
 import { viteAssets } from "./vite-assets.js";
+import { withJourneyMapErrors } from "./journey-maps.js";
+import { testPassed } from "./outcome.js";
 
 /** A saved bundle that can be published: a suite run or a comparison of two suite runs. */
 export type PublishedBundle = SuiteResultBundle | ComparisonResultBundle;
+
+function checkedSuite(bundle: SuiteResultBundle): SuiteResultBundle {
+  const tests = bundle.tests.map(withJourneyMapErrors);
+  return { ...bundle, tests, ok: bundle.ok && tests.every(testPassed) };
+}
+
+function checkedBundle(bundle: PublishedBundle): PublishedBundle {
+  if (bundle.kind === "suite") return checkedSuite(bundle);
+  const subjects = Object.fromEntries((["baseline", "candidate"] as const).map((side) => {
+    const subject = bundle.subjects[side];
+    return [side, { ...subject, bundle: subject.bundle ? checkedSuite(subject.bundle) : null }];
+  })) as ComparisonResultBundle["subjects"];
+  return { ...bundle, subjects, ok: bundle.ok && !!subjects.baseline.bundle?.ok && !!subjects.candidate.bundle?.ok };
+}
 
 const evidenceTypes = new Set(["application/json", "text/html", "image/png", "application/xml", "text/plain"]);
 
@@ -22,6 +38,7 @@ const text = (data: Uint8Array) => new TextDecoder().decode(data);
  * from `file://`, which is why nothing here is loaded from a separate file.
  */
 export async function viewerHtml(bundle: PublishedBundle): Promise<string> {
+  bundle = checkedBundle(bundle);
   const assets = await viteAssets(new URL("../dist/app/", import.meta.url));
   const asset = (name: string) => {
     const found = assets.find((item) => item.name === name);
@@ -44,6 +61,7 @@ export async function viewerHtml(bundle: PublishedBundle): Promise<string> {
 
 /** The only writer of `bundle.json` and the report page that renders it. */
 export async function writeReport(outputDir: string, bundle: PublishedBundle): Promise<void> {
+  bundle = checkedBundle(bundle);
   await mkdir(outputDir, { recursive: true });
   await writeFile(resolve(outputDir, "bundle.json"), JSON.stringify(bundle, null, 2));
   await writeFile(resolve(outputDir, "index.html"), await viewerHtml(bundle));
@@ -52,7 +70,7 @@ export async function writeReport(outputDir: string, bundle: PublishedBundle): P
 export async function readSavedBundle<K extends PublishedBundle["kind"]>(path: string, kinds: readonly K[]): Promise<Extract<PublishedBundle, { kind: K }>> {
   const bundle = JSON.parse(await readFile(path, "utf8")) as PublishedBundle | null;
   if (!bundle || !kinds.includes(bundle.kind as K)) throw new Error(`Expected a Journey Mesh ${kinds.join(" or ")} bundle: ${path}`);
-  return bundle as Extract<PublishedBundle, { kind: K }>;
+  return checkedBundle(bundle) as Extract<PublishedBundle, { kind: K }>;
 }
 
 /** Copy one registered artifact; hrefs must stay relative and inside the saved evidence directory. */

@@ -88,6 +88,23 @@ test("same named adapter is shared while separate definitions remain isolated", 
   assert.equal(events.filter((event) => event.event === "entry").length, 2);
 });
 
+test("report phase exclusions are explicit, inherited, saved, and overridable without changing execution", async () => {
+  const suite = await setup();
+  Object.assign(suite.config, { report: { excludedPhaseIds: ["urn:phase:setup"] } });
+  await suite.save();
+  const inherited = await runSuite(suite.path);
+  assert.deepEqual(inherited.tests[0].report, { excludedPhaseIds: ["urn:phase:setup"] });
+  assert.equal(inherited.tests[0].plan.operations.length, 2);
+  const saved = JSON.parse(await readFile(join(suite.directory, "reports/bundle.json"), "utf8"));
+  assert.deepEqual(saved.tests[0].report, inherited.tests[0].report);
+  Object.assign(suite.config.tests.sharing, { report: { excludedPhaseIds: [] } });
+  await suite.save();
+  assert.deepEqual((await runSuite(suite.path)).tests[0].report, { excludedPhaseIds: [] });
+  Object.assign(suite.config.tests.sharing, { report: { unknown: true } });
+  await suite.save();
+  await assert.rejects(validateSuite(suite.path), /Unknown setting tests.sharing.report.unknown/);
+});
+
 test("failed journey stops its profile, retains cleanup/report failures, and independent tests continue", async () => {
   const suite = await setup();
   Object.assign(suite.config.adapters.first.options, { fail: "alice", failClose: true });

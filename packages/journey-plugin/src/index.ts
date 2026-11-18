@@ -17,3 +17,6 @@ export { escapeHtml } from "./html.js";
 export { observedOperations, routedElsewhere } from "./observations.js";
 export type { ObservationFact, ObservedOperation } from "./observations.js";
 export { booleanOption, knownOptions, noOptions, optionalString, optionsObject, positiveNumber, requiredString, stringArray } from "./options.js";
+
+export { sourceCheckoutContract, sourceIdentityContract, sourceIdentity } from "./services.js";
+export type { SourceIdentity, SourceCheckout } from "./services.js";

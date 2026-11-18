@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { compileUjgJourneyPlan, toJourneyMapDocument, type UjgDocument } from "../src/index.js";
+import { Registry } from "../../../vendor/journey-path/src/data/parser.js";
 
 const document: UjgDocument = {
   "@id": "urn:test:document",
   "@type": "UJGDocument",
   nodes: [
+    { "@id": "urn:index", "@type": "JourneyEntryIndex", entryRefs: ["urn:entry"] },
     { "@id": "urn:composite", "@type": "CompositeState", subjourneyRefs: ["urn:journey"] },
     { "@id": "urn:journey", "@type": "Journey", defaultEntryRef: "urn:entry", entryRefs: ["urn:entry"], stateRefs: ["urn:state"], transitionRefs: [] },
     { "@id": "urn:entry", "@type": "JourneyEntry", stateRef: "urn:state" },
@@ -54,6 +56,31 @@ test("CustomLocator extensions remain opaque, detached data for adapter interpre
   assert.deepEqual(resolved.extensions, { "urn:example:locator": { query: "target" } });
 });
 
+test("command surfaces supply activation without changing the UJG transition or effect", async () => {
+  const input = structuredClone(document);
+  const journey = input.nodes.find((node) => node["@id"] === "urn:journey")!;
+  journey.stateRefs = ["urn:state", "urn:done"]; journey.transitionRefs = ["urn:transition"];
+  input.nodes.push(
+    { "@id": "urn:done", "@type": "State" },
+    { "@id": "urn:done-surface", "@type": "Surface", graphNodeRef: "urn:done" },
+    { "@id": "urn:done-binding", "@type": "ObservationBinding", observeSurfaceRef: "urn:done-surface", observationEventRef: "urn:observation-event:presence", expectedMatchCount: 1, locatorRefs: ["urn:locator"] },
+    { "@id": "urn:command", "@type": "Command" },
+    { "@id": "urn:command-surface", "@type": "Surface", graphNodeRef: "urn:command" },
+    { "@id": "urn:invoke", "@type": "ObservationEvent" },
+    { "@id": "urn:invoke-binding", "@type": "ObservationBinding", observeSurfaceRef: "urn:command-surface", observationEventRef: "urn:invoke", locatorRefs: ["urn:locator"] },
+    { "@id": "urn:effect", "@type": "Effect" },
+    { "@id": "urn:transition", "@type": "Transition", from: "urn:state", to: "urn:done", commandRef: "urn:command", effectRef: "urn:effect" }
+  );
+  const plan = await compileUjgJourneyPlan(input);
+  assert.deepEqual(plan.operations.map((operation) => operation.kind), ["state", "transition", "state"]);
+  const transition = plan.operations[1];
+  assert.equal(transition.kind, "transition");
+  if (transition.kind !== "transition") throw new Error("Expected transition");
+  assert.equal(transition.surface.id, "urn:command-surface");
+  assert.equal(transition.transition.id, "urn:transition");
+  assert.deepEqual(transition.effects.map((effect) => effect.id), ["urn:effect"]);
+});
+
 test("the journey map is projected from the executed JSON-LD: nested journeys, surfaces, phases and steps", async () => {
   const { mkdtemp, writeFile } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
@@ -73,5 +100,9 @@ test("the journey map is projected from the executed JSON-LD: nested journeys, s
   } });
   assert.deepEqual(map.steps, { "urn:step": { order: 0, compositeStateRef: "urn:composite", phaseRef: "urn:phase:setup" } });
   assert.deepEqual(map.touchpoints, { "urn:touchpoint": { journeyRefs: ["urn:journey"] } });
+  assert.deepEqual(map.users, { "urn:persona": { touchpointRefs: ["urn:touchpoint"] } });
+  const registry = new Registry(structuredClone(map) as never);
+  assert.equal(registry.getRootStartOptions()[0].stateRef, "urn:composite");
+  assert.deepEqual(registry.getJourneyProperties("urn:composite").users, [{ id: "urn:persona", label: undefined }]);
   assert.throws(() => toJourneyMapDocument({ ...document, nodes: document.nodes.filter((node) => node["@id"] !== "urn:journey") }), /missing node urn:journey/);
 });

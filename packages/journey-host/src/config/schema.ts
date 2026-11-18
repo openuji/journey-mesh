@@ -1,11 +1,18 @@
 import { knownOptions, optionalString, optionsObject, requiredString, stringArray } from "@openuji/journey-plugin";
 import { JourneyConfigError } from "./errors.js";
+import type { JourneyReportOptions } from "@openuji/journey-plugin";
 
 /** A plugin reference. `use` and `options` may contain `${VAR}` and are interpolated only when selected. */
 export type ComponentConfig = Readonly<{ use: string; options: Readonly<Record<string, unknown>> }>;
 export type AdapterConfig = ComponentConfig & Readonly<{ driver?: ComponentConfig; observers: readonly ComponentConfig[] }>;
 /** Infrastructure managed by `journey-mesh services up|down` or started for the tests that list it. */
-export type ServiceConfig = ComponentConfig & Readonly<{ dependsOn: readonly string[] }>;
+export type ServiceOutputRef = Readonly<{ service: string; output: string }>;
+export type ServiceConfig = ComponentConfig & Readonly<{ dependsOn: readonly string[]; inputs: Readonly<Record<string, ServiceOutputRef>> }>;
+function outputRef(value: unknown, label: string): ServiceOutputRef {
+  const item = optionsObject(value, label);
+  knownOptions(item, ["service", "output"]);
+  return { service: requiredString(item.service, `${label}.service`), output: requiredString(item.output, `${label}.output`) };
+}
 export type EnvFileConfig = Readonly<{ path?: string; env?: string; optional?: boolean }>;
 export type JourneyItemConfig = Readonly<{
   id: string; source: string; select: string; adapter: string;
@@ -20,14 +27,17 @@ export type TestConfig = Readonly<{
   profiles: readonly ProfileCombinationConfig[];
   environment?: ComponentConfig;
   timeoutMs?: number | string;
+  report?: JourneyReportOptions;
   reporters: readonly ComponentConfig[];
   services: readonly string[];
 }>;
 export type SuiteConfig = Readonly<{
   kind: "suite";
+  target?: ServiceOutputRef;
   /** Name of the system under test, shown in reports and comparisons. */
   label?: string;
   outputDir?: string;
+  report?: JourneyReportOptions;
   envFiles: readonly EnvFileConfig[];
   model: ComponentConfig;
   adapters: Readonly<Record<string, AdapterConfig>>;
@@ -55,9 +65,16 @@ function component(value: unknown, label: string, extra: readonly string[] = [])
   return { ...raw, use: requiredString(raw.use, `${label}.use`), options: optionsObject(raw.options ?? {}, `${label}.options`) };
 }
 
-function test(id: string, value: unknown, suite: Pick<SuiteConfig, "adapters" | "profiles" | "services">): TestConfig {
+function reportOptions(value: unknown, label: string): JourneyReportOptions | undefined {
+  if (value === undefined) return undefined;
+  const raw = optionsObject(value, label);
+  known(raw, ["excludedPhaseIds"], label);
+  return { excludedPhaseIds: raw.excludedPhaseIds === undefined ? [] : stringArray(raw.excludedPhaseIds, `${label}.excludedPhaseIds`) };
+}
+
+function test(id: string, value: unknown, suite: Pick<SuiteConfig, "adapters" | "profiles" | "services" | "report">): TestConfig {
   const raw = optionsObject(value, `tests.${id}`);
-  known(raw, ["journeys", "profiles", "environment", "timeoutMs", "reporters", "services"], `tests.${id}`);
+  known(raw, ["journeys", "profiles", "environment", "timeoutMs", "reporters", "services", "report"], `tests.${id}`);
   const journeys = list(raw.journeys, `tests.${id}.journeys`).map((item, index): JourneyItemConfig => {
     const label = `tests.${id}.journeys[${index}]`;
     const journey = optionsObject(item, label);
@@ -99,8 +116,10 @@ function test(id: string, value: unknown, suite: Pick<SuiteConfig, "adapters" | 
     return name;
   });
   if (raw.timeoutMs !== undefined && typeof raw.timeoutMs !== "number" && typeof raw.timeoutMs !== "string") throw new Error(`tests.${id}.timeoutMs must be a number`);
+  const report = raw.report === undefined ? suite.report : reportOptions(raw.report, `tests.${id}.report`);
   return {
     id, journeys, profiles, services,
+    ...(report ? { report } : {}),
     reporters: list(raw.reporters, `tests.${id}.reporters`).map((item, index) => component(item, `tests.${id}.reporters[${index}]`)),
     ...(raw.environment !== undefined ? { environment: component(raw.environment, `tests.${id}.environment`) } : {}),
     ...(raw.timeoutMs !== undefined ? { timeoutMs: raw.timeoutMs as number | string } : {})
@@ -109,7 +128,7 @@ function test(id: string, value: unknown, suite: Pick<SuiteConfig, "adapters" | 
 
 /** The only place raw YAML becomes typed configuration; every unknown key is rejected. */
 export function parseSuiteConfig(raw: Record<string, unknown>, testOrder: readonly string[]): SuiteConfig {
-  known(raw, ["kind", "label", "outputDir", "envFiles", "model", "adapters", "profiles", "services", "tests", "reporters"], "configuration");
+  known(raw, ["kind", "label", "outputDir", "envFiles", "model", "adapters", "profiles", "services", "tests", "reporters", "target", "report"], "configuration");
   if (raw.kind !== "suite") throw new Error("Configuration kind must be suite");
   const adapters = record(raw.adapters, "adapters", (value, name): AdapterConfig => {
     const adapter = component(value, `adapters.${name}`, ["driver", "observers"]);
@@ -121,12 +140,18 @@ export function parseSuiteConfig(raw: Record<string, unknown>, testOrder: readon
   });
   const profiles = record(raw.profiles, "profiles", (value, name) => component(value, `profiles.${name}`));
   const services = record(raw.services, "services", (value, name): ServiceConfig => {
-    const service = component(value, `services.${name}`, ["dependsOn"]);
-    return { use: service.use, options: service.options, dependsOn: service.dependsOn === undefined ? [] : stringArray(service.dependsOn, `services.${name}.dependsOn`) };
+    const service = component(value, `services.${name}`, ["dependsOn", "inputs"]);
+    const inputs = record(service.inputs, `services.${name}.inputs`, (ref, key) => outputRef(ref, `services.${name}.inputs.${key}`));
+    return { use: service.use, options: service.options, inputs, dependsOn: [...new Set([
+      ...(service.dependsOn === undefined ? [] : stringArray(service.dependsOn, `services.${name}.dependsOn`)),
+      ...Object.values(inputs).map((ref) => ref.service)
+    ])] };
   });
   for (const [name, service] of Object.entries(services)) {
     for (const dependency of service.dependsOn) if (!Object.hasOwn(services, dependency)) throw new Error(`services.${name}.dependsOn references unknown service ${dependency}`);
   }
+  const target = raw.target === undefined ? undefined : outputRef(raw.target, "target");
+  if (target && !Object.hasOwn(services, target.service)) throw new Error(`Unknown target service ${target.service}`);
   optionsObject(raw.tests, "tests");
   if (!testOrder.length) throw new Error("At least one test is required");
   const envFiles = list(raw.envFiles, "envFiles").map((entry, index): EnvFileConfig => {
@@ -136,14 +161,16 @@ export function parseSuiteConfig(raw: Record<string, unknown>, testOrder: readon
     if (item.path === undefined && item.env === undefined) throw new Error(`envFiles[${index}] needs path or env`);
     return { ...(item.path !== undefined ? { path: requiredString(item.path, "envFiles.path") } : {}), ...(item.env !== undefined ? { env: requiredString(item.env, "envFiles.env") } : {}), ...(item.optional === true ? { optional: true } : {}) };
   });
-  const suite = { adapters, profiles, services };
+  const report = reportOptions(raw.report, "report");
+  const suite = { adapters, profiles, services, report };
   const tests = testOrder.map((id) => {
     try { return test(id, (raw.tests as Record<string, unknown>)[id], suite); }
     // A structural error is not fixed by selecting another test, so no alternatives are offered.
     catch (error) { throw new JourneyConfigError(error instanceof Error ? error.message : "Invalid test", { testId: id }); }
   });
   return Object.freeze({
-    kind: "suite", envFiles, model: component(raw.model, "model"), adapters, profiles, services, tests,
+    kind: "suite", ...(target ? { target } : {}), envFiles, model: component(raw.model, "model"), adapters, profiles, services, tests,
+    ...(report ? { report } : {}),
     reporters: list(raw.reporters, "reporters").map((item, index) => component(item, `reporters[${index}]`)),
     ...(raw.label !== undefined ? { label: requiredString(raw.label, "label") } : {}),
     ...(raw.outputDir !== undefined ? { outputDir: optionalString(raw.outputDir, "outputDir") } : {})

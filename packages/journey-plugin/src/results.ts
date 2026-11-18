@@ -8,14 +8,17 @@ import type { JourneyArtifact, JourneyArtifactStore } from "./artifacts.js";
 export type JourneySegment = Readonly<{ id: string; journeyId: string; adapter: string; view?: string }>;
 /** A drawable journey document saved with the run, so reports render without the model or its source files. */
 export type JourneyView = Readonly<{ format: string; document: unknown }>;
+/** Presentation only: excluded phases still execute and retain their evidence. */
+export type JourneyReportOptions = Readonly<{ excludedPhaseIds: readonly string[] }>;
 /** Saved bundles contain no absolute paths: artifacts and provenance are relative, so a report can be moved or published. */
 export type TestResultBundle = Readonly<{
   kind: "test"; id: string; segments: readonly JourneySegment[]; views: Readonly<Record<string, JourneyView>>;
+  report?: JourneyReportOptions;
   result: RunResult; plan: JourneyPlan; outputs: readonly JourneyObserverOutput[];
   reportingErrors: readonly JourneyRunError[]; artifacts: readonly JourneyArtifact[];
 }>;
 export type SuiteResultBundle = Readonly<{
-  kind: "suite"; label?: string; ok: boolean; generatedAt: string;
+  kind: "suite"; target?: import("./services.js").SourceIdentity; label?: string; ok: boolean; generatedAt: string;
   tests: readonly TestResultBundle[]; errors: readonly JourneyRunError[];
   provenance?: Readonly<Record<string, unknown>>;
   artifacts: readonly JourneyArtifact[];
