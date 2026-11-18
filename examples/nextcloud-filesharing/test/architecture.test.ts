@@ -80,7 +80,7 @@ test("Android device pins and the Nextcloud application config live in mesh.yaml
 test("every journey a mesh runs is drawn on the report's journey map from its JSON-LD source", async () => {
   const { dirname, resolve } = await import("node:path");
   const { loadUjgDocument, toJourneyMapDocument } = await import("@openuji/journey-model-ujg");
-  for (const mesh of ["mesh.yaml", "comparison/nc34.mesh.yaml", "comparison/pr66147.mesh.yaml"]) {
+  for (const mesh of ["mesh.yaml"]) {
     const path = new URL(mesh, example).pathname;
     for (const item of (await loadSuiteConfig(path, {})).config.tests.flatMap((test) => test.journeys)) {
       const map = toJourneyMapDocument(await loadUjgDocument(resolve(dirname(path), item.source)));

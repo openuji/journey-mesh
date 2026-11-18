@@ -312,8 +312,7 @@ measurement, and reporting do not interpret UJG source identifiers.
 `journey-mesh render` republishes a saved suite or comparison bundle, with only
 its registered evidence and the viewer, into another directory. Configuration,
 plugin, and report contracts have one current shape, with no version fields or
-legacy readers. See the
-[Nextcloud comparison](examples/nextcloud-filesharing/README.md#compare-independent-deployments).
+legacy readers.
 
 ## Available integrations and examples
 
@@ -323,8 +322,7 @@ The repository currently includes:
 - Playwright and Android Appium adapters, with Nextcloud web/native drivers.
 - Android emulator, Appium server and pinned Nextcloud stack service plugins.
 - Axe and Android accessibility observers and reporters.
-- An optional UX observer with pure metric derivation and a
-  [configured Nextcloud comparison](examples/nextcloud-filesharing/README.md#compare-independent-deployments).
+- An optional UX observer with pure metric derivation.
 
 The [Nextcloud file-sharing example](examples/nextcloud-filesharing/README.md)
 demonstrates two compositions of the same architecture:
@@ -337,6 +335,12 @@ demonstrates two compositions of the same architecture:
 Concrete diagrams, configuration, prerequisites, lifecycle commands, and evidence
 limits live in the example. Other integrations can implement the extension
 contracts; the implementations above are the ones supplied today.
+
+For further examples of Journey Mesh in use, see
+[journey-checks](https://github.com/openuji/journey-checks). It runs journeys
+against targets this project does not control, such as an open Nextcloud pull
+request, using a tagged Journey Mesh release, and publishes one JSON result per
+check. Each check is a self-contained mesh that uses this repository's packages.
 
 Explore the [live demo](https://journey-mesh.openuji.org/#demo) and
 [known-good accessibility report](https://journey-mesh.openuji.org/accessibility/filesharing/artifacts/nextcloud-filesharing.axe-path).

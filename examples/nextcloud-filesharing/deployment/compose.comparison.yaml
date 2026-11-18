@@ -1,7 +1,0 @@
-# Explicit comparison networks avoid Docker assigning a subnet that overlaps the
-# canonical LAN host used by host browsers and inter-server federation.
-networks:
-  default:
-    ipam:
-      config:
-        - subnet: ${NEXTCLOUD_STACK_SUBNET}

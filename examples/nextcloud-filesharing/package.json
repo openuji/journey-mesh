@@ -42,12 +42,6 @@
     "journey:test": "journey-mesh test mesh.yaml",
     "journey:validate": "journey-mesh validate mesh.yaml",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
-    "test": "node --test deployment/*.test.mjs && node --import tsx --test test/*.test.ts",
-    "comparison:validate": "journey-mesh validate comparison/nc34.mesh.yaml comparison/pr66147.mesh.yaml",
-    "comparison:baseline": "journey-mesh test comparison/nc34.mesh.yaml",
-    "comparison:candidate": "journey-mesh test comparison/pr66147.mesh.yaml",
-    "comparison:compare": "journey-mesh compare test-results/nc34/bundle.json test-results/pr66147/bundle.json --title 'Nextcloud federated file acceptance' --output test-results/comparison",
-    "comparison:run": "pnpm comparison:validate && sh -c 'status=0; pnpm comparison:baseline || status=1; pnpm comparison:candidate || status=1; pnpm comparison:compare || status=1; exit $status'",
-    "comparison:report": "journey-mesh report test-results/comparison"
+    "test": "node --test deployment/*.test.mjs && node --import tsx --test test/*.test.ts"
   }
 }
