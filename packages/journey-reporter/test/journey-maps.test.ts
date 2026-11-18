@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { selectJourneyMaps } from "../src/journey-maps.js";
-import { publishReport, writeReport } from "../src/publish.js";
+import { publishReport, writeReport, readReport } from "../src/publish.js";
 import { collectivesTest } from "./collectives-fixture.js";
 
 test("mixed-document phase selection hides only excluded journeys and preserves the model and execution", async () => {
@@ -28,12 +28,12 @@ test("bad map references become saved reporting errors while execution and audit
   assert.match(selection.errors[0].message, /missing composite state urn:missing/);
   const directory = await mkdtemp(join(tmpdir(), "journey-map-errors-"));
   await writeReport(directory, { kind: "suite", ok: true, generatedAt: "now", tests: [saved], artifacts: [], errors: [] });
-  const bundle = JSON.parse(await readFile(join(directory, "bundle.json"), "utf8"));
+  const bundle = await readReport(directory, ["suite"]);
   assert.equal(bundle.ok, false);
   assert.equal(bundle.tests[0].result.ok, true);
   assert.deepEqual(bundle.tests[0].outputs, saved.outputs);
   assert.deepEqual(bundle.tests[0].reportingErrors, selection.errors);
-  const republished = await publishReport(join(directory, "bundle.json"));
+  const republished = await publishReport(join(directory, "manifest.json"));
   assert.equal(republished.ok, false);
   assert.equal(republished.kind, "suite");
   if (republished.kind === "suite") assert.deepEqual(republished.tests[0].reportingErrors, selection.errors);

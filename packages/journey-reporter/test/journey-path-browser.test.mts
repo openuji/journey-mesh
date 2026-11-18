@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer } from "node:http";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, mkdir, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { chromium } from "playwright";
@@ -12,6 +12,8 @@ import { savedTest } from "./fixtures.js";
 test("the viewer renders a test's journey path with recorded failures and screenshot previews", async () => {
   const directory = await mkdtemp(join(tmpdir(), "journey-path-view-"));
   const suite: SuiteResultBundle = { kind: "suite", ok: false, generatedAt: "2026-11-17", tests: [savedTest()], errors: [], artifacts: [] };
+  await mkdir(join(directory, "manual-plan"));
+  for (const artifact of suite.tests[0].artifacts) await writeFile(join(directory, "manual-plan", artifact.href), new Uint8Array());
   await writeReport(directory, suite);
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8R8AAAAASUVORK5CYII=", "base64");
   const types: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };

@@ -3,15 +3,15 @@ import { access, readFile, stat } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { parse } from "yaml";
 import { executeSuite, JourneyConfigError, prepareSuite, runConfiguredServices, validateSuite } from "@openuji/journey-host";
-import { compareBundles, publishReport, testFailures, testPassed } from "@openuji/journey-reporter";
+import { compareBundles, publishReport, reportDirectory, testFailures, testPassed } from "@openuji/journey-reporter";
 import type { ComparisonPairing } from "@openuji/journey-plugin";
 import { consoleJourneyProgress } from "@openuji/journey-runner/console";
 
 const help = `Usage:
   journey-mesh test <config.yaml> [--test <id>] [--output <directory>]
   journey-mesh validate <config.yaml>... [--test <id>]
-  journey-mesh compare <baseline/bundle.json> <candidate/bundle.json> [--pairings <file.yaml>] [--title <text>] [--output <directory>]
-  journey-mesh render <bundle.json> [--output <directory>]
+  journey-mesh compare <baseline-report> <candidate-report> [--pairings <file.yaml>] [--title <text>] [--output <directory>]
+  journey-mesh render <report-directory|manifest.json> [--output <directory>]
   journey-mesh services up <config.yaml> [--service <key>]
   journey-mesh services down <config.yaml> [--service <key>]
   journey-mesh report <directory> [--port <number>]
@@ -58,7 +58,7 @@ async function readPairings(path: string): Promise<readonly ComparisonPairing[]>
 
 async function printReportLocation(directory: string): Promise<void> {
   const index = resolve(directory, "index.html");
-  if (await access(index).then(() => true, () => false)) console.log(`Report: ${index}`);
+  if (await access(index).then(() => true, () => false)) console.log(`Report: ${index}\nOpen with: journey-mesh report ${shellArgument(directory)}`);
 }
 
 export async function main(args: string[]): Promise<number> {
@@ -80,7 +80,7 @@ export async function main(args: string[]): Promise<number> {
     }
     if (name === "report") { await serveReport(path, flags["--port"] === undefined ? 9323 : Number(flags["--port"])); return 0; }
     if (name === "render") {
-      const output = flags["--output"] ? resolve(flags["--output"]) : resolve(path, "..");
+      const output = flags["--output"] ? resolve(flags["--output"]) : await reportDirectory(path);
       await publishReport(path, output); await printReportLocation(output); return 0;
     }
     if (name === "compare") {

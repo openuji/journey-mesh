@@ -2,9 +2,7 @@ import type {
   AxeAuditReport,
   AxeAuditScanId,
   AxeNode,
-  AxeRuleResult,
-  AxeRuleResultType,
-  AxeResults
+  AxeRuleResultType
 } from "../types.js";
 import type { Immutable } from "@openuji/journey-core";
 import { axeNodeHtmlId } from "../artifacts/report-file-names.js";
@@ -16,66 +14,32 @@ import {
 } from "../shared/strings.js";
 import { metadataTable, reportStyles, summaryTable } from "./html-fragments.js";
 
+import type { HtmlDocumentParts } from "@openuji/journey-plugin";
+
 export function renderAxeAuditHtml(report: AxeAuditReport): string {
-  return [
-    "<!doctype html>",
-    '<html lang="en">',
-    "<head>",
-    '<meta charset="utf-8">',
-    `<title>${escapeHtml(report.auditId)} axe report</title>`,
-    reportStyles(),
-    "</head>",
-    "<body>",
-    "<main>",
+  const parts = axeAuditHtmlParts(report);
+  return parts.header + parts.sections.join("") + parts.footer;
+}
+
+export function axeAuditHtmlParts(report: AxeAuditReport): HtmlDocumentParts {
+  const header = ["<!doctype html>", '<html lang="en"><head><meta charset="utf-8">',
+    `<title>${escapeHtml(report.auditId)} axe report</title>`, reportStyles(), "</head><body><main>",
     `<h1>${escapeHtml(report.auditId)} axe report</h1>`,
-    metadataTable([
-      ["Created", report.createdAt],
-      ["URL", report.url],
-      ["Strict mode", String(report.strict)],
-      ["WCAG tags", report.wcagTags.join(", ")],
-      ["Metadata", JSON.stringify(report.metadata, null, 2)]
-    ]),
-    summaryTable(report.summary),
-    renderAuditScan("page-state", "Page State", report.scans.pageState),
-    renderAuditScan("matched-surface", "Matched Surface", report.scans.matchedSurface),
-    "</main>",
-    "</body>",
-    "</html>"
-  ].join("\n");
-}
-
-function renderAuditScan(
-  scanId: AxeAuditScanId,
-  label: string,
-  results: Immutable<AxeResults>
-): string {
-  return [
-    `<section id="scan-${escapeAttribute(scanId)}">`,
-    `<h2>${escapeHtml(label)}</h2>`,
-    summaryTable(summarizeResults(results)),
-    "<h3>Violations</h3>",
-    renderRuleResults(scanId, "violation", results.violations),
-    "<h3>Incomplete</h3>",
-    renderRuleResults(scanId, "incomplete", results.incomplete),
-    "</section>"
-  ].join("\n");
-}
-
-function renderRuleResults(
-  scanId: AxeAuditScanId,
-  resultType: AxeRuleResultType,
-  results: readonly Immutable<AxeRuleResult>[]
-): string {
-  if (results.length === 0) return "<p>None.</p>";
-  return results.map((result) => [
-    '<article class="finding">',
-    `<h4>${escapeHtml(result.id)}: ${escapeHtml(result.help)}</h4>`,
-    `<p><strong>Impact:</strong> ${escapeHtml(result.impact ?? "unknown")}</p>`,
-    `<p><a href="${escapeAttribute(result.helpUrl)}">${escapeHtml(result.helpUrl)}</a></p>`,
-    `<p>${escapeHtml(result.description)}</p>`,
-    result.nodes.map((node, nodeIndex) => renderAxeNode(scanId, resultType, result.id, node, nodeIndex)).join("\n"),
-    "</article>"
-  ].join("\n")).join("\n");
+    metadataTable([["Created", report.createdAt], ["URL", report.url], ["Strict mode", String(report.strict)],
+      ["WCAG tags", report.wcagTags.join(", ")], ["Metadata", JSON.stringify(report.metadata)]]), summaryTable(report.summary)].join("\n");
+  const sections: string[] = [];
+  for (const [scanId, label, results] of [["page-state", "Page State", report.scans.pageState], ["matched-surface", "Matched Surface", report.scans.matchedSurface]] as const) {
+    sections.push(`<section id="scan-${scanId}"><h2>${label}</h2>${summaryTable(summarizeResults(results))}</section>`);
+    for (const [category, type] of [["violations", "violation"], ["incomplete", "incomplete"]] as const) {
+      if (!results[category].length) sections.push(`<p>${label} ${category}: none.</p>`);
+      for (const result of results[category]) {
+        const heading = `<h3>${label} ${type}: ${escapeHtml(result.id)}: ${escapeHtml(result.help)}</h3><p>${escapeHtml(result.description)}</p><p><a href="${escapeAttribute(result.helpUrl)}">Rule documentation</a></p>`;
+        if (!result.nodes.length) sections.push(`<article class="finding">${heading}</article>`);
+        for (const [index, node] of result.nodes.entries()) sections.push(`<article class="finding">${heading}${renderAxeNode(scanId, type, result.id, node, index)}</article>`);
+      }
+    }
+  }
+  return { header, sections, footer: "</main></body></html>" };
 }
 
 function renderAxeNode(

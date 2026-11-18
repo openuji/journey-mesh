@@ -5,8 +5,8 @@
   "type": "module",
   "exports": {
     "./registry": {
-      "types": "./dist/data/parser.d.ts",
-      "default": "./dist/data/parser.js"
+      "types": "./src/data/parser.ts",
+      "default": "./src/data/parser.ts"
     },
     ".": {
       "types": "./src/index.ts",

@@ -48,7 +48,7 @@ test("excluded phases journal frozen not-applicable evidence without device or a
 });
 
 test("native capture and independent reporting work from detached saved output", async () => {
-  const { mkdtemp, readFile } = await import("node:fs/promises");
+  const { mkdtemp } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { fileArtifactStore } = await import("@openuji/journey-reporter");
@@ -69,6 +69,7 @@ test("native capture and independent reporting work from detached saved output",
   assert.equal(store.files[0].scope?.profileId, "touch");
   await androidAccessibilityReporter().report({ bundle: { kind: "test", id: "native", segments: [], views: {}, plan, result, outputs: [JSON.parse(JSON.stringify(output))], artifacts: store.files, reportingErrors: [] }, artifacts: store });
   const html = Buffer.from(await store.read(store.files.find((artifact) => artifact.contentType === "text/html")!)).toString("utf8");
-  assert.match(html, /data:image\/png;base64/);
+  assert.doesNotMatch(html, /data:image\/png;base64/);
+  assert.match(html, /href="android-.*\.png"/);
   assert.match(html, /compiled-state/);
 });

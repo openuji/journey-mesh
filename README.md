@@ -141,9 +141,9 @@ flowchart TB
   runner["Journey runner<br/>(runJourney)"] --> result["RunResult<br/>(outcomes, operation evidence)"]
   runner -.->|lifecycle events| lifecycle["Runner observers — optional<br/>(custom lifecycle logger)"]
   adapters["Execution adapters<br/>(Playwright, Appium)"] -.->|live observations| capture["Adapter observers — optional<br/>(axe, Android accessibility)"]
-  capture -->|observer outputs| bundle["Result bundle<br/>(bundle.json, written once by the host)"]
+  capture -->|observer outputs| bundle["Result summaries<br/>(manifest.json + semantic chunks)"]
   result --> bundle
-  bundle --> reporters["Reporters — optional<br/>(axe / Android standalone reports)"]
+  bundle --> reporters["Reporters — optional<br/>(axe / Android detail reports)"]
   bundle --> viewer["Report viewer<br/>(suite, test, journey path, comparison)"]
 ```
 
@@ -156,13 +156,13 @@ Observers retain detached evidence and provide calculated measurements through
 the shared observer output contract. The host collects those outputs with the
 immutable `RunResult` into a result bundle; reporters then write
 provider-specific files (for example the axe path report) next to it. Only the
-host writes `bundle.json`, once per output directory, and it holds no absolute
+host writes `manifest.json` and semantic data chunks. References contain no absolute
 paths, so a report directory can be moved or published as is. Reporting errors
 remain separate from execution history. Collection errors during execution can
 still fail the execution.
 
 The report viewer is a single Vite/React application published next to every
-`bundle.json`; no reporter needs to be configured for it. Its first view is the
+`manifest.json`; no reporter needs to be configured for it. Its first view is the
 **journey map**: the model's own journey document (actors, touchpoints, phases,
 steps, states) drawn with the vendored journey-path component, with each
 state's outcome and basic metrics in the node footer (`P 3V · 2I`, `S ✓ CLEAN`,
@@ -174,26 +174,36 @@ Two small contracts feed the map. A model binding may offer `view(source)`, a
 drawable form of a journey source; the UJG binding projects the same `.ujg.jsonld`
 document it executes into the renderer's nested journey document. The host
 embeds that view in the test bundle and records each journey as a **segment**.
-Published reports inline the viewer and the bundle into `index.html`, so they
-open straight from disk as well as over HTTP. An observer
+Published reports load their manifests and selected execution data over HTTP;
+open them with `journey-mesh report <directory>` or a static web server. An observer
 may return `nodes` (per operation: `axe` page/surface counts, `native` findings
-and passes, or `skipped`); its full evidence stays in `evidence` for its
-reporter.
+and passes, or `skipped`). Raw axe audits are persisted once as linked evidence;
+the viewer uses summaries without loading raw scans.
 
 Report visibility is explicit in the mesh:
 
 ```yaml
 report:
+  maxFileSizeMiB: 5
   excludedPhaseIds:
     - urn:phase:setup
 ```
 
-The suite setting is inherited by each test. A test may replace it with its own
+Phase visibility is inherited by each test. A test may replace it with its own
 `report` setting; `excludedPhaseIds: []` shows every selected journey. Without a
 setting, no phases are excluded. Filtering applies to each journey's modeled
 phase, including when setup and scenario share a document. It changes only the
 map: execution, evidence, and observer policies remain intact. The resolved
 setting is saved in the test bundle so re-publishing needs no mesh or model file.
+
+`maxFileSizeMiB` is suite-wide and defaults to 5 MiB (5,242,880 bytes). It caps
+all report files, including evidence, screenshots, HTML, and application assets.
+Positive fractional MiB values are accepted. JSON collections and HTML detail
+pages split at semantic boundaries; indivisible oversized values or files fail
+with a size error. Test-level phase settings do not reset the storage policy.
+The resolved byte limit is saved in the manifest and reused when republishing.
+Comparisons use the smaller limit of their available subjects. See the
+[report storage format](docs/report-storage.md).
 
 The UJG map projection preserves `Persona` nodes as renderer users and retains
 touchpoint relationships. Catalogue documents provide a `JourneyEntryIndex`
@@ -252,8 +262,8 @@ observer **automation** compatibility (`playwright`, `appium`). See the
 ```sh
 journey-mesh validate mesh.yaml [other.mesh.yaml ...] [--test <id>]
 journey-mesh test mesh.yaml [--test <id>] [--output <dir>]
-journey-mesh compare baseline/bundle.json candidate/bundle.json [--pairings <file>] [--title <text>] [--output <dir>]
-journey-mesh render bundle.json [--output <dir>]
+journey-mesh compare baseline/manifest.json candidate/manifest.json [--pairings <file>] [--title <text>] [--output <dir>]
+journey-mesh render report-directory [--output <dir>]
 journey-mesh report <dir>
 journey-mesh services up|down mesh.yaml [--service <key>]
 ```
@@ -302,7 +312,7 @@ Run each subject as an ordinary suite, then compare their bundles:
 journey-mesh validate baseline.mesh.yaml candidate.mesh.yaml   # preflight both before either starts
 journey-mesh test baseline.mesh.yaml
 journey-mesh test candidate.mesh.yaml
-journey-mesh compare baseline-results/bundle.json candidate-results/bundle.json --output comparison
+journey-mesh compare baseline-results candidate-results --output comparison
 ```
 
 `compare` loads no plugins and executes nothing. It copies each subject's

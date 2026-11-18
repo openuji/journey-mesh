@@ -313,7 +313,7 @@ provide detached outputs after execution. The host saves them in the result
 bundle. The report opens on the journey map, drawn from the same `ujg/*.ujg.jsonld`
 documents that are executed, with outcomes and accessibility metrics on every
 state. Open `test-results/index.html` directly or serve it with `pnpm e2e:report`. The axe and Android reporters write the
-detailed standalone reports linked below the map.
+detailed provider reports linked below the map.
 
 ```mermaid
 flowchart TB
@@ -341,17 +341,20 @@ From the repository root:
 pnpm exec journey-mesh report examples/nextcloud-filesharing/test-results
 ```
 
-The report root contains `index.html` and `bundle.json`. Each test has a
-subdirectory, such as `test-results/browser-sharing/`, containing:
+The report root contains `index.html`, `manifest.json`, application assets, and
+`data/` with plans, shared model views, execution records, and observer summaries.
+Each test has a directory such as `test-results/browser-sharing/` for linked
+provider evidence:
 
-- `bundle.json`: compiled plan, immutable functional outcomes, observer outputs,
-  measurements, reporting errors, and artifact descriptors.
-- `index.html`: test summary and links to observer artifacts.
-- Axe path HTML/JSON, accessibility summaries, and source screenshots.
-- For native execution: hierarchy evidence, screenshots, device metrics,
-  accessibility HTML/JSON, and APK/runtime metadata.
+- Raw axe audit documents, path HTML/JSON, accessibility summaries, and screenshots.
+- Native hierarchy XML, screenshots, device metrics, accessibility HTML/JSON,
+  and APK/runtime metadata.
 
-Reports are standalone files and do not require Playwright Test. Accessibility
+Serve the complete directory over HTTP. Reports do not require Playwright Test.
+Files default to a 5 MiB cap, configurable with suite-level
+`report.maxFileSizeMiB`. Structured documents and detail pages are split;
+oversized indivisible assets fail with a size error. Old `bundle.json` reports
+must be regenerated. Accessibility
 findings support review; they do not establish WCAG or TalkBack conformance.
 Native checks use the captured hierarchy and metrics; they do not exercise
 TalkBack navigation or prove what a screen reader announces. Setup operations

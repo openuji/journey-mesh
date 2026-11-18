@@ -8,6 +8,7 @@ import type {
 } from "@openuji/journey-runner";
 
 import type { AxeAuditReport } from "../types.js";
+import type { JsonDocumentRef } from "@openuji/journey-plugin";
 import type { Immutable } from "@openuji/journey-core";
 
 export type AxeScreenshotEvidence =
@@ -17,7 +18,7 @@ export type AxeScreenshotEvidence =
 
 export type AxeAuditEvidence =
   | Readonly<{ kind: "not-requested" }>
-  | Readonly<{ kind: "completed"; report: AxeAuditReport }>
+  | Readonly<{ kind: "completed"; report: AxeAuditReport; document?: JsonDocumentRef }>
   | Readonly<{ kind: "failed"; error: JourneyRunError }>;
 
 type OperationIdentity = {

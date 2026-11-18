@@ -120,7 +120,7 @@ export async function executeSuite(prepared: PreparedSuite, options: ExecuteOpti
   if (options.signal?.aborted) errors.push(errorToJourneyRunError(options.signal.reason ?? new Error("Suite cancelled")));
   const ok = !errors.length && !options.signal?.aborted && tests.length === prepared.tests.length && tests.every(testPassed);
   const draft: SuiteResultBundle = immutableSnapshot({
-    kind: "suite", ...(target ? { target } : {}), ...(prepared.label ? { label: prepared.label } : {}), ok, generatedAt: new Date().toISOString(),
+    kind: "suite", storage: { maxFileBytes: prepared.artifacts.maxFileBytes }, ...(target ? { target } : {}), ...(prepared.label ? { label: prepared.label } : {}), ok, generatedAt: new Date().toISOString(),
     tests, errors, provenance, artifacts: artifacts()
   });
   errors.push(...await reportJourneyResult({ bundle: draft, reporters: prepared.reporters, artifacts: prepared.artifacts }));

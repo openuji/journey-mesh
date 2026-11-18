@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { test } from "node:test";
 import { stringify } from "yaml";
-import { runSuite, validateSuite, loadSuiteConfig, runConfiguredServices } from "@openuji/journey-host";
-import { fileArtifactStore } from "@openuji/journey-reporter";
+import { runSuite, validateSuite, prepareSuite, loadSuiteConfig, runConfiguredServices } from "@openuji/journey-host";
+import { fileArtifactStore, readReport } from "@openuji/journey-reporter";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/${name}.mjs`, import.meta.url));
@@ -70,9 +70,9 @@ test("independent plugins compose ordered journeys sharing a touchpoint, fixture
   // Every link in the page markup resolves; inlined script and style content is not markup.
   const markup = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/g, "");
   for (const [, href] of markup.matchAll(/(?:href|src)="([^"]+)"/g)) await access(join(output, decodeURIComponent(href)));
-  assert.match(html, /<script type="module">/);
-  assert.match(html, /window\.__JOURNEY_MESH_BUNDLE__=/);
-  assert.match(await readFile(join(output, "bundle.json"), "utf8"), /fixture-evidence.txt/);
+  assert.match(html, /<script type="module" crossorigin src=".\/assets\//);
+  assert.doesNotMatch(html, /__JOURNEY_MESH_BUNDLE__/);
+  assert.match(JSON.stringify(await readReport(output)), /fixture-evidence.txt/);
   await access(join(output, "sharing/fixture-evidence.txt"));
   // The host is the only bundle writer: one bundle per output directory, none per test.
   await assert.rejects(access(join(output, "sharing/bundle.json")));
@@ -95,7 +95,7 @@ test("report phase exclusions are explicit, inherited, saved, and overridable wi
   const inherited = await runSuite(suite.path);
   assert.deepEqual(inherited.tests[0].report, { excludedPhaseIds: ["urn:phase:setup"] });
   assert.equal(inherited.tests[0].plan.operations.length, 2);
-  const saved = JSON.parse(await readFile(join(suite.directory, "reports/bundle.json"), "utf8"));
+  const saved = await readReport(join(suite.directory, "reports"), ["suite"]);
   assert.deepEqual(saved.tests[0].report, inherited.tests[0].report);
   Object.assign(suite.config.tests.sharing, { report: { excludedPhaseIds: [] } });
   await suite.save();
@@ -103,6 +103,27 @@ test("report phase exclusions are explicit, inherited, saved, and overridable wi
   Object.assign(suite.config.tests.sharing, { report: { unknown: true } });
   await suite.save();
   await assert.rejects(validateSuite(suite.path), /Unknown setting tests.sharing.report.unknown/);
+});
+
+test("suite storage policy reaches every artifact store and survives per-test phase overrides", async () => {
+  const suite = await setup();
+  Object.assign(suite.config, { report: { maxFileSizeMiB: 0.5, excludedPhaseIds: ["urn:phase:setup"] },
+    services: { bounded: { use: fixture("service"), options: { name: "bounded", log: "events.jsonl" } } } });
+  Object.assign(suite.config.tests.sharing, { report: { excludedPhaseIds: [] }, services: ["bounded"] });
+  await suite.save();
+  const prepared = await prepareSuite(suite.path);
+  for (const store of [prepared.artifacts, ...prepared.tests.map((test) => test.artifacts), ...prepared.services.map((service) => service.artifacts)]) assert.equal(store.maxFileBytes, 524_288);
+  const result = await runSuite(suite.path);
+  assert.equal(result.storage?.maxFileBytes, 524_288);
+  assert.deepEqual(result.tests[0].report, { excludedPhaseIds: [] });
+  assert.equal((await readReport(join(suite.directory, "reports"))).storage?.maxFileBytes, 524_288);
+  for (const maxFileSizeMiB of [0, -1, "5", 1e-20]) {
+    Object.assign(suite.config, { report: { maxFileSizeMiB } }); await suite.save();
+    await assert.rejects(validateSuite(suite.path), /positive safe byte count/);
+  }
+  Object.assign(suite.config, { report: { maxFileSizeMiB: 5 } });
+  Object.assign(suite.config.tests.sharing, { report: { maxFileSizeMiB: 10 } }); await suite.save();
+  await assert.rejects(validateSuite(suite.path), /Unknown setting tests.sharing.report.maxFileSizeMiB/);
 });
 
 test("failed journey stops its profile, retains cleanup/report failures, and independent tests continue", async () => {

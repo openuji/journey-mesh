@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { serveDirectory } from "./http-fixture.js";
 import { chromium } from "playwright";
 import { writeReport } from "../src/publish.js";
 import { collectivesTest } from "./collectives-fixture.js";
@@ -14,10 +14,11 @@ test("Collectives mixed document shows the UJG map, chips, responsive layout and
   const publish = () => writeReport(directory, { kind: "suite", ok: true, generatedAt: "now", tests: [saved], artifacts: [], errors: [] });
   await publish();
   const browser = await chromium.launch({ headless: true });
+  const server = await serveDirectory(directory);
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     const errors: string[] = []; page.on("pageerror", (error) => errors.push(error.message));
-    const url = pathToFileURL(join(directory, "index.html")).href;
+    const url = server.origin + "index.html";
     await page.goto(url);
     const map = page.locator("[data-journey-map]");
     const node = (index: number) => map.locator(`[data-node-id="urn:journey:collective-own:sharing:state:${index}"]`);
@@ -54,5 +55,5 @@ test("Collectives mixed document shows the UJG map, chips, responsive layout and
     assert.equal(await page.locator("[data-node-id]").count(), 0);
     assert.equal(await page.locator("[data-journey-path]").count(), 0);
     assert.deepEqual(errors, []);
-  } finally { await browser.close(); }
+  } finally { await browser.close(); await server.close(); }
 });

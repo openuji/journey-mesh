@@ -4,12 +4,14 @@ import { errorToJourneyRunError, type JourneyRunError } from "@openuji/journey-r
 import type { ComparisonPairing, ComparisonResultBundle, ComparisonSubject, SuiteResultBundle } from "@openuji/journey-plugin";
 import { inferPairings, validatePairings } from "./comparison.js";
 import { subjectDirectory } from "./paths.js";
-import { copySuiteEvidence, publishAtomically, readSavedBundle, writeReport } from "./publish.js";
+import { copySuiteEvidence, publishAtomically, readReport, reportDirectory } from "./publish.js";
+import { writeReportData } from "./report-writer.js";
+import { defaultMaxFileBytes } from "@openuji/journey-plugin";
 
 export type CompareBundlesInput = {
-  /** Saved suite `bundle.json` of the baseline run. */
+  /** Saved report directory or manifest of the baseline run. */
   baseline: string;
-  /** Saved suite `bundle.json` of the candidate run. */
+  /** Saved report directory or manifest of the candidate run. */
   candidate: string;
   outputDir: string;
   /** Explicit correspondence; without it, executions pair by equal test and profile IDs. */
@@ -29,29 +31,31 @@ export async function compareBundles(input: CompareBundlesInput): Promise<Compar
   const loaded = {} as Record<typeof sides[number], { path: string; bundle: SuiteResultBundle | null; errors: JourneyRunError[] }>;
   for (const side of sides) {
     const path = resolve(input[side]);
-    try { loaded[side] = { path, bundle: await readSavedBundle(path, ["suite"]), errors: [] }; }
+    try { loaded[side] = { path: await reportDirectory(path), bundle: await readReport(path, ["suite"]), errors: [] }; }
     catch (error) { loaded[side] = { path, bundle: null, errors: [errorToJourneyRunError(error)] }; }
   }
   const pairings = input.pairings
     ? validatePairings(input.pairings, { baseline: loaded.baseline.bundle, candidate: loaded.candidate.bundle })
     : inferPairings(loaded.baseline.bundle, loaded.candidate.bundle);
-  return publishAtomically(outputDir, sides.map((side) => dirname(loaded[side].path)), async (staging) => {
+  const limits = sides.flatMap((side) => loaded[side].bundle ? [loaded[side].bundle!.storage?.maxFileBytes ?? defaultMaxFileBytes] : []);
+  const maxFileBytes = limits.length ? Math.min(...limits) : defaultMaxFileBytes;
+  return publishAtomically(outputDir, sides.map((side) => loaded[side].bundle ? loaded[side].path : dirname(loaded[side].path)), async (staging) => {
     const subjects = {} as Record<typeof sides[number], ComparisonSubject>;
     for (const side of sides) {
-      const { path, bundle, errors } = loaded[side];
+      const { path, errors } = loaded[side];
+      let { bundle } = loaded[side];
       if (bundle) {
         // Each subject stays a complete report, so the comparison can link to its details.
-        await copySuiteEvidence(bundle, dirname(path), resolve(staging, subjectDirectory(side)));
-        await writeReport(resolve(staging, subjectDirectory(side)), bundle);
+        bundle = await copySuiteEvidence(bundle, path, resolve(staging, subjectDirectory(side)), maxFileBytes);
       }
-      subjects[side] = { source: relative(outputDir, path).split("\\").join("/"), ...(bundle?.label ? { label: bundle.label } : {}), bundle, errors };
+      subjects[side] = { source: relative(outputDir, bundle ? resolve(path, "manifest.json") : path).split("\\").join("/"), ...(bundle?.label ? { label: bundle.label } : {}), bundle, errors };
     }
     const ok = sides.every((side) => !subjects[side].errors.length && subjects[side].bundle?.ok === true);
     const bundle: ComparisonResultBundle = immutableSnapshot({
-      kind: "comparison", title: input.title ?? "Journey comparison", ok, generatedAt: new Date().toISOString(),
+      kind: "comparison", storage: { maxFileBytes }, title: input.title ?? "Journey comparison", ok, generatedAt: new Date().toISOString(),
       subjects, pairings, errors: [], artifacts: []
     });
-    await writeReport(staging, bundle);
+    await writeReportData(staging, bundle);
     return bundle;
   });
 }

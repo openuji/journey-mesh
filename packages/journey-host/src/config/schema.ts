@@ -1,6 +1,6 @@
-import { knownOptions, optionalString, optionsObject, requiredString, stringArray } from "@openuji/journey-plugin";
+import { knownOptions, optionalString, optionsObject, requiredString, stringArray, reportFileLimit } from "@openuji/journey-plugin";
 import { JourneyConfigError } from "./errors.js";
-import type { JourneyReportOptions } from "@openuji/journey-plugin";
+import type { JourneyReportOptions, SuiteReportOptions } from "@openuji/journey-plugin";
 
 /** A plugin reference. `use` and `options` may contain `${VAR}` and are interpolated only when selected. */
 export type ComponentConfig = Readonly<{ use: string; options: Readonly<Record<string, unknown>> }>;
@@ -37,7 +37,7 @@ export type SuiteConfig = Readonly<{
   /** Name of the system under test, shown in reports and comparisons. */
   label?: string;
   outputDir?: string;
-  report?: JourneyReportOptions;
+  report?: SuiteReportOptions;
   envFiles: readonly EnvFileConfig[];
   model: ComponentConfig;
   adapters: Readonly<Record<string, AdapterConfig>>;
@@ -65,11 +65,13 @@ function component(value: unknown, label: string, extra: readonly string[] = [])
   return { ...raw, use: requiredString(raw.use, `${label}.use`), options: optionsObject(raw.options ?? {}, `${label}.options`) };
 }
 
-function reportOptions(value: unknown, label: string): JourneyReportOptions | undefined {
+function reportOptions(value: unknown, label: string, suite = false): SuiteReportOptions | undefined {
   if (value === undefined) return undefined;
   const raw = optionsObject(value, label);
-  known(raw, ["excludedPhaseIds"], label);
-  return { excludedPhaseIds: raw.excludedPhaseIds === undefined ? [] : stringArray(raw.excludedPhaseIds, `${label}.excludedPhaseIds`) };
+  known(raw, ["excludedPhaseIds", ...(suite ? ["maxFileSizeMiB"] : [])], label);
+  if (raw.maxFileSizeMiB !== undefined) reportFileLimit(raw.maxFileSizeMiB);
+  return { excludedPhaseIds: raw.excludedPhaseIds === undefined ? [] : stringArray(raw.excludedPhaseIds, `${label}.excludedPhaseIds`),
+    ...(raw.maxFileSizeMiB === undefined ? {} : { maxFileSizeMiB: raw.maxFileSizeMiB as number }) };
 }
 
 function test(id: string, value: unknown, suite: Pick<SuiteConfig, "adapters" | "profiles" | "services" | "report">): TestConfig {
@@ -116,7 +118,7 @@ function test(id: string, value: unknown, suite: Pick<SuiteConfig, "adapters" | 
     return name;
   });
   if (raw.timeoutMs !== undefined && typeof raw.timeoutMs !== "number" && typeof raw.timeoutMs !== "string") throw new Error(`tests.${id}.timeoutMs must be a number`);
-  const report = raw.report === undefined ? suite.report : reportOptions(raw.report, `tests.${id}.report`);
+  const report = raw.report === undefined ? (suite.report ? { excludedPhaseIds: suite.report.excludedPhaseIds } : undefined) : reportOptions(raw.report, `tests.${id}.report`);
   return {
     id, journeys, profiles, services,
     ...(report ? { report } : {}),
@@ -161,7 +163,7 @@ export function parseSuiteConfig(raw: Record<string, unknown>, testOrder: readon
     if (item.path === undefined && item.env === undefined) throw new Error(`envFiles[${index}] needs path or env`);
     return { ...(item.path !== undefined ? { path: requiredString(item.path, "envFiles.path") } : {}), ...(item.env !== undefined ? { env: requiredString(item.env, "envFiles.env") } : {}), ...(item.optional === true ? { optional: true } : {}) };
   });
-  const report = reportOptions(raw.report, "report");
+  const report = reportOptions(raw.report, "report", true);
   const suite = { adapters, profiles, services, report };
   const tests = testOrder.map((id) => {
     try { return test(id, (raw.tests as Record<string, unknown>)[id], suite); }
