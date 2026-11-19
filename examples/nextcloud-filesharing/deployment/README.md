@@ -18,7 +18,8 @@ From `examples/nextcloud-filesharing`:
 pnpm e2e
 
 # Native: set this to a host IPv4 reachable by browser, containers, and emulator.
-export NEXTCLOUD_ANDROID_STACK_HOST=192.168.1.10
+stack_interface=$(route -n get default | awk '/interface:/{print $2}')
+export NEXTCLOUD_ANDROID_STACK_HOST="$(ipconfig getifaddr "$stack_interface")"
 pnpm android:up
 pnpm appium:up
 pnpm e2e:android
