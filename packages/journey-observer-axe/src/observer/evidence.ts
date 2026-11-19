@@ -8,8 +8,10 @@ import type {
 } from "@openuji/journey-runner";
 
 import type { AxeAuditReport } from "../types.js";
-import type { JsonDocumentRef } from "@openuji/journey-plugin";
 import type { Immutable } from "@openuji/journey-core";
+
+/** A file registered in the run's evidence store; `href` is relative to the run directory. */
+export type AxeEvidenceRef = Readonly<{ href: string }>;
 
 export type AxeScreenshotEvidence =
   | Readonly<{ kind: "not-requested" }>
@@ -18,7 +20,7 @@ export type AxeScreenshotEvidence =
 
 export type AxeAuditEvidence =
   | Readonly<{ kind: "not-requested" }>
-  | Readonly<{ kind: "completed"; report: AxeAuditReport; document?: JsonDocumentRef }>
+  | Readonly<{ kind: "completed"; report: AxeAuditReport; document?: AxeEvidenceRef }>
   | Readonly<{ kind: "failed"; error: JourneyRunError }>;
 
 type OperationIdentity = {

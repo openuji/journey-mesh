@@ -1,8 +1,87 @@
+# Read by the reporting layer only (journey-mesh test builds report/ after the run; the host ignores it).
 report:
   excludedPhaseIds:
     - urn:phase:setup
+  interpreters:
+    - use: "@openuji/journey-report-axe"
+    - use: "@openuji/journey-report-android"
 outputDir: ./test-results
 services:
+  web-stack:
+    use: "@openuji/journey-driver-nextcloud/stack/service"
+    options:
+      project: ${NEXTCLOUD_WEB_STACK_PROJECT:-journey-mesh-filesharing-web}
+      composeFiles: &compose-files
+        - ./deployment/compose.yaml
+      directory: ./.runtime/stacks/web
+      image: &nextcloud-image nextcloud:34.0.2-apache@sha256:e93ccfc952c95f18175f3d297fb2f60c35070c05ca976050c250a9ddab793e75
+      expectedVersion: &nextcloud-version 34.0.2
+      environment:
+        POSTGRES_DB: ${POSTGRES_DB}
+        POSTGRES_USER: ${POSTGRES_USER}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+        NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER}
+        NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD}
+        NEXTCLOUD_ALICE_HOST: ${NEXTCLOUD_WEB_STACK_HOST:-host.docker.internal}
+        NEXTCLOUD_ALICE_PORT: ${NEXTCLOUD_WEB_ALICE_PORT:-18081}
+        NEXTCLOUD_ALICE_URL: &web-alice-url http://${NEXTCLOUD_WEB_STACK_HOST:-host.docker.internal}:${NEXTCLOUD_WEB_ALICE_PORT:-18081}
+        NEXTCLOUD_ALICE_DB: ${NEXTCLOUD_ALICE_DB}
+        NEXTCLOUD_ALICE_DB_USER: ${NEXTCLOUD_ALICE_DB_USER}
+        NEXTCLOUD_ALICE_DB_PASSWORD: ${NEXTCLOUD_ALICE_DB_PASSWORD}
+        NEXTCLOUD_BOB_HOST: ${NEXTCLOUD_WEB_STACK_HOST:-host.docker.internal}
+        NEXTCLOUD_BOB_PORT: ${NEXTCLOUD_WEB_BOB_PORT:-18082}
+        NEXTCLOUD_BOB_URL: &web-bob-url http://${NEXTCLOUD_WEB_STACK_HOST:-host.docker.internal}:${NEXTCLOUD_WEB_BOB_PORT:-18082}
+        NEXTCLOUD_BOB_DB: ${NEXTCLOUD_BOB_DB}
+        NEXTCLOUD_BOB_DB_USER: ${NEXTCLOUD_BOB_DB_USER}
+        NEXTCLOUD_BOB_DB_PASSWORD: ${NEXTCLOUD_BOB_DB_PASSWORD}
+      services:
+        alice:
+          baseURL: *web-alice-url
+          username: &alice-username ${NEXTCLOUD_ALICE_USER}
+          password: &alice-password ${NEXTCLOUD_ALICE_PASSWORD}
+        bob:
+          baseURL: *web-bob-url
+          username: &bob-username ${NEXTCLOUD_BOB_USER}
+          password: &bob-password ${NEXTCLOUD_BOB_PASSWORD}
+      enabledApps: &enabled-apps
+        - federation
+        - files_sharing
+  android-stack:
+    use: "@openuji/journey-driver-nextcloud/stack/service"
+    options:
+      project: ${NEXTCLOUD_ANDROID_STACK_PROJECT:-journey-mesh-filesharing-android}
+      composeFiles: *compose-files
+      directory: ./.runtime/stacks/android
+      image: *nextcloud-image
+      expectedVersion: *nextcloud-version
+      environment:
+        POSTGRES_DB: ${POSTGRES_DB}
+        POSTGRES_USER: ${POSTGRES_USER}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+        NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER}
+        NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD}
+        NEXTCLOUD_ALICE_HOST: ${NEXTCLOUD_ANDROID_STACK_HOST}
+        NEXTCLOUD_ALICE_PORT: ${NEXTCLOUD_ANDROID_ALICE_PORT:-18083}
+        NEXTCLOUD_ALICE_URL: &android-alice-url http://${NEXTCLOUD_ANDROID_STACK_HOST}:${NEXTCLOUD_ANDROID_ALICE_PORT:-18083}
+        NEXTCLOUD_ALICE_DB: ${NEXTCLOUD_ALICE_DB}
+        NEXTCLOUD_ALICE_DB_USER: ${NEXTCLOUD_ALICE_DB_USER}
+        NEXTCLOUD_ALICE_DB_PASSWORD: ${NEXTCLOUD_ALICE_DB_PASSWORD}
+        NEXTCLOUD_BOB_HOST: ${NEXTCLOUD_ANDROID_STACK_HOST}
+        NEXTCLOUD_BOB_PORT: ${NEXTCLOUD_ANDROID_BOB_PORT:-18084}
+        NEXTCLOUD_BOB_URL: &android-bob-url http://${NEXTCLOUD_ANDROID_STACK_HOST}:${NEXTCLOUD_ANDROID_BOB_PORT:-18084}
+        NEXTCLOUD_BOB_DB: ${NEXTCLOUD_BOB_DB}
+        NEXTCLOUD_BOB_DB_USER: ${NEXTCLOUD_BOB_DB_USER}
+        NEXTCLOUD_BOB_DB_PASSWORD: ${NEXTCLOUD_BOB_DB_PASSWORD}
+      services:
+        alice:
+          baseURL: *android-alice-url
+          username: *alice-username
+          password: *alice-password
+        bob:
+          baseURL: *android-bob-url
+          username: *bob-username
+          password: *bob-password
+      enabledApps: *enabled-apps
   android:
     use: "@openuji/journey-driver-android/service"
     options:
@@ -27,10 +106,6 @@ envFiles:
   - ./deployment/.env.example
   - path: ./deployment/.env
     optional: true
-  - path: ./.runtime/stack.env
-    optional: true
-  - env: NEXTCLOUD_STACK_ENV_FILE
-    optional: true
   - path: ./.runtime/android.env
     optional: true
   - path: ./.runtime/appium.env
@@ -39,6 +114,8 @@ model:
   use: "@openuji/journey-model-ujg/plugin"
 tests:
   browser-sharing:
+    services:
+      - web-stack
     timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-600000}
     journeys:
       - id: alice-setup
@@ -70,37 +147,51 @@ tests:
           bob-setup: keyboard
           alice-offers: keyboard
           bob-accepts: keyboard
-    environment: &a1
+    environment:
       use: "@openuji/journey-driver-nextcloud/federated-sharing/plugin"
       options:
-        sharerTouchpoint: &a2
-          baseURL: ${NEXTCLOUD_ALICE_URL}
-        recipientTouchpoint: &a3
-          baseURL: ${NEXTCLOUD_BOB_URL}
-        sharerUser: &a4
+        sharerTouchpoint: &web-alice
+          baseURL: *web-alice-url
+        recipientTouchpoint: &web-bob
+          baseURL: *web-bob-url
+        sharerUser: &alice-user
           label: Alice
-          username: ${NEXTCLOUD_ALICE_USER}
-          password: ${NEXTCLOUD_ALICE_PASSWORD}
-        recipientUser: &a5
+          username: *alice-username
+          password: *alice-password
+        recipientUser: &bob-user
           label: Bob
-          username: ${NEXTCLOUD_BOB_USER}
-          password: ${NEXTCLOUD_BOB_PASSWORD}
+          username: *bob-username
+          password: *bob-password
         fixturePath: ./deployment/fixtures/report.pdf
         fixtureFileName: report.pdf
         effectIds:
           shareCreated: urn:effect:alice-confirm-share
           shareAccepted: urn:effect:bob-accept-share
         preserveFixtures: ${NEXTCLOUD_PRESERVE_FIXTURES:-false}
-    reporters:
-      - use: "@openuji/journey-observer-axe/reporter"
   native-recipient-sharing:
+    services:
+      - android-stack
     timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-600000}
-    environment: *a1
+    environment:
+      use: "@openuji/journey-driver-nextcloud/federated-sharing/plugin"
+      options:
+        sharerTouchpoint: &android-alice
+          baseURL: *android-alice-url
+        recipientTouchpoint: &android-bob
+          baseURL: *android-bob-url
+        sharerUser: *alice-user
+        recipientUser: *bob-user
+        fixturePath: ./deployment/fixtures/report.pdf
+        fixtureFileName: report.pdf
+        effectIds:
+          shareCreated: urn:effect:alice-confirm-share
+          shareAccepted: urn:effect:bob-accept-share
+        preserveFixtures: ${NEXTCLOUD_PRESERVE_FIXTURES:-false}
     journeys:
       - id: alice-setup
         source: ./ujg/setup.web.ujg.jsonld
         select: urn:journey:alice-web-setup
-        adapter: web
+        adapter: web-native
       - id: bob-setup
         source: ./ujg/setup.android.ujg.jsonld
         select: urn:journey:bob-android-setup
@@ -108,7 +199,7 @@ tests:
       - id: alice-offers
         source: ./ujg/filesharing.ujg.jsonld
         select: urn:journey:alice-federated-sharing
-        adapter: web
+        adapter: web-native
       - id: bob-accepts
         source: ./ujg/filesharing.android.ujg.jsonld
         select: urn:journey:bob-remote-share
@@ -126,9 +217,6 @@ tests:
           bob-setup: touch
           alice-offers: keyboard
           bob-accepts: touch
-    reporters:
-      - use: "@openuji/journey-observer-axe/reporter"
-      - use: "@openuji/journey-observer-android-accessibility/reporter"
 adapters:
   web:
     use: "@openuji/journey-adapter-playwright/plugin"
@@ -140,12 +228,12 @@ adapters:
     driver:
       use: "@openuji/journey-driver-nextcloud/web/plugin"
       options:
-        touchpoints: &a6
-          urn:touchpoint:nextcloud-a: *a2
-          urn:touchpoint:nextcloud-b: *a3
-        users: &a7
-          urn:user:alice: *a4
-          urn:user:bob: *a5
+        touchpoints:
+          urn:touchpoint:nextcloud-a: *web-alice
+          urn:touchpoint:nextcloud-b: *web-bob
+        users: &users
+          urn:user:alice: *alice-user
+          urn:user:bob: *bob-user
         entries:
           nextcloud.login: /login
           nextcloud.files: /apps/files/
@@ -159,7 +247,45 @@ adapters:
             source: user.username
           urn:transition:bob-enters-password:
             source: user.password
-          urn:transition:alice-enters-remote-bob: ${NEXTCLOUD_FEDERATED_RECIPIENT}
+          urn:transition:alice-enters-remote-bob: ${NEXTCLOUD_BOB_USER}@http://${NEXTCLOUD_WEB_STACK_HOST:-host.docker.internal}:${NEXTCLOUD_WEB_BOB_PORT:-18082}
+    observers:
+      - use: "@openuji/journey-observer-axe/plugin"
+        options:
+          reportId: nextcloud-filesharing.axe-path
+          strict: ${AXE_STRICT:-false}
+          sourceScreenshots:
+            states: true
+            fullPage: true
+          excludedPhaseIds:
+            - urn:phase:setup
+  web-native:
+    use: "@openuji/journey-adapter-playwright/plugin"
+    options:
+      browser: chromium
+      headless: ${HEADLESS:-true}
+      actionTimeoutMs: 30000
+      navigationTimeoutMs: 30000
+    driver:
+      use: "@openuji/journey-driver-nextcloud/web/plugin"
+      options:
+        touchpoints: &android-touchpoints
+          urn:touchpoint:nextcloud-a: *android-alice
+          urn:touchpoint:nextcloud-b: *android-bob
+        users: *users
+        entries:
+          nextcloud.login: /login
+          nextcloud.files: /apps/files/
+          nextcloud.pendingShares: /apps/files/pendingshares
+        transitionValues:
+          urn:transition:alice-enters-username:
+            source: user.username
+          urn:transition:alice-enters-password:
+            source: user.password
+          urn:transition:bob-enters-username:
+            source: user.username
+          urn:transition:bob-enters-password:
+            source: user.password
+          urn:transition:alice-enters-remote-bob: ${NEXTCLOUD_BOB_USER}@http://${NEXTCLOUD_ANDROID_STACK_HOST}:${NEXTCLOUD_ANDROID_BOB_PORT:-18084}
     observers:
       - use: "@openuji/journey-observer-axe/plugin"
         options:
@@ -189,8 +315,8 @@ adapters:
     driver:
       use: "@openuji/journey-driver-nextcloud/android/plugin"
       options:
-        touchpoints: *a6
-        users: *a7
+        touchpoints: *android-touchpoints
+        users: *users
         entries:
           nextcloud.android.application: application
         transitionValues:

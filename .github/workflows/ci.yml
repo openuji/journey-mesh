@@ -43,7 +43,7 @@ jobs:
         run: pnpm test
 
       - name: Install report browser
-        run: pnpm --filter @openuji/journey-reporter exec playwright install --with-deps chromium
+        run: pnpm --filter @openuji/report-renderer exec playwright install --with-deps chromium
 
-      - name: Test report in browser
-        run: pnpm --filter @openuji/journey-reporter test:browser
+      - name: Test report renderer in browser
+        run: pnpm --filter @openuji/report-renderer test:browser

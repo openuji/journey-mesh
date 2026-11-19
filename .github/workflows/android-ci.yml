@@ -48,16 +48,11 @@ jobs:
           pnpm build
           pnpm --filter @openuji/journey-adapter-playwright exec playwright install --with-deps chromium
           pnpm --filter @openuji/journey-adapter-appium exec journey-adapter-appium appium ensure-driver
-      - name: Configure canonical service URLs
+      - name: Configure native stack host
         run: |
           stack_host=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
-          stack_env=$(NEXTCLOUD_STACK_HOST="$stack_host" node examples/nextcloud-filesharing/deployment/configure-runtime.mjs --refresh)
-          echo "NEXTCLOUD_STACK_ENV_FILE=$stack_env" >> "$GITHUB_ENV"
-      - name: Start and provision services
-        run: |
-          pnpm --filter @openuji/example-nextcloud-filesharing stack:up
-          pnpm --filter @openuji/example-nextcloud-filesharing stack:provision
-          pnpm --filter @openuji/example-nextcloud-filesharing stack:seed
+          test -n "$stack_host"
+          echo "NEXTCLOUD_ANDROID_STACK_HOST=$stack_host" >> "$GITHUB_ENV"
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -74,9 +69,6 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: bash .github/workflows/run-ci.sh
-      - name: Reset services
-        if: always()
-        run: pnpm --filter @openuji/example-nextcloud-filesharing stack:reset
       - name: Upload evidence and logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -6,32 +6,30 @@
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
-    "./paths": "./src/paths.ts",
-    "./vite-assets": "./src/vite-assets.ts"
+    "./model": "./src/model/index.ts",
+    "./interpreter": "./src/interpreter.ts"
   },
   "dependencies": {
     "@openuji/journey-core": "workspace:*",
     "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
     "@openuji/journey-plugin": "workspace:*",
-    "@openuji/journey-path": "workspace:*"
+    "@openuji/journey-run-record": "workspace:*",
+    "@openuji/journey-path": "workspace:*",
+    "yaml": "2.9.1"
   },
   "devDependencies": {
     "tsx": "^4.20.3",
-    "playwright": "^1.61.1",
-    "vite": "^7.3.0",
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
+    "ajv": "^8.17.1",
+    "ts-json-schema-generator": "2.4.0",
     "@openuji/journey-model-ujg": "workspace:*"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && pnpm build:app",
-    "typecheck:test": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.browser.json",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
-    "test:browser": "node --import tsx --test test/*.test.mts",
-    "build:app": "vite build",
-    "dev": "vite --host 127.0.0.1"
-  }
+    "schema": "ts-json-schema-generator --path src/model/types.ts --tsconfig tsconfig.json --type ReportModelDocument --no-type-check --out schema/report-model.schema.json"
+  },
+  "types": "./src/index.ts"
 }

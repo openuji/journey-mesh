@@ -1,19 +1,15 @@
 import assert from "node:assert/strict";
-import { execFile, spawn } from "node:child_process";
 import { mkdtemp, readFile, writeFile, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { test } from "node:test";
 import { stringify } from "yaml";
 import { runSuite, validateSuite, prepareSuite, loadSuiteConfig, runConfiguredServices } from "@openuji/journey-host";
-import { fileArtifactStore, readReport } from "@openuji/journey-reporter";
+import { fileEvidenceStore, readRunRecord } from "@openuji/journey-run-record/node";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/${name}.mjs`, import.meta.url));
-const cli = resolve(root, "packages/journey-cli/bin/journey-mesh.mjs");
-const exec = promisify(execFile);
 
 async function setup() {
   const directory = await mkdtemp(join(tmpdir(), "journey-config-"));
@@ -26,7 +22,6 @@ async function setup() {
     },
     tests: {
       sharing: {
-        reporters: [{ use: fixture("reporter"), options: {} }],
         journeys: [
           { id: "alice", source: "model.json", select: "alice", adapter: "first" },
           { id: "bob", source: "model.json", select: "bob", adapter: "second" }
@@ -44,7 +39,7 @@ async function setup() {
   return { config, directory, path, save, events };
 }
 
-test("independent plugins compose ordered journeys sharing a touchpoint, fixtures, and reports", async () => {
+test("independent plugins compose ordered journeys sharing a touchpoint, fixtures, and one run record", async () => {
   const suite = await setup();
   suite.config.tests.sharing.profiles.push({ id: "another", journeys: { alice: "basic", bob: "basic" } });
   await suite.save();
@@ -66,17 +61,14 @@ test("independent plugins compose ordered journeys sharing a touchpoint, fixture
   assert.equal(operations[0].source?.references?.originalOperationId, "same-operation-id");
   assert.ok(Object.isFrozen(operations[0].source?.references));
   const output = join(suite.directory, "reports");
-  const html = await readFile(join(output, "index.html"), "utf8");
-  // Every link in the page markup resolves; inlined script and style content is not markup.
-  const markup = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/g, "");
-  for (const [, href] of markup.matchAll(/(?:href|src)="([^"]+)"/g)) await access(join(output, decodeURIComponent(href)));
-  assert.match(html, /<script type="module" crossorigin src=".\/assets\//);
-  assert.doesNotMatch(html, /__JOURNEY_MESH_BUNDLE__/);
-  assert.match(JSON.stringify(await readReport(output)), /fixture-evidence.txt/);
-  await access(join(output, "sharing/fixture-evidence.txt"));
-  // The host is the only bundle writer: one bundle per output directory, none per test.
-  await assert.rejects(access(join(output, "sharing/bundle.json")));
-  await assert.rejects(access(join(output, "sharing/index.html")));
+  const saved = await readRunRecord(output);
+  assert.deepEqual(saved.tests.map((test) => test.id), ["sharing"]);
+  assert.deepEqual(saved.tests[0].files.map((file) => [file.href, file.format]), [["tests/sharing/files/fixture-evidence.txt", "fixture/evidence"]]);
+  assert.equal(await readFile(join(output, "tests/sharing/files/fixture-evidence.txt"), "utf8"), "fixture observation");
+  assert.deepEqual(JSON.parse(await readFile(join(output, "run.json"), "utf8")).tests, [{ id: "sharing", ok: true, href: "tests/sharing/run.json" }]);
+  // Execution writes evidence only: no report, viewer, or presentation data.
+  for (const derived of ["index.html", "report", "manifest.json"]) await assert.rejects(access(join(output, derived)));
+  assert.equal(JSON.stringify(saved).includes("nodes"), false);
 });
 
 test("same named adapter is shared while separate definitions remain isolated", async () => {
@@ -88,48 +80,35 @@ test("same named adapter is shared while separate definitions remain isolated", 
   assert.equal(events.filter((event) => event.event === "entry").length, 2);
 });
 
-test("report phase exclusions are explicit, inherited, saved, and overridable without changing execution", async () => {
+test("report sections belong to the reporting layer: the host accepts them, ignores them, and records nothing", async () => {
   const suite = await setup();
-  Object.assign(suite.config, { report: { excludedPhaseIds: ["urn:phase:setup"] } });
-  await suite.save();
-  const inherited = await runSuite(suite.path);
-  assert.deepEqual(inherited.tests[0].report, { excludedPhaseIds: ["urn:phase:setup"] });
-  assert.equal(inherited.tests[0].plan.operations.length, 2);
-  const saved = await readReport(join(suite.directory, "reports"), ["suite"]);
-  assert.deepEqual(saved.tests[0].report, inherited.tests[0].report);
+  Object.assign(suite.config, { report: { excludedPhaseIds: ["urn:phase:setup"], interpreters: [{ use: "./not-loaded-by-the-host.mjs" }], anything: true } });
   Object.assign(suite.config.tests.sharing, { report: { excludedPhaseIds: [] } });
   await suite.save();
-  assert.deepEqual((await runSuite(suite.path)).tests[0].report, { excludedPhaseIds: [] });
-  Object.assign(suite.config.tests.sharing, { report: { unknown: true } });
+  const run = await runSuite(suite.path);
+  assert.equal(run.ok, true);
+  assert.equal(run.tests[0].plan.operations.length, 2);
+  assert.equal("report" in run.tests[0], false);
+  Object.assign(suite.config.tests.sharing, { reporters: [] });
   await suite.save();
-  await assert.rejects(validateSuite(suite.path), /Unknown setting tests.sharing.report.unknown/);
+  await assert.rejects(validateSuite(suite.path), /Unknown setting tests.sharing.reporters/);
 });
 
-test("suite storage policy reaches every artifact store and survives per-test phase overrides", async () => {
+test("every evidence store writes below its own prefix of the run directory", async () => {
   const suite = await setup();
-  Object.assign(suite.config, { report: { maxFileSizeMiB: 0.5, excludedPhaseIds: ["urn:phase:setup"] },
-    services: { bounded: { use: fixture("service"), options: { name: "bounded", log: "events.jsonl" } } } });
-  Object.assign(suite.config.tests.sharing, { report: { excludedPhaseIds: [] }, services: ["bounded"] });
+  Object.assign(suite.config, { services: { bounded: { use: fixture("service"), options: { name: "bounded", log: "events.jsonl", identity: { version: "1" } } } } });
+  Object.assign(suite.config.tests.sharing, { services: ["bounded"] });
   await suite.save();
   const prepared = await prepareSuite(suite.path);
-  for (const store of [prepared.artifacts, ...prepared.tests.map((test) => test.artifacts), ...prepared.services.map((service) => service.artifacts)]) assert.equal(store.maxFileBytes, 524_288);
-  const result = await runSuite(suite.path);
-  assert.equal(result.storage?.maxFileBytes, 524_288);
-  assert.deepEqual(result.tests[0].report, { excludedPhaseIds: [] });
-  assert.equal((await readReport(join(suite.directory, "reports"))).storage?.maxFileBytes, 524_288);
-  for (const maxFileSizeMiB of [0, -1, "5", 1e-20]) {
-    Object.assign(suite.config, { report: { maxFileSizeMiB } }); await suite.save();
-    await assert.rejects(validateSuite(suite.path), /positive safe byte count/);
-  }
-  Object.assign(suite.config, { report: { maxFileSizeMiB: 5 } });
-  Object.assign(suite.config.tests.sharing, { report: { maxFileSizeMiB: 10 } }); await suite.save();
-  await assert.rejects(validateSuite(suite.path), /Unknown setting tests.sharing.report.maxFileSizeMiB/);
+  assert.equal("maxFileBytes" in prepared.artifacts, false);
+  const run = await runSuite(suite.path);
+  assert.deepEqual(run.files.map((file) => file.href), ["services/bounded/bounded.identity.json"]);
+  assert.deepEqual(run.tests[0].files.map((file) => file.href), ["tests/sharing/files/fixture-evidence.txt"]);
 });
 
 test("failed journey stops its profile, retains cleanup/report failures, and independent tests continue", async () => {
   const suite = await setup();
   Object.assign(suite.config.adapters.first.options, { fail: "alice", failClose: true });
-  suite.config.tests.sharing.reporters[0].options = { fail: true };
   Object.assign(suite.config.tests.sharing.environment.options, { failTeardown: true });
   const second = structuredClone(suite.config.tests.sharing);
   second.journeys = [{ id: "bob", source: "model.json", select: "bob", adapter: "second" }];
@@ -138,11 +117,10 @@ test("failed journey stops its profile, retains cleanup/report failures, and ind
   const result = await runSuite(suite.path);
   assert.equal(result.ok, false); assert.equal(result.tests.length, 2);
   assert.match(result.tests[0].result.errors.map((error) => error.message).join("\n"), /Fixture state failure.*Fixture close failure.*Fixture teardown failure/s);
-  assert.match(result.tests[0].reportingErrors[0].message, /Fixture report failure/);
   const events = await suite.events();
   assert.deepEqual(events.filter((event) => event.event === "state").map((event) => event.item), ["alice", "bob"]);
   assert.equal(events.filter((event) => event.event === "teardown").length, 2);
-  await access(join(suite.directory, "reports/index.html"));
+  await access(join(suite.directory, "reports/run.json"));
 });
 
 test("partial adapter startup always closes children and tears down shared fixtures", async () => {
@@ -224,34 +202,8 @@ test("cooperative setup cancellation still runs teardown", async () => {
   assert.deepEqual((await suite.events()).map((event) => event.event), ["setup", "teardown"]);
 });
 
-test("CLI validates, executes and uses nonzero exit codes for invalid config and run failures", async () => {
-  const suite = await setup();
-  const validation = await exec(process.execPath, [cli, "validate", suite.path, "--test", "sharing"], { cwd: tmpdir() });
-  assert.match(validation.stdout, /Valid tests: sharing/);
-  const run = await exec(process.execPath, [cli, "test", suite.path], { cwd: tmpdir() }); assert.match(run.stdout, /PASS sharing/);
-  await assert.rejects(exec(process.execPath, [cli, "test", suite.path, "--test", "missing"]), (error: unknown) => (error as { code: number }).code === 2);
-  Object.assign(suite.config.adapters.first.options, { fail: "alice" }); await suite.save();
-  await assert.rejects(exec(process.execPath, [cli, "test", suite.path]), (error: unknown) => (error as { code: number }).code === 1);
-});
-
-test("CLI interruption produces reports after closing runtimes and fixtures", async () => {
-  const suite = await setup(); Object.assign(suite.config.adapters.first.options, { delay: 500 }); await suite.save();
-  const child = spawn(process.execPath, [cli, "test", suite.path], { stdio: ["ignore", "pipe", "pipe"] });
-  const exit = new Promise<number | null>((done) => child.once("exit", done));
-  try {
-    let running = false;
-    for (let count = 0; count < 200; count++) {
-      try { running = (await suite.events()).some((event) => event.event === "state"); } catch {}
-      if (running) break;
-      await new Promise((done) => setTimeout(done, 10));
-    }
-    assert.equal(running, true); child.kill("SIGTERM"); assert.equal(await exit, 1);
-    assert.equal((await suite.events()).at(-1)?.event, "teardown"); await access(join(suite.directory, "reports/index.html"));
-  } finally { child.kill("SIGKILL"); }
-});
-
-test("artifact store refuses traversal", async () => {
-  const artifacts = fileArtifactStore(await mkdtemp(join(tmpdir(), "journey-store-")));
+test("evidence store refuses traversal", async () => {
+  const artifacts = fileEvidenceStore(await mkdtemp(join(tmpdir(), "journey-store-")), "tests/x/files");
   await assert.rejects(artifacts.write({ name: "../escape.json", data: "secret", contentType: "application/json" }));
 });
 
@@ -264,33 +216,8 @@ test("numeric-looking test names preserve YAML declaration order and dot names s
   await writeFile(suite.path, source.replace("tests: {}", `tests:\n${blocks.join("\n")}`));
   const result = await runSuite(suite.path);
   assert.deepEqual(result.tests.map((test) => test.id), ["20", "3", ".."]);
-  assert.ok(result.tests[2].artifacts.length > 0);
-  await access(join(suite.directory, "reports/%2E%2E", result.tests[2].artifacts[0].href));
-});
-
-test("missing device configuration identifies its test and suggests explicit selection without starting fixtures", async () => {
-  const suite = await setup();
-  suite.config.tests.sharing.journeys[1].adapter = "first";
-  const deviceTest = structuredClone(suite.config.tests.sharing);
-  deviceTest.journeys = [{ id: "bob", source: "model.json", select: "bob", adapter: "second" }];
-  deviceTest.profiles = [{ id: "device", journeys: { bob: "basic" } } as typeof deviceTest.profiles[number]];
-  Object.assign(suite.config.tests, { "device-required": deviceTest });
-  Object.assign(suite.config.adapters.second.options, { device: "${JOURNEY_TEST_REQUIRED_DEVICE}" });
-  await suite.save();
-  const env = { ...process.env };
-  delete env.JOURNEY_TEST_REQUIRED_DEVICE;
-  await assert.rejects(exec(process.execPath, [cli, "test", suite.path], { env }), (error: unknown) => {
-    const failure = error as { code: number; stderr: string };
-    assert.equal(failure.code, 2);
-    assert.match(failure.stderr, /Configuration error in test "device-required"/);
-    assert.match(failure.stderr, /Missing environment variable JOURNEY_TEST_REQUIRED_DEVICE/);
-    assert.match(failure.stderr, /all configured tests must pass preflight\. No tests were started/);
-    assert.match(failure.stderr, /journey-mesh test .* --test sharing/);
-    return true;
-  });
-  await assert.rejects(access(join(suite.directory, "events.jsonl")));
-  const validation = await exec(process.execPath, [cli, "validate", suite.path, "--test", "sharing"], { env });
-  assert.match(validation.stdout, /Valid tests: sharing/);
+  assert.equal(result.tests[2].files[0].href, "tests/%2E%2E/files/fixture-evidence.txt");
+  await access(join(suite.directory, "reports", result.tests[2].files[0].href));
 });
 
 function serviceEntry(name: string, options: Record<string, unknown> = {}, dependsOn?: readonly string[]) {
@@ -349,9 +276,9 @@ test("managed services start dependencies once and clean up after partial startu
     automation: { use: fixture("service"), dependsOn: ["service"], options: { name: "automation", log: "events.jsonl", failUp: true } }
   } });
   Object.assign(suite.config.tests.sharing, { services: ["automation"] }); await suite.save();
-  const bundle = await runSuite(suite.path);
-  assert.equal(bundle.ok, false);
-  assert.match(bundle.errors[0].message, /up failure/);
+  const run = await runSuite(suite.path);
+  assert.equal(run.ok, false);
+  assert.match(run.errors[0].message, /up failure/);
   assert.deepEqual((await suite.events()).map(({ event, name }) => [event, name]), [["up", "service"], ["up", "automation"], ["down", "automation"], ["down", "service"]]);
 });
 

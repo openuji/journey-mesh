@@ -1,6 +1,7 @@
 /**
  * The Journey Mesh host: load a suite configuration, load its plugins, compile and assemble
- * each test, execute them sequentially with journey-runner, and write one result bundle.
+ * each test, execute them sequentially with journey-runner, and write one run record.
+ * It knows nothing about reports: those are derived from the run record by the reporting layer.
  */
 export { loadSuiteConfig, interpolate, JourneyConfigError } from "./config/load.js";
 export type { Environment, LoadedSuiteConfig } from "./config/load.js";

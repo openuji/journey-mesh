@@ -1,0 +1,43 @@
+{
+  "name": "@openuji/report-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Renders Journey Mesh report models: an interactive viewer, static sites, and Markdown summaries. An app, not a library.",
+  "dependencies": {
+    "@openuji/journey-path": "workspace:*",
+    "@openuji/journey-reporter": "workspace:*",
+    "@openuji/journey-run-record": "workspace:*",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tsx": "^4.20.3"
+  },
+  "devDependencies": {
+    "@openuji/journey-model-ujg": "workspace:*",
+    "@openuji/journey-report-axe": "workspace:*",
+    "@openuji/journey-observer-axe": "workspace:*",
+    "@openuji/journey-core": "workspace:*",
+    "@openuji/journey-runner": "workspace:*",
+    "@openuji/journey-execution-model": "workspace:*",
+    "@openuji/journey-plugin": "workspace:*",
+    "@types/node": "^22.13.14",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "playwright": "^1.61.1",
+    "typescript": "^5.8.3",
+    "vite": "^7.3.0",
+    "@openuji/journey-report-android": "workspace:*",
+    "@openuji/journey-observer-android-accessibility": "workspace:*"
+  },
+  "scripts": {
+    "build:app": "vite build",
+    "dev": "vite --host 127.0.0.1",
+    "serve": "tsx cli/serve.ts",
+    "site": "tsx cli/site.ts",
+    "markdown": "tsx cli/markdown.ts",
+    "typecheck:test": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "test": "node --import tsx --test test/*.test.ts",
+    "test:browser": "node --import tsx --test test/*.test.mts"
+  }
+}

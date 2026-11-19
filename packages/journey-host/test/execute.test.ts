@@ -8,7 +8,7 @@ import { stringify } from "yaml";
 import type { JourneyObserverComponent } from "@openuji/journey-plugin";
 import type { JourneyObserverOutput, JourneyMeasurement } from "@openuji/journey-core";
 import type { RunResult } from "@openuji/journey-runner";
-import { readReport } from "@openuji/journey-reporter";
+import { readRunRecord } from "@openuji/journey-run-record/node";
 import { collectObserverOutputs, runSuite } from "../src/index.js";
 
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/${name}.mjs`, import.meta.url));
@@ -35,7 +35,7 @@ test("observer outputs are checked against the run and failures never hide other
   assert.ok(Object.isFrozen(outputs[0]));
 });
 
-test("service provenance and artifacts reach the suite bundle with relative hrefs", async () => {
+test("service provenance and evidence reach the run record with relative hrefs", async () => {
   const directory = await mkdtemp(join(tmpdir(), "journey-services-"));
   await writeFile(join(directory, "model.json"), JSON.stringify({ journeys: ["task"] }));
   await writeFile(join(directory, "mesh.yaml"), stringify({
@@ -45,22 +45,28 @@ test("service provenance and artifacts reach the suite bundle with relative href
     profiles: { default: { use: fixture("profile") } },
     tests: { task: { services: ["stack"], journeys: [{ id: "task", source: "model.json", select: "task", adapter: "adapter" }], profiles: [{ id: "default", journeys: { task: "default" } }] } }
   }));
-  const bundle = await runSuite(join(directory, "mesh.yaml"));
-  assert.equal(bundle.ok, true);
-  assert.equal(bundle.label, "Fixture system");
-  assert.deepEqual(bundle.provenance, { stack: { version: "1.2.3" } });
-  assert.deepEqual(bundle.artifacts.map((artifact) => artifact.href), ["services/stack/stack.identity.json"]);
-  // The model's drawable view is embedded in the bundle and referenced by each journey segment.
-  assert.deepEqual(bundle.tests[0].segments, [{ id: "task", journeyId: "task", adapter: "adapter", view: "model.json" }]);
-  assert.deepEqual(bundle.tests[0].views, { "model.json": { format: "fixture", document: { journeys: ["task"] } } });
-  const saved = await readReport(join(directory, "results"), ["suite"]);
-  assert.deepEqual(saved.provenance, bundle.provenance);
-  // Saved bundles are publishable: no local absolute path survives anywhere in them.
+  const run = await runSuite(join(directory, "mesh.yaml"));
+  assert.equal(run.ok, true);
+  assert.equal(run.label, "Fixture system");
+  assert.deepEqual(run.provenance, { stack: { version: "1.2.3" } });
+  assert.deepEqual(run.files.map((file) => file.href), ["services/stack/stack.identity.json"]);
+  // The model document snapshot is recorded with the run and referenced by each journey segment.
+  assert.deepEqual(run.tests[0].segments, [{ id: "task", journeyId: "task", adapter: "adapter", view: "model.json" }]);
+  assert.deepEqual(run.tests[0].views, { "model.json": { format: "fixture", document: { journeys: ["task"] } } });
+  const saved = await readRunRecord(join(directory, "results"));
+  assert.deepEqual(saved.provenance, run.provenance);
+  assert.ok(saved.startedAt <= saved.finishedAt);
+  // Run records are portable: no local absolute path survives anywhere in them.
   const absolute: string[] = [];
   const walk = (value: unknown, path: string): void => {
     if (typeof value === "string" && (value.startsWith("/") || value.includes(directory))) absolute.push(path);
     else if (value && typeof value === "object") for (const [key, item] of Object.entries(value)) walk(item, `${path}.${key}`);
   };
-  walk(saved, "bundle");
+  walk(saved, "run");
   assert.deepEqual(absolute, []);
+});
+
+test("recorded observer outputs keep only contract fields, so no presentation data enters the run record", async () => {
+  const { outputs } = await collectObserverOutputs([observer(() => ({ ...valid("extra"), nodes: [{ executionId: "execution", operationId: "op", metrics: { kind: "axe" } }], html: "<p>" }))], result);
+  assert.deepEqual(Object.keys(outputs[0]).sort(), ["errors", "evidence", "id", "kind", "measurements"]);
 });

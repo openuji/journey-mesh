@@ -12,7 +12,7 @@ export type CompiledTest = Readonly<{
   segments: ReadonlyMap<string, Segment>;
   /** `<journey item>.<alias>` → plan operation ID. */
   aliases: ReadonlyMap<string, string>;
-  /** Renderable documents by segment source, saved with the run for the report viewer. */
+  /** Model document snapshots by segment source, recorded with the run. */
   views: ReadonlyMap<string, JourneyModelView>;
 }>;
 
@@ -34,7 +34,7 @@ export async function compileTest(test: TestConfig, compiler: JourneyModelCompil
   const views = new Map<string, JourneyModelView>();
   for (const item of test.journeys) {
     const source = resolve(dirname(configPath), interpolate(item.source, env, `journey ${item.id}.source`));
-    // Provenance stays relative to the configuration, so saved bundles carry no local paths.
+    // Provenance stays relative to the configuration, so run records carry no local paths.
     const sourceRef = relative(dirname(configPath), source).split(sep).join("/");
     const child = await compiler.compile(source, item.select);
     if (!child.operations.length) throw new Error(`Journey ${item.id} has no executable operations`);

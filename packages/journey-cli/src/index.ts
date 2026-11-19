@@ -1,31 +1,43 @@
-import { createServer, type Server } from "node:http";
-import { access, readFile, stat } from "node:fs/promises";
-import { extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { access, readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { parse } from "yaml";
 import { executeSuite, JourneyConfigError, prepareSuite, runConfiguredServices, validateSuite } from "@openuji/journey-host";
-import { compareBundles, publishReport, reportDirectory, testFailures, testPassed } from "@openuji/journey-reporter";
-import type { ComparisonPairing } from "@openuji/journey-plugin";
+import { testFailures } from "@openuji/journey-run-record";
+import { runDirectory } from "@openuji/journey-run-record/node";
+import { buildReport, compareRuns, defaultReportConfig, exportReport, loadReportConfig, type ComparisonPairing, type ReportConfig } from "@openuji/journey-reporter";
 import { consoleJourneyProgress } from "@openuji/journey-runner/console";
 
+/**
+ * The composition root: the only place that wires execution (host → run record) to reporting
+ * (run record → report model). Neither side depends on the other.
+ */
 const help = `Usage:
-  journey-mesh test <config.yaml> [--test <id>] [--output <directory>]
+  journey-mesh test <config.yaml> [--test <id>] [--output <directory>] [--no-report]
   journey-mesh validate <config.yaml>... [--test <id>]
-  journey-mesh compare <baseline-report> <candidate-report> [--pairings <file.yaml>] [--title <text>] [--output <directory>]
-  journey-mesh render <report-directory|manifest.json> [--output <directory>]
+  journey-mesh report <run-directory> [--config <config.yaml>]
+  journey-mesh export <run-directory> [--output <file.json>] [--data]
+  journey-mesh compare <baseline-run> <candidate-run> [--pairings <file.yaml>] [--title <text>] [--config <config.yaml>] [--output <directory>]
   journey-mesh services up <config.yaml> [--service <key>]
   journey-mesh services down <config.yaml> [--service <key>]
-  journey-mesh report <directory> [--port <number>]
 
+test writes a run record, then derives its report model below <output>/report/.
 Without --test, every test in the YAML is selected and must pass preflight.
 Validating several configurations checks all of them before any is run.
-Without --service, every entry in the YAML's services section is selected.`;
+Without --service, every entry in the YAML's services section is selected.
+View a generated report with the workspace renderer:
+  pnpm --filter @openuji/report-renderer serve <run-directory>
 
-const commands: Record<string, { positionals: [number, number]; flags: readonly string[] }> = {
-  test: { positionals: [1, 1], flags: ["--test", "--output"] },
+Exit codes: 0 passed, 1 failed, 2 configuration error, 3 tests passed but the report could not be built.`;
+
+export const exitCodes = Object.freeze({ passed: 0, failed: 1, configuration: 2, report: 3 });
+
+type CommandSpec = { positionals: [number, number]; flags: readonly string[]; switches?: readonly string[] };
+const commands: Record<string, CommandSpec> = {
+  test: { positionals: [1, 1], flags: ["--test", "--output"], switches: ["--no-report"] },
   validate: { positionals: [1, Infinity], flags: ["--test"] },
-  compare: { positionals: [2, 2], flags: ["--pairings", "--title", "--output"] },
-  render: { positionals: [1, 1], flags: ["--output"] },
-  report: { positionals: [1, 1], flags: ["--port"] },
+  report: { positionals: [1, 1], flags: ["--config"] },
+  export: { positionals: [1, 1], flags: ["--output"], switches: ["--data"] },
+  compare: { positionals: [2, 2], flags: ["--pairings", "--title", "--config", "--output"] },
   "services up": { positionals: [1, 1], flags: ["--service"] },
   "services down": { positionals: [1, 1], flags: ["--service"] }
 };
@@ -34,18 +46,18 @@ function parseArguments(args: readonly string[]) {
   const name = args[0] === "services" ? `services ${args[1] ?? ""}` : args[0];
   const command = commands[name];
   if (!command) throw new JourneyConfigError(help);
-  const positionals: string[] = []; const flags: Record<string, string> = {};
+  const positionals: string[] = []; const flags: Record<string, string> = {}; const switches = new Set<string>();
   for (let index = name.split(" ").length; index < args.length; index++) {
     const value = args[index];
     if (!value.startsWith("--")) { positionals.push(value); continue; }
+    if (command.switches?.includes(value)) { switches.add(value); continue; }
     const next = args[index + 1];
     if (!command.flags.includes(value)) throw new JourneyConfigError(`Unknown option ${value}`);
     if (!next || next.startsWith("--")) throw new JourneyConfigError(`Missing value for ${value}`);
     flags[value] = next; index++;
   }
   if (positionals.length < command.positionals[0] || positionals.length > command.positionals[1]) throw new JourneyConfigError(help);
-  if (flags["--port"] !== undefined && (!/^\d+$/.test(flags["--port"]) || Number(flags["--port"]) > 65535)) throw new JourneyConfigError("--port must be a TCP port");
-  return { name, positionals, flags };
+  return { name, positionals, flags, switches };
 }
 
 async function readPairings(path: string): Promise<readonly ComparisonPairing[]> {
@@ -56,19 +68,45 @@ async function readPairings(path: string): Promise<readonly ComparisonPairing[]>
   return pairings as ComparisonPairing[];
 }
 
-async function printReportLocation(directory: string): Promise<void> {
-  const index = resolve(directory, "index.html");
-  if (await access(index).then(() => true, () => false)) console.log(`Report: ${index}\nOpen with: journey-mesh report ${shellArgument(directory)}`);
+async function reportConfig(path: string | undefined): Promise<ReportConfig> {
+  if (!path) return defaultReportConfig;
+  try { return await loadReportConfig(path); }
+  catch (error) { throw new JourneyConfigError(`Invalid report configuration in ${path}: ${error instanceof Error ? error.message : "unreadable"}`); }
+}
+
+async function printLocations(directory: string): Promise<void> {
+  const exists = (path: string) => access(path).then(() => true, () => false);
+  if (await exists(resolve(directory, "run.json"))) console.log(`Run record: ${resolve(directory, "run.json")}`);
+  if (await exists(resolve(directory, "report/report.json"))) {
+    console.log(`Report model: ${resolve(directory, "report/report.json")}`);
+    printViewerCommand(directory);
+  }
+}
+
+function printViewerCommand(directory: string): void {
+  console.log(`View with the workspace renderer:\n  pnpm --filter @openuji/report-renderer serve ${shellArgument(resolve(directory))}`);
+}
+
+/** Build the report of a finished run. Report problems are warnings; they never change the run's verdict. */
+async function report(directory: string, config: ReportConfig): Promise<boolean> {
+  try {
+    const { model } = await buildReport(directory, { config });
+    for (const error of model.errors) console.error(`  Report warning${error.test ? ` (${error.test})` : ""}: ${error.message}`);
+    return true;
+  } catch (error) {
+    console.error(`Report could not be built: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
 }
 
 export async function main(args: string[]): Promise<number> {
-  if (!args.length || args.includes("--help")) { console.log(help); return 0; }
+  if (!args.length || args.includes("--help")) { console.log(help); return exitCodes.passed; }
   const controller = new AbortController();
   const interrupt = () => controller.abort(new Error("Journey test interrupted"));
   let parsed: ReturnType<typeof parseArguments> | undefined;
   try {
     parsed = parseArguments(args);
-    const { name, positionals, flags } = parsed;
+    const { name, positionals, flags, switches } = parsed;
     const [path] = positionals;
     if (name === "services up" || name === "services down") {
       // No SIGINT/SIGTERM handler: androidUp/appiumUp (and any other service
@@ -76,50 +114,63 @@ export async function main(args: string[]): Promise<number> {
       // here would only replace Node's default terminate-on-signal behavior
       // with a no-op, making Ctrl-C appear to hang instead of exiting.
       await runConfiguredServices(path, name === "services up" ? "up" : "down", { service: flags["--service"] });
-      return 0;
+      return exitCodes.passed;
     }
-    if (name === "report") { await serveReport(path, flags["--port"] === undefined ? 9323 : Number(flags["--port"])); return 0; }
-    if (name === "render") {
-      const output = flags["--output"] ? resolve(flags["--output"]) : await reportDirectory(path);
-      await publishReport(path, output); await printReportLocation(output); return 0;
+    if (name === "report") {
+      const directory = await runDirectory(path);
+      const ok = await report(directory, await reportConfig(flags["--config"]));
+      await printLocations(directory);
+      return ok ? exitCodes.passed : exitCodes.report;
+    }
+    if (name === "export") {
+      const exported = JSON.stringify(await exportReport(path, { data: switches.has("--data") }));
+      if (flags["--output"]) await writeFile(resolve(flags["--output"]), exported);
+      else process.stdout.write(`${exported}\n`);
+      return exitCodes.passed;
     }
     if (name === "compare") {
       const outputDir = resolve(flags["--output"] ?? "comparison-results");
-      const comparison = await compareBundles({
-        baseline: positionals[0], candidate: positionals[1], title: flags["--title"], outputDir,
+      const config = await reportConfig(flags["--config"]);
+      const comparison = await compareRuns({
+        baseline: positionals[0], candidate: positionals[1], outputDir, ...(flags["--title"] ? { title: flags["--title"] } : {}), config,
         ...(flags["--pairings"] ? { pairings: await readPairings(flags["--pairings"]) } : {})
       });
       for (const side of ["baseline", "candidate"] as const) {
-        const subject = comparison.subjects[side];
-        console.log(`${subject.bundle?.ok && !subject.errors.length ? "PASS" : "FAIL"} ${side}${subject.label ? ` (${subject.label})` : ""}`);
-        for (const error of [...subject.errors, ...(subject.bundle?.errors ?? []), ...(subject.bundle?.tests.flatMap(testFailures) ?? [])]) console.error(`  ${error.message}`);
+        const subject = comparison.comparison!.subjects[side];
+        console.log(`${subject.ok ? "PASS" : "FAIL"} ${side}${subject.label ? ` (${subject.label})` : ""}`);
+        for (const error of subject.errors) console.error(`  ${error.message}`);
       }
-      await printReportLocation(outputDir); return comparison.ok ? 0 : 1;
+      console.log(`Comparison: ${resolve(outputDir, "report/report.json")}`);
+      printViewerCommand(outputDir);
+      return comparison.ok ? exitCodes.passed : exitCodes.failed;
     }
     process.once("SIGINT", interrupt); process.once("SIGTERM", interrupt);
     if (name === "validate") {
       const valid: string[] = [];
       for (const config of positionals) {
+        await reportConfig(config);
         const result = await validateSuite(config, { test: flags["--test"], signal: controller.signal });
         valid.push(...result.tests.map((id) => positionals.length > 1 ? `${config}#${id}` : id));
       }
-      console.log(`Valid tests: ${valid.join(", ")}`); return 0;
+      console.log(`Valid tests: ${valid.join(", ")}`); return exitCodes.passed;
     }
+    const config = await reportConfig(path);
     const options = { test: flags["--test"], outputDir: flags["--output"] ? resolve(flags["--output"]) : undefined, signal: controller.signal };
     const prepared = await prepareSuite(path, options);
-    const result = await executeSuite(prepared, { ...options, progress: [
+    const run = await executeSuite(prepared, { ...options, progress: [
       consoleJourneyProgress(),
       { publish(event) {
         if (event.type === "execution-completed") console.log(`  ${event.result.profileId}: ${event.result.outcome.kind}`);
       } }
     ] });
-    for (const test of result.tests) {
-      console.log(`${testPassed(test) ? "PASS" : "FAIL"} ${test.id}`);
+    for (const test of run.tests) {
+      console.log(`${test.ok ? "PASS" : "FAIL"} ${test.id}`);
       for (const error of testFailures(test)) console.error(`  ${error.name}: ${error.message}`);
     }
-    for (const error of result.errors) console.error(`  ${error.name}: ${error.message}`);
-    await printReportLocation(prepared.outputDir);
-    return result.ok ? 0 : 1;
+    for (const error of run.errors) console.error(`  ${error.name}: ${error.message}`);
+    const reported = switches.has("--no-report") || await report(prepared.outputDir, config);
+    await printLocations(prepared.outputDir);
+    return !run.ok ? exitCodes.failed : reported ? exitCodes.passed : exitCodes.report;
   } catch (error) {
     if (error instanceof JourneyConfigError) {
       console.error(error.testId ? `Configuration error in test ${JSON.stringify(error.testId)}:` : "Configuration error:");
@@ -129,34 +180,13 @@ export async function main(args: string[]): Promise<number> {
         console.error("Without --test, all configured tests must pass preflight. No tests were started.");
         console.error(`To select ${JSON.stringify(alternative)} only:\n  journey-mesh ${parsed.name} ${shellArgument(parsed.positionals[0])} --test ${shellArgument(alternative)}`);
       }
-      return 2;
+      return exitCodes.configuration;
     }
     console.error(error instanceof Error ? error.message : "Journey Mesh failed");
-    return 1;
+    return exitCodes.failed;
   } finally {
     process.removeListener("SIGINT", interrupt); process.removeListener("SIGTERM", interrupt);
   }
-}
-
-/** Serve only the generated artifact directory, bound to loopback. */
-export async function serveReport(directory: string, port = 9323): Promise<Server> {
-  const root = resolve(directory);
-  await stat(resolve(root, "index.html"));
-  const types: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".png": "image/png", ".xml": "application/xml" };
-  const server = createServer(async (request, response) => {
-    try {
-      const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
-      const path = resolve(root, `.${pathname.endsWith("/") ? `${pathname}index.html` : pathname}`);
-      const child = relative(root, path);
-      if (child === ".." || child.startsWith(`..${sep}`) || isAbsolute(child)) { response.writeHead(403).end(); return; }
-      const data = await readFile(path);
-      response.writeHead(200, { "content-type": types[extname(path)] ?? "application/octet-stream", "x-content-type-options": "nosniff" }); response.end(data);
-    } catch { response.writeHead(404).end("Artifact not found"); }
-  });
-  await new Promise<void>((done, reject) => { server.once("error", reject); server.listen(port, "127.0.0.1", done); });
-  const address = server.address();
-  console.log(`Journey Mesh report: http://127.0.0.1:${typeof address === "object" && address ? address.port : port}/`);
-  return server;
 }
 
 function shellArgument(value: string): string {

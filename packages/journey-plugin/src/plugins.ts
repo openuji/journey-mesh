@@ -2,7 +2,6 @@ import type { JourneyObserverOutput } from "@openuji/journey-core";
 import type { JourneyPlan, JourneyPlanOperation } from "@openuji/journey-execution-model";
 import type { JourneyAdapter, JourneyEnvironment, JourneyProfile, RunResult } from "@openuji/journey-runner";
 import type { JourneyArtifactStore } from "./artifacts.js";
-import type { JourneyReporter } from "./results.js";
 
 export type JourneyPluginContext = {
   readonly artifacts: JourneyArtifactStore;
@@ -31,17 +30,17 @@ export type JourneyService = {
   readonly name: string;
   up(input?: { signal?: AbortSignal; inputs?: Readonly<Record<string, unknown>> }): Promise<void | Readonly<Record<string, unknown>>>;
   down?(): Promise<void>;
-  /** Identity of what the service provided, recorded in the suite bundle. Must not contain credentials. */
+  /** Identity of what the service provided, recorded in the run record. Must not contain credentials. */
   provenance?(): unknown;
 };
 
-/** A drawable form of a journey source: a JSON document in a format the report viewer knows (`journey-map`). */
+/** A snapshot of the model document behind a journey source (e.g. format `journey-map`), recorded with the run. */
 export type JourneyModelView = Readonly<{ format: string; document: unknown }>;
 
 export type JourneyModelCompiler = {
   compile(source: string, selection: string): Promise<JourneyPlan>;
   resolveOperation(plan: Pick<JourneyPlan, "id" | "operations">, selector: string): JourneyPlanOperation;
-  /** The journey map the report viewer draws for `source`, if the model has one. Read-only; called during preparation. */
+  /** The model document behind `source`, if the model has one, so consumers need no model sources. Read-only; called during preparation. */
   view?(source: string): Promise<JourneyModelView | undefined>;
 };
 
@@ -77,10 +76,9 @@ export type ServicePlugin<S = unknown> = Plugin<"service", S, JourneyService> & 
   readonly inputs?: Readonly<Record<string, Contract<unknown>>>;
   readonly outputs?: Readonly<Record<string, Contract<unknown>>>;
 };
-export type ReporterPlugin<S = unknown> = Plugin<"reporter", S, JourneyReporter>;
 
 /** What a module exports as `journeyMeshPlugin`. */
-export type JourneyMeshPlugin = AdapterPlugin | DriverPlugin | ObserverPlugin | ModelPlugin | ProfilePlugin | EnvironmentPlugin | ServicePlugin | ReporterPlugin;
+export type JourneyMeshPlugin = AdapterPlugin | DriverPlugin | ObserverPlugin | ModelPlugin | ProfilePlugin | EnvironmentPlugin | ServicePlugin;
 export type JourneyPluginKind = JourneyMeshPlugin["kind"];
 export type PluginOfKind<K extends JourneyPluginKind> = Extract<JourneyMeshPlugin, { kind: K }>;
 
@@ -91,4 +89,3 @@ export const defineModelPlugin = <S>(plugin: ModelPlugin<S>) => plugin;
 export const defineProfilePlugin = <S>(plugin: ProfilePlugin<S>) => plugin;
 export const defineEnvironmentPlugin = <S>(plugin: EnvironmentPlugin<S>) => plugin;
 export const defineServicePlugin = <S>(plugin: ServicePlugin<S>) => plugin;
-export const defineReporterPlugin = <S>(plugin: ReporterPlugin<S>) => plugin;

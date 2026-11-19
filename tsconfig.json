@@ -44,6 +44,9 @@
       "path": "packages/journey-observer-android-accessibility/tsconfig.json"
     },
     {
+      "path": "packages/journey-run-record/tsconfig.json"
+    },
+    {
       "path": "packages/journey-host/tsconfig.json"
     },
     {
@@ -57,6 +60,12 @@
     },
     {
       "path": "packages/journey-environment-http"
+    },
+    {
+      "path": "packages/journey-report-axe/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-report-android/tsconfig.json"
     }
   ]
 }

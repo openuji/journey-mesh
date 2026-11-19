@@ -7,14 +7,13 @@
   "exports": {
     ".": "./src/index.ts",
     "./plugin": "./src/plugin.ts",
-    "./reporter": "./src/reporter.ts"
+    "./evidence": "./src/evidence-entry.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
     "@openuji/journey-runner": "workspace:*",
     "@openuji/journey-adapter-appium": "workspace:*",
     "fast-xml-parser": "5.3.0",
-    "@openuji/journey-reporter": "workspace:*",
     "@openuji/journey-core": "workspace:*",
     "@openuji/journey-plugin": "workspace:*"
   },
@@ -26,6 +25,6 @@
   },
   "devDependencies": {
     "tsx": "^4.20.3",
-    "@openuji/journey-reporter": "workspace:*"
+    "@openuji/journey-run-record": "workspace:*"
   }
 }

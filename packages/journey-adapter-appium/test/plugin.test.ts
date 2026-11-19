@@ -5,7 +5,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { fileArtifactStore } from "@openuji/journey-reporter";
+import { fileEvidenceStore } from "@openuji/journey-run-record/node";
 import type { JourneyPluginContext } from "@openuji/journey-plugin";
 import { journeyMeshPlugin } from "../src/plugin.js";
 
@@ -20,7 +20,7 @@ async function serveApk(data: Buffer): Promise<{ url: string; sha256: string; cl
 
 async function context(directory: string): Promise<JourneyPluginContext> {
   return {
-    artifacts: fileArtifactStore(directory), configPath: join(directory, "mesh.yaml"), testId: "test",
+    artifacts: fileEvidenceStore(directory), configPath: join(directory, "mesh.yaml"), testId: "test",
     operations: [], env: {}, resolveOperation() { throw new Error("No operations"); }, resolvePath: (value) => join(directory, value)
   };
 }

@@ -1,18 +1,13 @@
-import { immutableSnapshot, type JourneyObserverOutput, type JourneyMeasurement } from "@openuji/journey-core";
+import { immutableSnapshot, type JourneyMeasurement } from "@openuji/journey-core";
 import type { AppiumExecutionObserver, AppiumOperationObservation } from "@openuji/journey-adapter-appium";
 import { errorToJourneyRunError, type RunResult } from "@openuji/journey-runner";
 import type { AndroidAccessibilityEvidence, AndroidArtifactWriter, AndroidCapture, AndroidOperationEvidence } from "./evidence.js";
 import { checkAndroidHierarchy, parseAndroidHierarchy, redactAndroidHierarchy } from "./hierarchy.js";
-import { androidAccessibilityFindings, androidNodeSummaries, buildAndroidAccessibilityReport } from "./report.js";
+import { androidAccessibilityFindings, androidAccessibilityKind, assessAndroidOperations } from "./classify.js";
+import type { AndroidAccessibilityObserverOutput } from "./output.js";
 
-export type * from "./evidence.js";
-export type * from "./hierarchy.js";
+export * from "./evidence-entry.js";
 export { checkAndroidHierarchy, parseAndroidHierarchy, redactAndroidHierarchy } from "./hierarchy.js";
-export { androidAccessibilityFindings, androidNodeSummaries, buildAndroidAccessibilityReport, renderAndroidAccessibilityReport } from "./report.js";
-export type { AndroidAccessibilityReport, AndroidAccessibilityPathItem, AndroidReportResource } from "./report.js";
-export { loadAndroidReportResources } from "./report-resources.js";
-export { isAndroidAccessibilityOutput } from "./output.js";
-export type { AndroidAccessibilityObserverOutput } from "./output.js";
 
 export type AndroidAccessibilityObserverOptions = Readonly<{
   reportId: string;
@@ -24,7 +19,7 @@ export type AndroidAccessibilityObserverOptions = Readonly<{
 }>;
 export type AndroidAccessibilityObserver = AppiumExecutionObserver & {
   readonly evidence: readonly AndroidAccessibilityEvidence[];
-  output(result: RunResult): JourneyObserverOutput;
+  output(result: RunResult): AndroidAccessibilityObserverOutput;
 };
 
 export function androidAccessibilityObserver(options: AndroidAccessibilityObserverOptions): AndroidAccessibilityObserver {
@@ -47,15 +42,16 @@ export function androidAccessibilityObserver(options: AndroidAccessibilityObserv
     },
     output(result) {
       const evidence = facts.filter((fact) => fact.kind === "execution-started" ? fact.execution.runId === result.runId : fact.evidence.runId === result.runId);
-      const report = buildAndroidAccessibilityReport({ reportId: configuredOptions.reportId, createdAt: (configuredOptions.now ?? (() => new Date().toISOString()))(), result, evidence, strict: configuredOptions.strict ?? false });
+      const assessments = assessAndroidOperations(evidence, result);
       const measurements: JourneyMeasurement[] = result.evidence.executions.map((execution) => {
-        const items = report.items.filter((item) => item.executionId === execution.executionId);
+        const items = assessments.filter((item) => item.executionId === execution.executionId);
         const checked = items.filter((item) => item.status === "checked");
         const complete = result.executions.find((item) => item.executionId === execution.executionId)?.outcome.kind === "passed" && !items.some((item) => item.status === "error" || item.status === "skipped");
         return { id: "android/hierarchy-findings", label: "Android hierarchy findings across checks", method: "android-hierarchy-heuristics", unit: "finding", aggregation: "sum-across-checks", scope: { runId: result.runId, executionId: execution.executionId, profileId: execution.profileId, operationIds: execution.operations.map((op) => op.operationId) }, status: !checked.length ? "unavailable" : complete ? "available" : "partial", value: checked.length ? checked.flatMap((item) => item.checks).filter((check) => check.status === "finding").length : null, ...(!checked.length ? { reason: "No completed hierarchy checks." } : !complete ? { reason: "Execution or hierarchy collection did not complete." } : {}) };
       });
       const findings = androidAccessibilityFindings(evidence, result.runId);
-      return immutableSnapshot({ id: configuredOptions.reportId, kind: "android-accessibility", measurements, nodes: androidNodeSummaries(report), evidence: { journal: evidence, report }, errors: configuredOptions.strict && findings.length ? [{ name: "AndroidStrictError", message: `Android hierarchy checks recorded ${findings.length} potential finding(s).` }] : [] });
+      const recorded = { reportId: configuredOptions.reportId, createdAt: (configuredOptions.now ?? (() => new Date().toISOString()))(), strict: configuredOptions.strict ?? false, journal: evidence };
+      return immutableSnapshot({ id: configuredOptions.reportId, kind: androidAccessibilityKind, measurements, evidence: recorded, errors: configuredOptions.strict && findings.length ? [{ name: "AndroidStrictError", message: `Android hierarchy checks recorded ${findings.length} potential finding(s).` }] : [] });
     }
   };
 }

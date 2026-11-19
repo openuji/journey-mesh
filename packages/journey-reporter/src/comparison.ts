@@ -1,22 +1,18 @@
 import { immutableSnapshot, type JourneyMeasurement } from "@openuji/journey-core";
-import type { ComparisonPairing, ComparisonResultBundle, SuiteResultBundle } from "@openuji/journey-plugin";
+import type { SuiteRun } from "@openuji/journey-run-record";
+import type { ComparisonPairing, MeasurementDifference } from "./model/types.js";
 
-export type MeasurementDifference = Readonly<{
-  pairing: string; observer: string; metric: string; label: string; unit: string;
-  status: "available" | "missing" | "partial" | "incompatible";
-  baseline: JourneyMeasurement | null; candidate: JourneyMeasurement | null;
-  delta: number | null; changed: boolean | null; reason?: string;
-}>;
+export type { ComparisonPairing, MeasurementDifference };
 
-function selections(bundle: SuiteResultBundle | null) {
+function selections(run: SuiteRun | null) {
   const result = new Map<string, { test: string; profile: string }>();
-  for (const test of bundle?.tests ?? []) for (const assessment of test.result.assessments) {
+  for (const test of run?.tests ?? []) for (const assessment of test.result.assessments) {
     result.set(JSON.stringify([test.id, assessment.profile.id]), { test: test.id, profile: assessment.profile.id });
   }
   return result;
 }
 /** Pair executions with the same test and profile IDs; anything else needs explicit pairings. */
-export function inferPairings(baseline: SuiteResultBundle | null, candidate: SuiteResultBundle | null): readonly ComparisonPairing[] {
+export function inferPairings(baseline: SuiteRun | null, candidate: SuiteRun | null): readonly ComparisonPairing[] {
   const left = selections(baseline); const right = selections(candidate);
   return immutableSnapshot([...new Set([...left.keys(), ...right.keys()])].map((key) => {
     const [test, profile] = JSON.parse(key) as [string, string];
@@ -24,7 +20,7 @@ export function inferPairings(baseline: SuiteResultBundle | null, candidate: Sui
   }));
 }
 /** Reject explicit pairings whose selections do not exist in the saved subjects. */
-export function validatePairings(pairings: readonly ComparisonPairing[], subjects: Readonly<Record<"baseline" | "candidate", SuiteResultBundle | null>>): readonly ComparisonPairing[] {
+export function validatePairings(pairings: readonly ComparisonPairing[], subjects: Readonly<Record<"baseline" | "candidate", SuiteRun | null>>): readonly ComparisonPairing[] {
   const ids = new Set<string>();
   for (const pairing of pairings) {
     if (!pairing || typeof pairing.id !== "string" || !pairing.id) throw new Error("Each pairing needs an id");
@@ -33,21 +29,22 @@ export function validatePairings(pairings: readonly ComparisonPairing[], subject
     for (const side of ["baseline", "candidate"] as const) {
       const selection = pairing[side];
       if (!selection || typeof selection.test !== "string" || typeof selection.profile !== "string") throw new Error(`Pairing ${pairing.id} needs ${side}.test and ${side}.profile`);
-      const bundle = subjects[side];
-      if (bundle && !selections(bundle).has(JSON.stringify([selection.test, selection.profile]))) throw new Error(`Unknown ${side} selection ${selection.test}/${selection.profile} in pairing ${pairing.id}`);
+      const run = subjects[side];
+      if (run && !selections(run).has(JSON.stringify([selection.test, selection.profile]))) throw new Error(`Unknown ${side} selection ${selection.test}/${selection.profile} in pairing ${pairing.id}`);
     }
   }
   return immutableSnapshot(pairings.map(({ id, baseline, candidate }) => ({ id, baseline: { test: baseline.test, profile: baseline.profile }, candidate: { test: candidate.test, profile: candidate.profile } })));
 }
 
-export function compareMeasurements(bundle: ComparisonResultBundle): readonly MeasurementDifference[] {
+/** Pair measurements by observer and measurement ID; differences are computed only when both are available and comparable. */
+export function compareMeasurements(pairings: readonly ComparisonPairing[], subjects: Readonly<Record<"baseline" | "candidate", SuiteRun | null>>): readonly MeasurementDifference[] {
   const rows: MeasurementDifference[] = [];
-  for (const pairing of bundle.pairings) {
+  for (const pairing of pairings) {
     const measures = (side: "baseline" | "candidate") => {
       const selected = pairing[side];
-      const test = bundle.subjects[side].bundle?.tests.find((item) => item.id === selected.test);
+      const test = subjects[side]?.tests.find((item) => item.id === selected.test);
       const map = new Map<string, { observer: string; metric: JourneyMeasurement }>();
-      for (const output of test?.outputs ?? []) for (const metric of output.measurements) {
+      for (const output of test?.observers ?? []) for (const metric of output.measurements) {
         if (metric.scope.profileId !== selected.profile) continue;
         const key = JSON.stringify([output.id, metric.id]);
         if (map.has(key)) throw new Error(`Ambiguous measurement ${key} in ${pairing.id}`);

@@ -43,7 +43,7 @@ export function validateUXConfiguration(config: UXConfiguration): void {
   }
 }
 
-/** Calculation belongs to the observer; reporters consume this immutable output. */
+/** Calculation belongs to the observer; reports and comparisons consume this immutable output. */
 export function deriveUXOutput(input: UXConfiguration & Readonly<{
   result: RunResult; actions: readonly JourneyInputAction[]; observations: readonly UXObservation[];
 }>): JourneyObserverOutput {

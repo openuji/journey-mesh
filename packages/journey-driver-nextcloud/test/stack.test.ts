@@ -3,13 +3,13 @@ import test from "node:test";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileArtifactStore } from "@openuji/journey-reporter";
+import { fileEvidenceStore } from "@openuji/journey-run-record/node";
 import { nextcloudStackRuntime, validateStackOptions, type StackOptions, type StackExecutor } from "../src/runtime/stack.js";
 
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), "nextcloud-runtime-"));
   const options: StackOptions = { project: "isolated-stack", composeFiles: ["/compose.yaml"], image: "nextcloud@sha256:pinned", expectedVersion: "34.0.2", directory, environment: { PASSWORD: "literal$# value" }, enabledApps: ["notifications"], services: { first: { baseURL: "http://example.test:18081", username: "account", password: "private-password" } } };
-  const artifacts = fileArtifactStore(join(directory, "evidence"));
+  const artifacts = fileEvidenceStore(join(directory, "evidence"));
   const calls: readonly string[][] = [];
   const execute: StackExecutor = async (command, args) => {
     (calls as string[][]).push([command, ...args]);

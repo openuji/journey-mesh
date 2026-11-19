@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { androidAccessibilityObserver } from "../src/index.js";
+import { androidAccessibilityObserver, androidAdapterName, isAndroidAccessibilityOutput } from "../src/index.js";
 
 test("excluded phases journal frozen not-applicable evidence without device or artifact I/O", async () => {
   let deviceReads = 0;
@@ -47,29 +47,30 @@ test("excluded phases journal frozen not-applicable evidence without device or a
   assert.ok(Object.isFrozen(fact.evidence.notApplicable));
 });
 
-test("native capture and independent reporting work from detached saved output", async () => {
+test("native capture records a detached journal, measurements and evidence files, and nothing for presentation", async () => {
   const { mkdtemp } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
-  const { fileArtifactStore } = await import("@openuji/journey-reporter");
-  const { androidAccessibilityReporter } = await import("../src/reporter.js");
-  const store = fileArtifactStore(await mkdtemp(join(tmpdir(), "native-output-")));
+  const { fileEvidenceStore } = await import("@openuji/journey-run-record/node");
+  const store = fileEvidenceStore(await mkdtemp(join(tmpdir(), "native-output-")), "tests/native/files");
   const operation = { id: "compiled-state", sequence: 0, kind: "state" as const, actorId: "actor", touchpointId: "device", entry: { id: "entry", stateId: "state" }, state: { id: "state" }, surface: { id: "surface" }, target: { bindings: [], expectedMatchCount: 0, observation: { bindings: [], stateId: "state", surfaceId: "surface", expectedMatchCount: 0 } } };
   const plan = { id: "manual-plan", operations: [operation] };
-  const observer = androidAccessibilityObserver({ reportId: "native", screenshots: true, writeArtifact: (input) => store.write(input) });
+  const observer = androidAccessibilityObserver({ reportId: "native", screenshots: true, writeArtifact: (input) => store.write(input), now: () => "2026-11-19" });
   const execution = { runId: "run", executionId: "execution", profile: { id: "touch" }, plan };
   observer.onExecutionStarted!({ execution });
   await observer.observeOperation!({ stage: "state-asserted", execution, operation, expectedMatchCount: 0, targets: [], session: { async source() { return '<hierarchy><node class="android.widget.TextView" text="Example" bounds="[0,0][100,100]"/></hierarchy>'; }, async deviceMetrics() { return { densityDpi: 160 }; }, async screenshot() { return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8R8AAAAASUVORK5CYII="; } } } as never);
   const result: import("@openuji/journey-runner").RunResult = { ok: true, runId: "run", plan: { id: plan.id }, assessments: [{ kind: "applicable", profile: { id: "touch" } }], executions: [{ executionId: "execution", profileId: "touch", outcome: { kind: "passed" } }], evidence: { executions: [{ executionId: "execution", profileId: "touch", operations: [{ operationId: operation.id, operationKind: "state", outcome: { kind: "passed" } }] }] }, errors: [] };
   const output = observer.output(result);
-  const node = output.nodes?.[0];
-  assert.equal(node?.operationId, "compiled-state");
-  assert.equal(node?.metrics.kind, "native");
-  assert.ok(!store.files.some((artifact) => artifact.contentType === "text/html"));
-  assert.equal(store.files[0].scope?.profileId, "touch");
-  await androidAccessibilityReporter().report({ bundle: { kind: "test", id: "native", segments: [], views: {}, plan, result, outputs: [JSON.parse(JSON.stringify(output))], artifacts: store.files, reportingErrors: [] }, artifacts: store });
-  const html = Buffer.from(await store.read(store.files.find((artifact) => artifact.contentType === "text/html")!)).toString("utf8");
-  assert.doesNotMatch(html, /data:image\/png;base64/);
-  assert.match(html, /href="android-.*\.png"/);
-  assert.match(html, /compiled-state/);
+  assert.ok(isAndroidAccessibilityOutput(JSON.parse(JSON.stringify(output))));
+  assert.deepEqual(Object.keys(output).sort(), ["errors", "evidence", "id", "kind", "measurements"]);
+  assert.deepEqual({ reportId: output.evidence.reportId, createdAt: output.evidence.createdAt, strict: output.evidence.strict, facts: output.evidence.journal.length }, { reportId: "native", createdAt: "2026-11-19", strict: false, facts: 2 });
+  assert.equal(output.measurements[0].id, "android/hierarchy-findings");
+  assert.equal(output.measurements[0].status, "available");
+  assert.deepEqual(store.files.map((file) => [file.contentType, file.scope?.profileId]), [["application/xml", "touch"], ["image/png", "touch"]]);
+  assert.ok(store.files.every((file) => file.href.startsWith("tests/native/files/android-")));
+});
+
+test("the adapter name in the evidence entry matches the Appium adapter", async () => {
+  const { appiumAdapterName } = await import("@openuji/journey-adapter-appium");
+  assert.equal(androidAdapterName, appiumAdapterName);
 });

@@ -10,7 +10,7 @@ import type {
   AxeRuleResultType,
   AxeScanEvidence
 } from "../types.js";
-import { addAxeSummaries, summarizeResults } from "../reporting/report-summary.js";
+import { addAxeSummaries, summarizeResults } from "./summary.js";
 import { stringTargets, urlPath } from "../shared/strings.js";
 import { immutableSnapshot } from "@openuji/journey-core";
 

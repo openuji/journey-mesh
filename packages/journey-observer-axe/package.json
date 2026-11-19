@@ -7,7 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./plugin": "./src/plugin.ts",
-    "./reporter": "./src/reporter.ts"
+    "./evidence": "./src/evidence.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
@@ -15,7 +15,6 @@
     "@openuji/journey-adapter-playwright": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
     "playwright": "^1.61.1",
-    "@openuji/journey-reporter": "workspace:*",
     "@openuji/journey-core": "workspace:*",
     "@openuji/journey-plugin": "workspace:*"
   },
@@ -27,6 +26,6 @@
   },
   "devDependencies": {
     "tsx": "^4.20.3",
-    "@openuji/journey-reporter": "workspace:*"
+    "@openuji/journey-run-record": "workspace:*"
   }
 }

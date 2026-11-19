@@ -1,0 +1,952 @@
+{
+  "$ref": "#/definitions/ReportModelDocument",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ArtifactScope": {
+      "additionalProperties": false,
+      "description": "Which execution an artifact belongs to; artifacts without an operation describe the whole execution.",
+      "properties": {
+        "executionId": {
+          "type": "string"
+        },
+        "operationId": {
+          "type": "string"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId",
+        "executionId",
+        "profileId"
+      ],
+      "type": "object"
+    },
+    "ComparisonModel": {
+      "additionalProperties": false,
+      "properties": {
+        "differences": {
+          "items": {
+            "$ref": "#/definitions/MeasurementDifference"
+          },
+          "type": "array"
+        },
+        "pairings": {
+          "items": {
+            "$ref": "#/definitions/ComparisonPairing"
+          },
+          "type": "array"
+        },
+        "subjects": {
+          "additionalProperties": false,
+          "properties": {
+            "baseline": {
+              "$ref": "#/definitions/ComparisonSubject"
+            },
+            "candidate": {
+              "$ref": "#/definitions/ComparisonSubject"
+            }
+          },
+          "required": [
+            "baseline",
+            "candidate"
+          ],
+          "type": "object"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "pairings",
+        "differences",
+        "subjects"
+      ],
+      "type": "object"
+    },
+    "ComparisonPairing": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline": {
+          "additionalProperties": false,
+          "properties": {
+            "profile": {
+              "type": "string"
+            },
+            "test": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "test",
+            "profile"
+          ],
+          "type": "object"
+        },
+        "candidate": {
+          "additionalProperties": false,
+          "properties": {
+            "profile": {
+              "type": "string"
+            },
+            "test": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "test",
+            "profile"
+          ],
+          "type": "object"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "baseline",
+        "candidate"
+      ],
+      "type": "object"
+    },
+    "ComparisonSubject": {
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "description": "The subject's run directory below the comparison directory (`subjects/<side>`), or null if it could not be read.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "errors": {
+          "items": {
+            "$ref": "#/definitions/ModelError"
+          },
+          "type": "array"
+        },
+        "label": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "errors",
+        "directory"
+      ],
+      "type": "object"
+    },
+    "DataRef": {
+      "additionalProperties": false,
+      "description": "A JSON document an interpreter derived from observer evidence (e.g. an axe path report).",
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "href": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "observer": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "href",
+        "name",
+        "format",
+        "observer"
+      ],
+      "type": "object"
+    },
+    "FileRef": {
+      "additionalProperties": false,
+      "description": "An evidence file of the run. Interpret `format` to render it; otherwise link `href`.",
+      "properties": {
+        "contentType": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        },
+        "href": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/definitions/ArtifactScope"
+        }
+      },
+      "required": [
+        "href",
+        "name",
+        "contentType"
+      ],
+      "type": "object"
+    },
+    "JourneyMapModel": {
+      "additionalProperties": false,
+      "properties": {
+        "rootStartIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "segments": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "touchpoints": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Touchpoint ID → adapters that executed operations at it.",
+          "type": "object"
+        },
+        "view": {
+          "description": "Key in `TestModel.views`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "view",
+        "segments",
+        "rootStartIds",
+        "touchpoints"
+      ],
+      "type": "object"
+    },
+    "JourneyMeasurement": {
+      "additionalProperties": false,
+      "properties": {
+        "aggregation": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/definitions/MeasurementScope"
+        },
+        "status": {
+          "enum": [
+            "available",
+            "partial",
+            "unavailable",
+            "not-applicable"
+          ],
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "value": {
+          "type": [
+            "number",
+            "boolean",
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "method",
+        "unit",
+        "aggregation",
+        "scope",
+        "status",
+        "value"
+      ],
+      "type": "object"
+    },
+    "MapState": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "type": "string"
+        },
+        "metrics": {
+          "$ref": "#/definitions/NodeMetrics"
+        },
+        "outcome": {
+          "$ref": "#/definitions/StepOutcome"
+        },
+        "screenshot": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "outcome"
+      ],
+      "type": "object"
+    },
+    "MeasurementDifference": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/JourneyMeasurement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidate": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/JourneyMeasurement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "changed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "delta": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "metric": {
+          "type": "string"
+        },
+        "observer": {
+          "type": "string"
+        },
+        "pairing": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "available",
+            "missing",
+            "partial",
+            "incompatible"
+          ],
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pairing",
+        "observer",
+        "metric",
+        "label",
+        "unit",
+        "status",
+        "baseline",
+        "candidate",
+        "delta",
+        "changed"
+      ],
+      "type": "object"
+    },
+    "MeasurementScope": {
+      "additionalProperties": false,
+      "description": "Detached data observers produce for a run record. No model or runtime handles, and no presentation data.",
+      "properties": {
+        "executionId": {
+          "type": "string"
+        },
+        "operationIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId",
+        "executionId",
+        "profileId",
+        "operationIds"
+      ],
+      "type": "object"
+    },
+    "ModelError": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "message"
+      ],
+      "type": "object"
+    },
+    "NodeMetrics": {
+      "additionalProperties": {},
+      "description": "Compact per-step metrics from an observer interpreter, e.g. for journey-map node footers. Open by design; documented kinds:\n- `axe`: `{ pageState?: Counts; matchedSurface?: Counts }` with `Counts = { violations, incomplete, passes, inapplicable }`\n- `native`: `{ findings: number; passes: number }`\n- `skipped`: `{ reason?: string }`",
+      "properties": {
+        "kind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "Outcome": {
+      "description": "Profile level: an execution outcome, or why the profile did not execute.",
+      "enum": [
+        "passed",
+        "failed",
+        "not-executed",
+        "not-applicable"
+      ],
+      "type": "string"
+    },
+    "ProfileModel": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "$ref": "#/definitions/ModelError"
+        },
+        "executionId": {
+          "type": "string"
+        },
+        "files": {
+          "description": "Files of this execution that belong to no single step.",
+          "items": {
+            "$ref": "#/definitions/FileRef"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "mapStates": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "$ref": "#/definitions/MapState"
+            },
+            "type": "object"
+          },
+          "description": "View key → model state ID → overlay for the journey map.",
+          "type": "object"
+        },
+        "measurements": {
+          "items": {
+            "$ref": "#/definitions/JourneyMeasurement"
+          },
+          "type": "array"
+        },
+        "outcome": {
+          "$ref": "#/definitions/Outcome"
+        },
+        "reason": {
+          "description": "Why the profile was not applicable.",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/definitions/StepModel"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "outcome",
+        "steps",
+        "mapStates",
+        "measurements",
+        "files"
+      ],
+      "type": "object"
+    },
+    "ProfileSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "failedSteps": {
+          "type": "number"
+        },
+        "id": {
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/definitions/Outcome"
+        },
+        "steps": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "outcome",
+        "steps",
+        "failedSteps"
+      ],
+      "type": "object"
+    },
+    "ReportError": {
+      "additionalProperties": false,
+      "description": "A reporting problem (an interpreter failed, a journey map is broken). Never part of the test verdict.",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "test": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message",
+        "name"
+      ],
+      "type": "object"
+    },
+    "ReportModel": {
+      "additionalProperties": false,
+      "description": "`report/report.json`.",
+      "properties": {
+        "comparison": {
+          "$ref": "#/definitions/ComparisonModel"
+        },
+        "errors": {
+          "description": "Problems deriving this report.",
+          "items": {
+            "$ref": "#/definitions/ReportError"
+          },
+          "type": "array"
+        },
+        "files": {
+          "description": "Suite and service evidence files.",
+          "items": {
+            "$ref": "#/definitions/FileRef"
+          },
+          "type": "array"
+        },
+        "finishedAt": {
+          "type": "string"
+        },
+        "format": {
+          "const": "journey-mesh/report-model",
+          "type": "string"
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "suite",
+            "comparison"
+          ],
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "ok": {
+          "description": "The run verdict, copied from the run record. Report errors never change it.",
+          "type": "boolean"
+        },
+        "provenance": {
+          "additionalProperties": {},
+          "type": "object"
+        },
+        "runErrors": {
+          "description": "Suite-level execution errors from the run record.",
+          "items": {
+            "$ref": "#/definitions/ModelError"
+          },
+          "type": "array"
+        },
+        "startedAt": {
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/definitions/SourceIdentity"
+        },
+        "tests": {
+          "description": "Empty for a comparison.",
+          "items": {
+            "$ref": "#/definitions/TestSummary"
+          },
+          "type": "array"
+        },
+        "version": {
+          "const": 1,
+          "type": "number"
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "kind",
+        "generatedAt",
+        "ok",
+        "runErrors",
+        "errors",
+        "files",
+        "tests"
+      ],
+      "type": "object"
+    },
+    "ReportModelDocument": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ReportModel"
+        },
+        {
+          "$ref": "#/definitions/TestModel"
+        }
+      ],
+      "description": "Any JSON file of the report model; the root of `schema/report-model.schema.json`."
+    },
+    "SourceIdentity": {
+      "additionalProperties": false,
+      "description": "Public identity only. Runtime paths and credentials never belong here.",
+      "properties": {
+        "pullRequest": {
+          "type": "number"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "sourceSha": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository",
+        "sourceSha"
+      ],
+      "type": "object"
+    },
+    "StepModel": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "type": "string"
+        },
+        "excluded": {
+          "description": "In a phase excluded from this report by configuration; it still executed.",
+          "type": "boolean"
+        },
+        "files": {
+          "items": {
+            "$ref": "#/definitions/FileRef"
+          },
+          "type": "array"
+        },
+        "from": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "metrics": {
+          "$ref": "#/definitions/NodeMetrics"
+        },
+        "outcome": {
+          "$ref": "#/definitions/StepOutcome"
+        },
+        "phaseId": {
+          "type": "string"
+        },
+        "screenshots": {
+          "items": {
+            "$ref": "#/definitions/FileRef"
+          },
+          "type": "array"
+        },
+        "segment": {
+          "type": "string"
+        },
+        "sequence": {
+          "type": "number"
+        },
+        "stateId": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "touchpointId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "sequence",
+        "kind",
+        "touchpointId",
+        "label",
+        "excluded",
+        "outcome",
+        "screenshots",
+        "files"
+      ],
+      "type": "object"
+    },
+    "StepOutcome": {
+      "description": "Step and journey-map state level.",
+      "enum": [
+        "passed",
+        "failed",
+        "not-executed"
+      ],
+      "type": "string"
+    },
+    "TestModel": {
+      "additionalProperties": false,
+      "description": "`report/tests/<encoded-test-id>.json`.",
+      "properties": {
+        "data": {
+          "description": "Interpreter outputs.",
+          "items": {
+            "$ref": "#/definitions/DataRef"
+          },
+          "type": "array"
+        },
+        "excludedPhaseIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "failures": {
+          "description": "What made the test fail: execution errors and observer findings.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "source": {
+                "enum": [
+                  "execution",
+                  "observer"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "message",
+              "name",
+              "source"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "files": {
+          "description": "Test-wide evidence files (no execution scope).",
+          "items": {
+            "$ref": "#/definitions/FileRef"
+          },
+          "type": "array"
+        },
+        "format": {
+          "const": "journey-mesh/report-model/test",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "journeys": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "adapter": {
+                "type": "string"
+              },
+              "journeyId": {
+                "type": "string"
+              },
+              "segmentId": {
+                "type": "string"
+              },
+              "view": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "segmentId",
+              "journeyId",
+              "adapter"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "mapErrors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "maps": {
+          "items": {
+            "$ref": "#/definitions/JourneyMapModel"
+          },
+          "type": "array"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "profiles": {
+          "items": {
+            "$ref": "#/definitions/ProfileModel"
+          },
+          "type": "array"
+        },
+        "version": {
+          "const": 1,
+          "type": "number"
+        },
+        "views": {
+          "additionalProperties": {
+            "$ref": "#/definitions/ViewRef"
+          },
+          "description": "View key → model snapshot (`{ format, document }` JSON). `format` is e.g. `journey-map`.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "id",
+        "ok",
+        "failures",
+        "excludedPhaseIds",
+        "views",
+        "journeys",
+        "maps",
+        "mapErrors",
+        "data",
+        "files",
+        "profiles"
+      ],
+      "type": "object"
+    },
+    "TestSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "href": {
+          "description": "The test model, relative to the run directory.",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "metricKinds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "profiles": {
+          "items": {
+            "$ref": "#/definitions/ProfileSummary"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "ok",
+        "href",
+        "metricKinds",
+        "profiles"
+      ],
+      "type": "object"
+    },
+    "ViewRef": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "href": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "href",
+        "format"
+      ],
+      "type": "object"
+    }
+  }
+}

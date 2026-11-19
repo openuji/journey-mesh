@@ -2,3 +2,5 @@ packages:
   - "packages/*"
   - "examples/*"
   - "vendor/*"
+  # Only this app: apps/web is a separately versioned npm project.
+  - "apps/report-renderer"
