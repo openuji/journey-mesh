@@ -5,9 +5,9 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { executionDescriptor, runJourney, type JourneyPlan } from "@openuji/journey-runner";
-import { fileArtifactStore } from "@openuji/journey-reporter";
-import { axeReporter } from "../src/reporter.js";
-import { axeObserver } from "../src/index.js";
+import { playwrightAdapterName } from "@openuji/journey-adapter-playwright";
+import { fileEvidenceStore } from "@openuji/journey-run-record/node";
+import { axeAdapterName, axeObserver, isAxeOutput } from "../src/index.js";
 import { collectAxeEvidence } from "../src/observer/collect-evidence.js";
 
 test("excluded phases append frozen not-applicable evidence before capture or audit", async () => {
@@ -48,9 +48,9 @@ test("excluded phases append frozen not-applicable evidence before capture or au
   assert.ok(Object.isFrozen(evidence.notApplicable));
 });
 
-test("axe writes standalone artifacts without Playwright TestInfo or example fixtures", async () => {
+test("axe captures standalone evidence without Playwright TestInfo, example fixtures, or any report output", async () => {
   const directory = await mkdtemp(join(tmpdir(), "journey-axe-"));
-  const artifacts = fileArtifactStore(directory);
+  const artifacts = fileEvidenceStore(directory, "tests/standalone/files");
   const operation = {
     id: "state", sequence: 0, kind: "state",
     actorId: "actor", touchpointId: "touchpoint",
@@ -60,7 +60,7 @@ test("axe writes standalone artifacts without Playwright TestInfo or example fix
   const plan = { id: "standalone-plan", operations: [operation] } as unknown as JourneyPlan;
   const profile = { id: "standalone" };
   const execution = executionDescriptor({ plan, profile, runId: "standalone", executionId: "standalone" });
-  const observer = axeObserver({ artifacts, reportId: "standalone", sourceScreenshots: { states: true } });
+  const observer = axeObserver({ artifacts, reportId: "standalone", sourceScreenshots: { states: true }, now: () => "2026-11-19" });
   await observer.onExecutionStarted!({ execution });
   await observer.observeOperation!({
     stage: "state-asserted", execution, operation, expectedMatchCount: 0, locator: {} as never,
@@ -71,12 +71,14 @@ test("axe writes standalone artifacts without Playwright TestInfo or example fix
     adapter: { name: "fixture", createExecution() { return { start() {}, close() {}, openEntry() {}, assertState() {}, performTransition() {}, recordControlFlow() {} }; } }
   });
   const output = observer.output(result);
-  // An unmatched surface cannot be audited: the journey map shows the node as skipped.
-  assert.deepEqual(output.nodes?.map((node) => [node.executionId, node.operationId, node.metrics.kind]), [["standalone", "state", "skipped"]]);
-  assert.ok(!artifacts.files.some((file) => file.contentType === "text/html"));
-  await axeReporter().report({ bundle: { kind: "test", id: "standalone", segments: [], views: {}, result, plan, outputs: [output], reportingErrors: [], artifacts: artifacts.files }, artifacts });
-
-  assert.ok(artifacts.files.some((file) => file.name.includes("standalone") && file.href.endsWith(".html")));
-  assert.ok(artifacts.files.some((file) => file.href.endsWith(".png")));
+  assert.ok(isAxeOutput(output));
+  assert.deepEqual(Object.keys(output).sort(), ["errors", "evidence", "id", "kind", "measurements"]);
+  assert.deepEqual(Object.keys(output.evidence).sort(), ["createdAt", "journal", "reportId", "wcagTags"]);
+  assert.equal(output.evidence.journal.length, 2);
+  assert.deepEqual(artifacts.files.map((file) => [file.href, file.contentType]), [["tests/standalone/files/standalone-000-state.source.playwright-screenshot.png", "image/png"]]);
   for (const file of artifacts.files) await access(join(directory, file.href));
+});
+
+test("the adapter name in the evidence entry matches the Playwright adapter", () => {
+  assert.equal(axeAdapterName, playwrightAdapterName);
 });

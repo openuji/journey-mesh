@@ -9,12 +9,13 @@
   },
   "types": "./src/index.ts",
   "dependencies": {
+    "@openuji/journey-host": "workspace:*",
+    "@openuji/journey-run-record": "workspace:*",
     "@openuji/journey-reporter": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
-    "@openuji/journey-host": "workspace:*",
+    "@openuji/journey-plugin": "workspace:*",
     "tsx": "^4.20.3",
-    "yaml": "2.9.1",
-    "@openuji/journey-plugin": "workspace:*"
+    "yaml": "2.9.1"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

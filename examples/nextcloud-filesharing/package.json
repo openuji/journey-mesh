@@ -19,7 +19,8 @@
     "@openuji/journey-cli": "workspace:*",
     "@openuji/journey-host": "workspace:*",
     "@openuji/journey-observer-ux": "workspace:*",
-    "@openuji/journey-reporter": "workspace:*"
+    "@openuji/journey-report-axe": "workspace:*",
+    "@openuji/journey-report-android": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.20.3"
@@ -27,12 +28,7 @@
   "scripts": {
     "e2e": "journey-mesh test mesh.yaml --test browser-sharing",
     "e2e:headed": "HEADLESS=false journey-mesh test mesh.yaml --test browser-sharing",
-    "e2e:report": "journey-mesh report test-results",
-    "stack:provision": "sh deployment/scripts/provision.sh",
-    "stack:reset": "sh deployment/scripts/reset.sh",
-    "stack:seed": "sh deployment/scripts/seed.sh",
-    "stack:up": "sh deployment/scripts/up.sh",
-    "stack:up:android": "sh deployment/scripts/up.sh --android",
+    "e2e:report": "pnpm --filter @openuji/report-renderer serve test-results",
     "e2e:android": "journey-driver-android android check mesh.yaml --require-locale en-US && journey-mesh test mesh.yaml --test native-recipient-sharing",
     "android:check": "journey-driver-android android check mesh.yaml --require-locale en-US",
     "android:up": "pnpm run android:check && journey-mesh services up mesh.yaml --service android",
@@ -42,6 +38,7 @@
     "journey:test": "journey-mesh test mesh.yaml",
     "journey:validate": "journey-mesh validate mesh.yaml",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
-    "test": "node --test deployment/*.test.mjs && node --import tsx --test test/*.test.ts"
+    "test": "node --import tsx --test test/*.test.ts",
+    "e2e:report:markdown": "pnpm --filter @openuji/report-renderer markdown test-results"
   }
 }

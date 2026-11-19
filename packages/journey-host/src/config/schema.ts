@@ -1,6 +1,5 @@
-import { knownOptions, optionalString, optionsObject, requiredString, stringArray, reportFileLimit } from "@openuji/journey-plugin";
+import { knownOptions, optionalString, optionsObject, requiredString, stringArray } from "@openuji/journey-plugin";
 import { JourneyConfigError } from "./errors.js";
-import type { JourneyReportOptions, SuiteReportOptions } from "@openuji/journey-plugin";
 
 /** A plugin reference. `use` and `options` may contain `${VAR}` and are interpolated only when selected. */
 export type ComponentConfig = Readonly<{ use: string; options: Readonly<Record<string, unknown>> }>;
@@ -27,17 +26,14 @@ export type TestConfig = Readonly<{
   profiles: readonly ProfileCombinationConfig[];
   environment?: ComponentConfig;
   timeoutMs?: number | string;
-  report?: JourneyReportOptions;
-  reporters: readonly ComponentConfig[];
   services: readonly string[];
 }>;
 export type SuiteConfig = Readonly<{
   kind: "suite";
   target?: ServiceOutputRef;
-  /** Name of the system under test, shown in reports and comparisons. */
+  /** Name of the system under test, recorded with the run. */
   label?: string;
   outputDir?: string;
-  report?: SuiteReportOptions;
   envFiles: readonly EnvFileConfig[];
   model: ComponentConfig;
   adapters: Readonly<Record<string, AdapterConfig>>;
@@ -45,8 +41,13 @@ export type SuiteConfig = Readonly<{
   services: Readonly<Record<string, ServiceConfig>>;
   /** In YAML declaration order. */
   tests: readonly TestConfig[];
-  reporters: readonly ComponentConfig[];
 }>;
+
+/**
+ * `report` sections (suite and test level) belong to the reporting layer, which parses them itself.
+ * The host accepts the key so one file can configure both, but never reads it.
+ */
+const reportingSection = "report";
 
 const known = (value: Record<string, unknown>, keys: readonly string[], label: string) => {
   for (const key of Object.keys(value)) if (!keys.includes(key)) throw new Error(`Unknown setting ${label}.${key}`);
@@ -65,18 +66,9 @@ function component(value: unknown, label: string, extra: readonly string[] = [])
   return { ...raw, use: requiredString(raw.use, `${label}.use`), options: optionsObject(raw.options ?? {}, `${label}.options`) };
 }
 
-function reportOptions(value: unknown, label: string, suite = false): SuiteReportOptions | undefined {
-  if (value === undefined) return undefined;
-  const raw = optionsObject(value, label);
-  known(raw, ["excludedPhaseIds", ...(suite ? ["maxFileSizeMiB"] : [])], label);
-  if (raw.maxFileSizeMiB !== undefined) reportFileLimit(raw.maxFileSizeMiB);
-  return { excludedPhaseIds: raw.excludedPhaseIds === undefined ? [] : stringArray(raw.excludedPhaseIds, `${label}.excludedPhaseIds`),
-    ...(raw.maxFileSizeMiB === undefined ? {} : { maxFileSizeMiB: raw.maxFileSizeMiB as number }) };
-}
-
-function test(id: string, value: unknown, suite: Pick<SuiteConfig, "adapters" | "profiles" | "services" | "report">): TestConfig {
+function test(id: string, value: unknown, suite: Pick<SuiteConfig, "adapters" | "profiles" | "services">): TestConfig {
   const raw = optionsObject(value, `tests.${id}`);
-  known(raw, ["journeys", "profiles", "environment", "timeoutMs", "reporters", "services", "report"], `tests.${id}`);
+  known(raw, ["journeys", "profiles", "environment", "timeoutMs", "services", reportingSection], `tests.${id}`);
   const journeys = list(raw.journeys, `tests.${id}.journeys`).map((item, index): JourneyItemConfig => {
     const label = `tests.${id}.journeys[${index}]`;
     const journey = optionsObject(item, label);
@@ -118,11 +110,8 @@ function test(id: string, value: unknown, suite: Pick<SuiteConfig, "adapters" | 
     return name;
   });
   if (raw.timeoutMs !== undefined && typeof raw.timeoutMs !== "number" && typeof raw.timeoutMs !== "string") throw new Error(`tests.${id}.timeoutMs must be a number`);
-  const report = raw.report === undefined ? (suite.report ? { excludedPhaseIds: suite.report.excludedPhaseIds } : undefined) : reportOptions(raw.report, `tests.${id}.report`);
   return {
     id, journeys, profiles, services,
-    ...(report ? { report } : {}),
-    reporters: list(raw.reporters, `tests.${id}.reporters`).map((item, index) => component(item, `tests.${id}.reporters[${index}]`)),
     ...(raw.environment !== undefined ? { environment: component(raw.environment, `tests.${id}.environment`) } : {}),
     ...(raw.timeoutMs !== undefined ? { timeoutMs: raw.timeoutMs as number | string } : {})
   };
@@ -130,7 +119,7 @@ function test(id: string, value: unknown, suite: Pick<SuiteConfig, "adapters" | 
 
 /** The only place raw YAML becomes typed configuration; every unknown key is rejected. */
 export function parseSuiteConfig(raw: Record<string, unknown>, testOrder: readonly string[]): SuiteConfig {
-  known(raw, ["kind", "label", "outputDir", "envFiles", "model", "adapters", "profiles", "services", "tests", "reporters", "target", "report"], "configuration");
+  known(raw, ["kind", "label", "outputDir", "envFiles", "model", "adapters", "profiles", "services", "tests", "target", reportingSection], "configuration");
   if (raw.kind !== "suite") throw new Error("Configuration kind must be suite");
   const adapters = record(raw.adapters, "adapters", (value, name): AdapterConfig => {
     const adapter = component(value, `adapters.${name}`, ["driver", "observers"]);
@@ -163,8 +152,7 @@ export function parseSuiteConfig(raw: Record<string, unknown>, testOrder: readon
     if (item.path === undefined && item.env === undefined) throw new Error(`envFiles[${index}] needs path or env`);
     return { ...(item.path !== undefined ? { path: requiredString(item.path, "envFiles.path") } : {}), ...(item.env !== undefined ? { env: requiredString(item.env, "envFiles.env") } : {}), ...(item.optional === true ? { optional: true } : {}) };
   });
-  const report = reportOptions(raw.report, "report", true);
-  const suite = { adapters, profiles, services, report };
+  const suite = { adapters, profiles, services };
   const tests = testOrder.map((id) => {
     try { return test(id, (raw.tests as Record<string, unknown>)[id], suite); }
     // A structural error is not fixed by selecting another test, so no alternatives are offered.
@@ -172,8 +160,6 @@ export function parseSuiteConfig(raw: Record<string, unknown>, testOrder: readon
   });
   return Object.freeze({
     kind: "suite", ...(target ? { target } : {}), envFiles, model: component(raw.model, "model"), adapters, profiles, services, tests,
-    ...(report ? { report } : {}),
-    reporters: list(raw.reporters, "reporters").map((item, index) => component(item, `reporters[${index}]`)),
     ...(raw.label !== undefined ? { label: requiredString(raw.label, "label") } : {}),
     ...(raw.outputDir !== undefined ? { outputDir: optionalString(raw.outputDir, "outputDir") } : {})
   });

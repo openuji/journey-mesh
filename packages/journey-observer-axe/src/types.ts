@@ -20,7 +20,6 @@ export type AxeNode = AxeRuleResult["nodes"][number];
 export type AxeAuditMetadata = JsonObject;
 export type AxeAuditScanId = "page-state" | "matched-surface";
 export type AxeRuleResultType = "violation" | "incomplete";
-export type AxePathAuditItemStatus = "audited" | "skipped" | "not-applicable";
 
 export type AxeAuditSummary = {
   violations: number;
@@ -69,129 +68,6 @@ export type AxeAuditReport = Immutable<{
   };
 }>;
 
-export type AxePathAuditFindingNode = {
-  nodeIndex: number;
-  target: string[];
-  failureSummary?: string;
-  htmlHref: string;
-};
-
-export type AxePathAuditFinding = {
-  type: AxeRuleResultType;
-  scanId: AxeAuditScanId;
-  ruleId: string;
-  impact?: string;
-  help: string;
-  helpUrl: string;
-  description: string;
-  nodes: AxePathAuditFindingNode[];
-};
-
-export type AxePathAuditFindings = {
-  violations: AxePathAuditFinding[];
-  incomplete: AxePathAuditFinding[];
-};
-
-export type AxePathAuditItem = Immutable<{
-  itemId: string;
-  groupId?: string;
-  groupLabel?: string;
-  status: AxePathAuditItemStatus;
-  reason?: string;
-  metadata: AxeAuditMetadata;
-  auditId?: string;
-  createdAt?: string;
-  url?: string;
-  strict?: boolean;
-  wcagTags?: string[];
-  sourceJsonHref?: string;
-  sourceHtmlHref?: string;
-  sourceScreenshotHref?: string;
-  sourceScreenshotError?: string;
-  summary?: AxeAuditSummary;
-  scanSummaries?: AxeAuditScanSummaries;
-  findings?: AxePathAuditFindings;
-}>;
-
-export type AxePathAuditSummary = {
-  items: number;
-  audited: number;
-  skipped: number;
-  notApplicable: number;
-  violations: number;
-  incomplete: number;
-  passes: number;
-  inapplicable: number;
-  scanSummaries: AxeAuditScanSummaries;
-};
-
-export type AxePathAuditReport = Immutable<{
-  format: "journey-mesh/axe-path";
-  reportId: string;
-  createdAt: string;
-  wcagTags: string[];
-  metadata: AxeAuditMetadata;
-  summary: AxePathAuditSummary;
-  items: AxePathAuditItem[];
-}>;
-
-export type AxeAccessibilitySummaryEntry = {
-  id: string;
-  itemId: string;
-  auditId: string | null;
-  status: AxePathAuditItemStatus;
-  summary: AxeAuditSummary;
-  metrics: {
-    pageState: AxeAuditSummary;
-    matchedSurface: AxeAuditSummary;
-  };
-  sourceHtmlHref: string;
-  sourceScreenshotHref?: string;
-  reason?: string;
-  additionalItems?: AxeAccessibilitySummaryEntry[];
-};
-
-export type AxeAccessibilitySummaryProfile = {
-  states: Record<string, AxeAccessibilitySummaryEntry>;
-  transitions: Record<string, AxeAccessibilitySummaryEntry>;
-};
-
-export type AxeAccessibilitySummaryReport = Immutable<{
-  format: "journey-mesh/accessibility-summary";
-  generatedAt: string;
-  source: {
-    reportId: string;
-    reportMode: string;
-    reportCreatedAt: string;
-    aggregateHtmlHref: string;
-    summary: AxePathAuditSummary;
-  };
-  states?: Record<string, AxeAccessibilitySummaryEntry>;
-  transitions?: Record<string, AxeAccessibilitySummaryEntry>;
-  profiles?: Record<string, AxeAccessibilitySummaryProfile>;
-}>;
-
-export type AxePathAuditItemInput = Immutable<
-  | {
-      itemId: string;
-      groupId?: string;
-      groupLabel?: string;
-      metadata?: AxeAuditMetadata;
-      report: AxeAuditReport;
-      sourceScreenshotHref?: string;
-      sourceScreenshotError?: string;
-    }
-  | {
-      itemId: string;
-      groupId?: string;
-      groupLabel?: string;
-      metadata?: AxeAuditMetadata;
-      status: "skipped" | "not-applicable";
-      reason: string;
-      sourceScreenshotHref?: string;
-      sourceScreenshotError?: string;
-    }>;
-
 export type AxeAuditRunnerInput = {
   page: Page;
   resolvedLocator: Locator;
@@ -219,13 +95,13 @@ export type AxeObserverOptions = {
     timeoutMs?: number;
   };
   auditRunner?: AxeAuditRunner;
-  /** Clock for report timestamps; injectable for deterministic output. */
+  /** Clock for evidence timestamps; injectable for deterministic output. */
   now?: () => string;
 };
 
 export type AxeObserver = PlaywrightExecutionObserver & {
   readonly evidence: readonly AxeEvidence[];
-  output(result: RunResult): import("@openuji/journey-core").JourneyObserverOutput;
+  output(result: RunResult): import("./output.js").AxeObserverOutput;
 };
 
 export type AxeJourneyOperation = Immutable<PlaywrightOperationObservation["operation"]>;
@@ -237,8 +113,3 @@ export type AxeJourneyItem = Immutable<{
   groupLabel: string;
   metadata: AxeAuditMetadata;
 }>;
-
-export type AxePathSourceScreenshotFields = {
-  sourceScreenshotHref?: string;
-  sourceScreenshotError?: string;
-};

@@ -1,14 +1,12 @@
-import { immutableSnapshot, type JourneyObserverOutput, type JourneyMeasurement } from "@openuji/journey-core";
-import { observerName, wcag22Tags } from "../constants.js";
+import { immutableSnapshot, type JourneyMeasurement } from "@openuji/journey-core";
+import { axeAuditFormat, axeObserverKind, observerName, wcag22Tags } from "../constants.js";
 import type { AxeObserver, AxeObserverOptions } from "../types.js";
 import { runAxeAudit } from "../audit/run-axe-audit.js";
-import { axeNodeSummaries, buildAxeObservedPathReport, strictAxeFailureReports } from "../reporting/observed-path-report.js";
-import { axeFailureMessage } from "../audit/strict-mode.js";
+import { axeFailureMessage, strictAxeFailureReports } from "../audit/strict-mode.js";
 import { collectAxeEvidence } from "./collect-evidence.js";
 import { AxeEvidenceJournal } from "./evidence-journal.js";
-import { writeJsonDocument } from "@openuji/journey-plugin";
-import { auditJsonFileName } from "../artifacts/report-file-names.js";
-import { linkedAxeJournal } from "../output.js";
+import { auditJsonFileName } from "../artifacts/file-names.js";
+import { linkedAxeJournal, type AxeObserverOutput } from "../output.js";
 
 export function axeObserver(options: AxeObserverOptions): AxeObserver {
   const config = Object.freeze({ ...options, excludedPhaseIds: Object.freeze([...(options.excludedPhaseIds ?? [])]) });
@@ -21,16 +19,15 @@ export function axeObserver(options: AxeObserverOptions): AxeObserver {
       let evidence = await collectAxeEvidence(observation, config, config.auditRunner ?? runAxeAudit);
       if ("audit" in evidence && evidence.audit.kind === "completed") {
         const { runId, executionId, profileId, operation } = evidence;
-        const artifact = await writeJsonDocument(config.artifacts, { name: auditJsonFileName(evidence.audit.report.auditId), value: evidence.audit.report,
-          scope: { runId, executionId, profileId, operationId: operation.id } });
+        const artifact = await config.artifacts.write({ name: auditJsonFileName(evidence.audit.report.auditId), data: JSON.stringify(evidence.audit.report),
+          contentType: "application/json", format: axeAuditFormat, scope: { runId, executionId, profileId, operationId: operation.id } });
         evidence = { ...evidence, audit: { ...evidence.audit, document: { href: artifact.href } } };
       }
       journal.append({ kind: "operation-observed", evidence });
       if ("audit" in evidence && evidence.audit.kind === "failed") throw Object.assign(new Error(evidence.audit.error.message), evidence.audit.error);
     },
-    output(result): JourneyObserverOutput {
+    output(result): AxeObserverOutput {
       const evidence = journal.snapshot();
-      const pathReport = buildAxeObservedPathReport({ reportId: config.reportId, createdAt: (config.now ?? (() => new Date().toISOString()))(), result, evidence, wcagTags: config.tags ?? wcag22Tags, metadata: config.metadata });
       const measurements: JourneyMeasurement[] = [];
       for (const execution of result.evidence.executions) {
         const reports = evidence.flatMap((fact) => fact.kind === "operation-observed" && fact.evidence.runId === result.runId && fact.evidence.executionId === execution.executionId && "audit" in fact.evidence && fact.evidence.audit.kind === "completed" ? [fact.evidence.audit.report] : []);
@@ -39,7 +36,10 @@ export function axeObserver(options: AxeObserverOptions): AxeObserver {
           measurements.push({ id: `axe/${scan}/${category}`, label: `${scan === "pageState" ? "Page" : "Scoped"} axe ${category} across scans`, method: `axe-rule-results/${scan}/${(config.tags ?? wcag22Tags).join(",")}`, unit: "rule-result", aggregation: "sum-across-scans", scope: { runId: result.runId, executionId: execution.executionId, profileId: execution.profileId, operationIds: execution.operations.map((op) => op.operationId) }, status: !reports.length ? "unavailable" : complete ? "available" : "partial", value: reports.length ? reports.reduce((sum, report) => sum + report.scans[scan][category].length, 0) : null, ...(!reports.length ? { reason: "No completed axe scans." } : !complete ? { reason: "Execution ended before all scans completed." } : {}) });
         }
       }
-      return immutableSnapshot({ id: config.reportId, kind: "axe", measurements, nodes: axeNodeSummaries(pathReport), evidence: { journal: linkedAxeJournal(evidence), pathReport }, errors: strictAxeFailureReports(evidence, result.runId).map((report) => ({ name: "AxeStrictError", message: axeFailureMessage(report) })) });
+      const recorded = { reportId: config.reportId, createdAt: (config.now ?? (() => new Date().toISOString()))(), wcagTags: [...(config.tags ?? wcag22Tags)],
+        ...(config.metadata ? { metadata: config.metadata } : {}), journal: linkedAxeJournal(evidence) };
+      return immutableSnapshot({ id: config.reportId, kind: axeObserverKind, measurements, evidence: recorded,
+        errors: strictAxeFailureReports(evidence, result.runId).map((report) => ({ name: "AxeStrictError", message: axeFailureMessage(report) })) });
     }
   };
 }

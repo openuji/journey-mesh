@@ -1,15 +1,22 @@
 import type { JourneyObserverOutput } from "@openuji/journey-core";
 import type { AndroidAccessibilityEvidence } from "./evidence.js";
-import type { AndroidAccessibilityReport } from "./report.js";
+import { androidAccessibilityKind } from "./classify.js";
 
-/** What the Android accessibility observer contributes to a test bundle. */
+/** What the Android accessibility observer records for a test: capture settings and the journal. */
+export type AndroidRecordedEvidence = Readonly<{
+  reportId: string;
+  createdAt: string;
+  strict: boolean;
+  journal: readonly AndroidAccessibilityEvidence[];
+}>;
+
 export type AndroidAccessibilityObserverOutput = JourneyObserverOutput & {
-  kind: "android-accessibility";
-  evidence: Readonly<{ journal: readonly AndroidAccessibilityEvidence[]; report: AndroidAccessibilityReport }>;
+  kind: typeof androidAccessibilityKind;
+  evidence: AndroidRecordedEvidence;
 };
 
-/** Saved bundles are plain JSON: check the shape before the reporter relies on it. */
+/** Recorded outputs are plain JSON: check the shape before relying on it. */
 export function isAndroidAccessibilityOutput(output: JourneyObserverOutput): output is AndroidAccessibilityObserverOutput {
-  const evidence = output.evidence as { journal?: unknown; report?: { format?: unknown } } | null;
-  return output.kind === "android-accessibility" && !!evidence && Array.isArray(evidence.journal) && evidence.report?.format === "journey-mesh/android-accessibility";
+  const evidence = output.evidence as Partial<AndroidRecordedEvidence> | null;
+  return output.kind === androidAccessibilityKind && !!evidence && Array.isArray(evidence.journal) && typeof evidence.reportId === "string";
 }

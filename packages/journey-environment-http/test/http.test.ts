@@ -27,7 +27,7 @@ test("HTTP fixtures capture native values, encode paths, assert subsets, isolate
       ] }] }
     };
     const reports: string[] = [];
-    const env = httpEnvironment(options, { maxFileBytes: 5 * 1024 * 1024, files: [], read: async () => new Uint8Array(), write: async (item) => {
+    const env = httpEnvironment(options, { files: [], read: async () => new Uint8Array(), write: async (item) => {
       reports.push(String(item.data)); return { name: item.name, href: item.name, contentType: item.contentType };
     } });
     for (const id of ["first", "second"]) {

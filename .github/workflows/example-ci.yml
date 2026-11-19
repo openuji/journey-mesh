@@ -41,23 +41,10 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm --filter @openuji/journey-adapter-playwright exec playwright install --with-deps chromium
 
-      - name: Start Nextcloud stack
-        run: pnpm --filter @openuji/example-nextcloud-filesharing stack:up
-
-      - name: Provision Nextcloud stack
-        run: pnpm --filter @openuji/example-nextcloud-filesharing stack:provision
-
-      - name: Seed Nextcloud stack
-        run: pnpm --filter @openuji/example-nextcloud-filesharing stack:seed
-
       - name: Run Nextcloud filesharing example
         env:
           UJG_EXAMPLE_TIMEOUT_MS: 600000
         run: pnpm --filter @openuji/example-nextcloud-filesharing e2e
-
-      - name: Reset Nextcloud stack
-        if: always()
-        run: pnpm --filter @openuji/example-nextcloud-filesharing stack:reset
 
       - name: Upload Journey Mesh artifacts
         if: always()

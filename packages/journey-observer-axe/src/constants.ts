@@ -8,3 +8,12 @@ export const wcag22Tags = [
 
 export const axeScopeAttribute = "data-axe-audit-scope";
 export const observerName = "@openuji/journey-observer-axe";
+/** `JourneyObserverOutput.kind` of this observer. */
+export const axeObserverKind = "axe";
+/** `format` of raw audit evidence files (`<auditId>.axe.json`). */
+export const axeAuditFormat = "journey-mesh/axe-audit";
+/**
+ * The adapter this observer observes. Kept as a literal so evidence consumers need no browser runtime;
+ * a test checks it equals `playwrightAdapterName`.
+ */
+export const axeAdapterName = "@openuji/journey-adapter-playwright";

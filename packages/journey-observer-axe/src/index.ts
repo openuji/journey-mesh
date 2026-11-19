@@ -5,40 +5,8 @@ export { buildAxeAuditReport } from "./audit/audit-report.js";
 export {
   axeFailureMessage,
   isAxeStrict,
-  shouldFailForAxeViolations
+  shouldFailForAxeViolations,
+  strictAxeFailureReports
 } from "./audit/strict-mode.js";
-export { buildAxePathAuditReport } from "./reporting/path-audit-report.js";
-export { buildAxeAccessibilitySummaryReport } from "./reporting/accessibility-summary-report.js";
-export { axeNodeSummaries, buildAxeObservedPathReport, buildAxePathItems } from "./reporting/observed-path-report.js";
-export { isAxeOutput } from "./output.js";
-export type { AxeObserverOutput } from "./output.js";
-export type { AxeEvidence, AxeOperationEvidence, AxeAuditEvidence, AxeScreenshotEvidence } from "./observer/evidence.js";
-
-export type {
-  AxeAccessibilitySummaryEntry,
-  AxeAccessibilitySummaryProfile,
-  AxeAccessibilitySummaryReport,
-  AxeAuditMetadata,
-  AxeAuditReport,
-  AxeAuditRunner,
-  AxeAuditRunnerInput,
-  AxeAuditScanId,
-  AxeAuditScanSummaries,
-  AxeAuditSummary,
-  AxeNode,
-  AxeNodeEvidence,
-  AxeObserver,
-  AxeObserverOptions,
-  AxePathAuditFinding,
-  AxePathAuditFindingNode,
-  AxePathAuditFindings,
-  AxePathAuditItem,
-  AxePathAuditItemInput,
-  AxePathAuditItemStatus,
-  AxePathAuditReport,
-  AxePathAuditSummary,
-  AxeResults,
-  AxeRuleResult,
-  AxeRuleResultType,
-  AxeScanEvidence
-} from "./types.js";
+export * from "./evidence.js";
+export type { AxeAuditRunner, AxeAuditRunnerInput, AxeObserver, AxeObserverOptions } from "./types.js";

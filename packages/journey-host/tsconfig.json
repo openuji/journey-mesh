@@ -20,7 +20,7 @@
       "path": "../journey-core/tsconfig.json"
     },
     {
-      "path": "../journey-reporter/tsconfig.json"
+      "path": "../journey-run-record/tsconfig.json"
     },
     {
       "path": "../journey-plugin"

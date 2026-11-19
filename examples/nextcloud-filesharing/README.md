@@ -24,7 +24,7 @@ Each test first executes explicit Alice and Bob login setup journeys, whose
 operations use `urn:phase:setup`, followed by Alice's offer and Bob's acceptance
 journeys. Accessibility observers journal setup operations as not applicable
 without taking screenshots or auditing them.
-Each test has one shared fixture lifecycle per profile and one report. Native
+Each test has one shared fixture lifecycle per profile and one test record. Native
 bindings come from the checked-in Android model; runtime selection does not
 rewrite them.
 
@@ -51,25 +51,44 @@ command uses Android Studio's bundled Java and Android CLI when standalone SDK
 tools are absent. Linux hosts need working KVM access. Local native execution is
 supported on Apple Silicon and Intel macOS, and x86-64 Linux.
 
-## Start the Nextcloud stack
+## Nextcloud infrastructure
 
-The stack lifecycle owns Docker and the canonical service URLs:
+`mesh.yaml` declares two instances of
+`@openuji/journey-driver-nextcloud/stack/service`. Each test starts its selected
+stack once, runs all profiles, and removes its containers and volumes afterward,
+including after failures and cancellation. The fixture environment creates and
+cleans the shared file per profile; no separate provisioning or seeding command
+is needed.
+
+| Test | Stack host | Alice / Bob ports |
+| --- | --- | --- |
+| `browser-sharing` | `host.docker.internal` | 18081 / 18082 |
+| `native-recipient-sharing` | Explicit `NEXTCLOUD_ANDROID_STACK_HOST` | 18083 / 18084 |
+
+The Compose projects, networks, and volumes are independent. The mixed test's
+Alice browser, Bob Android app, and both containers must reach the native
+stack's canonical host. Set its IPv4 in `deployment/.env` or the shell before
+native validation or execution:
 
 ```sh
-pnpm stack:up
-pnpm stack:provision
-pnpm stack:seed
+export NEXTCLOUD_ANDROID_STACK_HOST=192.168.1.10  # replace with your reachable host IPv4
 ```
 
-`stack:up` starts only the containers and preserves `host.docker.internal` for
-web runs, then writes the effective configuration to `.runtime/stack.env`.
-For Android, use `pnpm stack:up:android` instead: it discovers a host IPv4 address
-reachable from the device and Docker containers. Provisioning creates the users and
-federation configuration; seeding uploads `report.pdf` for Alice.
+On macOS, use the active network interface's IPv4; on Linux with the Android
+emulator, the Docker bridge gateway is suitable. CI supplies that gateway.
+Update the value after changing networks. URLs, trusted domains, redirects, and
+the federated recipient are derived from this one value in YAML.
 
-Set `NEXTCLOUD_STACK_HOST` to a reachable IPv4 address before `stack:up` to
-override discovery. `NEXTCLOUD_STACK_ENV_FILE` can select a complete custom
-environment file. Later stack commands reuse the generated runtime environment.
+Browser runs do not require native configuration. The default browser hostname
+must resolve on the host; on Linux this may require adding
+`127.0.0.1 host.docker.internal` to `/etc/hosts`. Compose supplies the container
+host mapping.
+
+Shared account and database defaults come from `deployment/.env.example`, then
+optional `deployment/.env`; shell values take precedence. The image pin, version,
+project defaults, and port defaults live in `mesh.yaml`. See the
+[deployment guide](deployment/README.md) for overrides and migration from older
+persistent stacks.
 
 ## Run the browser test
 
@@ -101,7 +120,7 @@ pnpm exec journey-mesh test mesh.yaml --test browser-sharing
 
 The test runs both its default and keyboard-only profiles. Set `HEADLESS=false`
 to watch the browsers. `AXE_STRICT=true` enables the browser accessibility
-observer's reporting failure policy.
+observer's strict failure policy (a test verdict, not a report setting).
 
 ## Start the optional native services
 
@@ -203,8 +222,8 @@ and application entry bindings. Selecting an adapter does not translate web
 locators into native ones. See the [native journey model](ujg/filesharing.android.ujg.jsonld)
 and [Android driver](../../packages/journey-driver-nextcloud/src/android.ts).
 
-With the stack, Android, and Appium ready, the execution command still selects
-only the YAML test:
+With `NEXTCLOUD_ANDROID_STACK_HOST` configured and Android and Appium ready,
+select the YAML test; its Nextcloud stack starts automatically:
 
 ```sh
 pnpm exec journey-mesh validate mesh.yaml --test native-recipient-sharing
@@ -213,8 +232,9 @@ pnpm exec journey-mesh test mesh.yaml --test native-recipient-sharing
 
 This runs `default-web-touch-android` and
 `keyboard-only-web-touch-android`. Set `ANDROID_A11Y_STRICT=true` to enable the
-native accessibility observer's reporting failure policy. Omitting `--test`
-selects both configured tests and therefore requires both the web and the native services.
+native accessibility observer's strict failure policy (a test verdict, not a report setting). Omitting `--test`
+selects both configured tests, starts both Nextcloud stacks, and requires the
+native host, Android, and Appium configuration.
 
 From the repository root, the same selections are:
 
@@ -233,16 +253,12 @@ pnpm android:down
 ```
 
 These commands stop only the processes recorded for this example. They retain
-the AVD, Android SDK packages, APK, Appium cache, reports, and Nextcloud data.
+the AVD, Android SDK packages, APK, Appium cache, and reports.
 `ANDROID_AVD_NAME=another-dedicated-avd pnpm android:down` stops a named override.
 
-To delete the Nextcloud containers and their service volumes, run:
-
-```sh
-pnpm stack:reset
-```
-
-This is a destructive backend reset; reports and Android assets are retained.
+Nextcloud containers and volumes are removed by the test's service lifecycle.
+Existing persistent deployments are not adopted or deleted automatically; see
+[the migration instructions](deployment/README.md#migrate-persistent-stacks).
 See [native execution](#run-the-native-recipient-test) for the bindings and
 [evidence and reports](#evidence-and-reports) for evidence limits and review
 status. The CI-only
@@ -293,7 +309,7 @@ sequenceDiagram
     Runner->>Env: Tear down fixtures
   end
   Runner-->>Host: Immutable RunResult
-  Host->>Host: Run reporters and publish indexes
+  Host->>Host: Write the run record (journey-mesh test then derives report/)
 ```
 
 Each applicable profile sets up shared fixtures once and executes its configured
@@ -309,11 +325,11 @@ The web observer captures axe scans and optional source screenshots. The native
 observer captures a redacted UI hierarchy, device metrics, optional screenshots,
 and heuristic accessibility checks. Observers collect evidence at adapter stages
 such as state assertion and transition readiness, retain detached evidence, and
-provide detached outputs after execution. The host saves them in the result
-bundle. The report opens on the journey map, drawn from the same `ujg/*.ujg.jsonld`
-documents that are executed, with outcomes and accessibility metrics on every
-state. Open `test-results/index.html` directly or serve it with `pnpm e2e:report`. The axe and Android reporters write the
-detailed provider reports linked below the map.
+provide detached outputs after execution. The host writes them into the
+[run record](../../docs/run-record.md). `journey-mesh test` then builds the
+[report model](../../docs/report-model.md) with the interpreters configured
+under `report.interpreters`: `@openuji/journey-report-axe` and
+`@openuji/journey-report-android`.
 
 ```mermaid
 flowchart TB
@@ -321,40 +337,56 @@ flowchart TB
   native["Appium observations"] --> android["Hierarchy + metrics<br/>optional screenshots + heuristic checks"]
   axe --> journals["Detached observer evidence"]
   android --> journals
-  journals --> reporting["Configured reporter plugins"]
-  result["Immutable RunResult"] --> reporting
-  result --> base["Functional evidence + summary"]
-  reporting --> artifacts["Per-test artifact store"]
-  base --> artifacts
-  artifacts --> indexes["Test and suite indexes"]
+  result["Immutable RunResult"] --> record[("Run record<br/>run.json, tests/*/run.json, evidence files")]
+  journals --> record
+  record --> interpreters["Report interpreters<br/>(axe, Android)"]
+  interpreters --> model[("Report model<br/>test-results/report/")]
+  model --> viewer["apps/report-renderer<br/>serve / site / markdown"]
 ```
 
-The host collects observer outputs and invokes independently configured reporters sequentially.
-Reporting errors do not rewrite `RunResult`; the configured suite succeeds only
-when execution passes and reporting has no errors. Accessibility strict modes
-record policy errors in observer outputs. Evidence-collection errors during
-execution can fail the operation itself.
+The verdict comes from execution and observer policy alone. Accessibility
+strict modes record policy errors in observer outputs, and evidence-collection
+errors during execution can fail the operation itself. Interpreter or journey
+map problems are report warnings: they never change the verdict.
 
-From the repository root:
+After a test prints `PASS` or `FAIL` and the `Report model:` path, open the
+generated report from this directory:
 
 ```sh
-pnpm exec journey-mesh report examples/nextcloud-filesharing/test-results
+pnpm e2e:report             # pnpm --filter @openuji/report-renderer serve test-results
+pnpm e2e:report:markdown    # pnpm --filter @openuji/report-renderer markdown test-results
 ```
 
-The report root contains `index.html`, `manifest.json`, application assets, and
-`data/` with plans, shared model views, execution records, and observer summaries.
-Each test has a directory such as `test-results/browser-sharing/` for linked
-provider evidence:
+Open <http://127.0.0.1:9323/> in your browser. The same command shows browser
+and native-recipient results, including every profile in the latest run.
+It reads the existing results without starting Nextcloud, Android, Appium, or
+another test run. Stop the viewer with Ctrl-C.
 
-- Raw axe audit documents, path HTML/JSON, accessibility summaries, and screenshots.
-- Native hierarchy XML, screenshots, device metrics, accessibility HTML/JSON,
-  and APK/runtime metadata.
+Alternatively, from the repository root:
 
-Serve the complete directory over HTTP. Reports do not require Playwright Test.
-Files default to a 5 MiB cap, configurable with suite-level
-`report.maxFileSizeMiB`. Structured documents and detail pages are split;
-oversized indivisible assets fail with a size error. Old `bundle.json` reports
-must be regenerated. Accessibility
+```sh
+pnpm --filter @openuji/report-renderer serve examples/nextcloud-filesharing/test-results
+```
+
+The renderer takes the `test-results` directory containing both `report/` and
+the evidence files. If it says the viewer is not built, run `pnpm build` once.
+Use `--port 9324` to select another port.
+
+The run directory contains `run.json` and, per test, `tests/<test>/run.json`
+and `tests/<test>/files/` for evidence:
+
+- Raw axe audit documents (`journey-mesh/axe-audit`) and source screenshots.
+- Native hierarchy XML, screenshots and device metrics.
+
+`report/` holds the derived model, including the axe path report, the
+accessibility summary and the Android report as interpreter data. The viewer
+opens on the journey map, drawn from the same `ujg/*.ujg.jsonld` documents that
+are executed, with outcomes and accessibility metrics on every state.
+
+Reports do not require Playwright Test. To host them, run
+`pnpm --filter @openuji/report-renderer site test-results --out site`; see
+[the renderer](../../apps/report-renderer/README.md) for its hosting limits.
+Accessibility
 findings support review; they do not establish WCAG or TalkBack conformance.
 Native checks use the captured hierarchy and metrics; they do not exercise
 TalkBack navigation or prove what a screen reader announces. Setup operations

@@ -9,7 +9,7 @@ by plugging compatible components together.
 In practice Journey Mesh is a configurable, multi-adapter, sequential journey
 runner: one test composes several journeys (for example Alice in a browser, Bob
 on Android) into one ordered plan, runs it once per interaction profile, and
-saves outcomes and evidence in a single result bundle.
+saves outcomes and evidence in one run record.
 
 ## Problem
 
@@ -38,9 +38,14 @@ flowchart LR
 ```
 
 A composition can use one execution adapter or combine several within one
-journey. It can collect additional evidence through observers and publish it
-through reporters. Each component brings its own capabilities and requirements;
-composition depends on compatible contracts.
+journey. It can collect additional evidence through observers. Each component
+brings its own capabilities and requirements; composition depends on compatible
+contracts.
+
+Running journeys and reporting on them are separate layers with one boundary:
+execution writes a **run record**, and reporting derives a **report model** from
+it. Rendering (HTML viewers, templates, Markdown) consumes that model and lives
+outside the packages. See [architecture](docs/architecture.md).
 
 ### Description to plan
 
@@ -105,7 +110,7 @@ A **service** is infrastructure a test needs, managed independently of any
 single execution: a pinned Nextcloud stack, an Android emulator, an Appium
 server. `JourneyService` exposes `up()`, an optional `down()`, and an optional
 `provenance()` that records what was provided (versions, image digests) in the
-suite bundle.
+run record.
 
 ```mermaid
 flowchart TB
@@ -137,80 +142,67 @@ sees services.
 ### Observation and reporting
 
 ```mermaid
-flowchart TB
-  runner["Journey runner<br/>(runJourney)"] --> result["RunResult<br/>(outcomes, operation evidence)"]
-  runner -.->|lifecycle events| lifecycle["Runner observers — optional<br/>(custom lifecycle logger)"]
-  adapters["Execution adapters<br/>(Playwright, Appium)"] -.->|live observations| capture["Adapter observers — optional<br/>(axe, Android accessibility)"]
-  capture -->|observer outputs| bundle["Result summaries<br/>(manifest.json + semantic chunks)"]
-  result --> bundle
-  bundle --> reporters["Reporters — optional<br/>(axe / Android detail reports)"]
-  bundle --> viewer["Report viewer<br/>(suite, test, journey path, comparison)"]
+flowchart LR
+  subgraph execution["Execution (packages)"]
+    runner["Journey runner<br/>(runJourney)"] --> result["RunResult"]
+    adapters["Execution adapters<br/>(Playwright, Appium)"] -.->|live observations| capture["Observers<br/>(axe, Android accessibility)"]
+  end
+  result --> record[("Run record<br/>run.json + evidence files")]
+  capture -->|journal, measurements, policy errors| record
+  subgraph reporting["Reporting (packages)"]
+    interpreters["Interpreters<br/>(journey-report-axe, -android)"] --> model[("Report model<br/>report/*.json, JSON Schema")]
+  end
+  record --> interpreters
+  model --> viewer["apps/report-renderer<br/>(viewer, static site, Markdown)"]
+  model --> templates["Your templates or frontend"]
 ```
 
-Functional outcomes and operation evidence are part of `RunResult`, even when no
-additional observer is installed. Runner observers receive run and execution
-lifecycle events. Adapter observers receive observations through an
-adapter-specific contract, which may expose live runtime handles.
+**Execution** runs journeys and captures evidence. Observers keep detached
+evidence and return calculated measurements and policy errors (for example axe
+strict mode) through the observer output contract. The host collects them with
+the immutable `RunResult` and writes one [run record](docs/run-record.md):
+`run.json`, one record per test, and the registered evidence files. Nothing in
+execution knows about reports: no presentation data, no HTML, no file-size
+policy. A test's verdict depends only on execution and observer findings.
 
-Observers retain detached evidence and provide calculated measurements through
-the shared observer output contract. The host collects those outputs with the
-immutable `RunResult` into a result bundle; reporters then write
-provider-specific files (for example the axe path report) next to it. Only the
-host writes `manifest.json` and semantic data chunks. References contain no absolute
-paths, so a report directory can be moved or published as is. Reporting errors
-remain separate from execution history. Collection errors during execution can
-still fail the execution.
+**Reporting** reads a run record and nothing else. Observer **interpreters**
+turn recorded evidence into report data: the axe interpreter derives the path
+report, a per-state summary, and journey-map node metrics; the Android
+interpreter derives its evidence report. The reporting layer then joins plan,
+execution, interpreter results and evidence files into the
+[report model](docs/report-model.md): plain JSON below `<run>/report/`,
+described by a JSON Schema. Problems while reporting (a failing interpreter, a
+broken journey map) become report errors and never change a verdict.
 
-The report viewer is a single Vite/React application published next to every
-`manifest.json`; no reporter needs to be configured for it. Its first view is the
-**journey map**: the model's own journey document (actors, touchpoints, phases,
-steps, states) drawn with the vendored journey-path component, with each
-state's outcome and basic metrics in the node footer (`P 3V · 2I`, `S ✓ CLEAN`,
-`SKIPPED`). People who need every finding follow the links below the map to the
-provider reports, such as the axe path report or the Android accessibility
-report. Executed steps, screenshots and measurements stay one click away.
+**Rendering** is entirely an app's concern: what to do with the aggregated data
+(a viewer, a static site, Markdown, your own templates) is decided outside the
+packages. [`apps/report-renderer`](apps/report-renderer) is one such app: an
+interactive viewer (journey map with outcomes and node metrics, profile switch,
+comparisons, axe and Android views), static site publication with its own
+hosting limits, and a Markdown summary. Any template engine or frontend can read
+the same JSON.
 
-Two small contracts feed the map. A model binding may offer `view(source)`, a
-drawable form of a journey source; the UJG binding projects the same `.ujg.jsonld`
-document it executes into the renderer's nested journey document. The host
-embeds that view in the test bundle and records each journey as a **segment**.
-Published reports load their manifests and selected execution data over HTTP;
-open them with `journey-mesh report <directory>` or a static web server. An observer
-may return `nodes` (per operation: `axe` page/surface counts, `native` findings
-and passes, or `skipped`). Raw axe audits are persisted once as linked evidence;
-the viewer uses summaries without loading raw scans.
-
-Report visibility is explicit in the mesh:
+`journey-mesh test` composes both layers: it writes the run record, then builds
+`report/` from the `report:` section of the mesh:
 
 ```yaml
 report:
-  maxFileSizeMiB: 5
   excludedPhaseIds:
     - urn:phase:setup
+  interpreters:
+    - use: "@openuji/journey-report-axe"
+    - use: "@openuji/journey-report-android"
 ```
 
-Phase visibility is inherited by each test. A test may replace it with its own
-`report` setting; `excludedPhaseIds: []` shows every selected journey. Without a
-setting, no phases are excluded. Filtering applies to each journey's modeled
-phase, including when setup and scenario share a document. It changes only the
-map: execution, evidence, and observer policies remain intact. The resolved
-setting is saved in the test bundle so re-publishing needs no mesh or model file.
+The host accepts `report` sections but never reads them. Phase exclusions are
+presentation only: excluded phases still execute and keep their evidence. A test
+may replace them with its own `report.excludedPhaseIds`.
 
-`maxFileSizeMiB` is suite-wide and defaults to 5 MiB (5,242,880 bytes). It caps
-all report files, including evidence, screenshots, HTML, and application assets.
-Positive fractional MiB values are accepted. JSON collections and HTML detail
-pages split at semantic boundaries; indivisible oversized values or files fail
-with a size error. Test-level phase settings do not reset the storage policy.
-The resolved byte limit is saved in the manifest and reused when republishing.
-Comparisons use the smaller limit of their available subjects. See the
-[report storage format](docs/report-storage.md).
-
-The UJG map projection preserves `Persona` nodes as renderer users and retains
-touchpoint relationships. Catalogue documents provide a `JourneyEntryIndex`
-containing the entries to discover; that index introduces no execution order or
-transitions. Invalid map views produce reporting errors and make the suite fail
-without rewriting execution outcomes. The viewer shows the error instead of
-silently replacing the model with an execution-plan diagram.
+A model binding may offer `view(source)`, a snapshot of the model document
+behind a journey source; the host records it with the run, so reports need no
+model sources. The UJG binding projects the `.ujg.jsonld` document it executes
+into the journey-map format, preserving `Persona` nodes and touchpoints.
+Catalogue documents provide a `JourneyEntryIndex` with the entries to discover.
 
 ### Component responsibilities
 
@@ -224,7 +216,7 @@ silently replacing the model with an execution-plan diagram.
 | Environment | Set up shared fixtures, verify effects, and tear down fixtures | Optional |
 | Runner observer | Observe run and execution lifecycle events | Optional |
 | Adapter observer | Collect evidence at the adapter's observation boundary | Optional; must match the adapter contract |
-| Reporter | Publish results and any collected evidence | Optional, after execution |
+| Report interpreter | Derive report data (documents, node metrics) from one observer's recorded evidence | Optional; reporting layer, after execution |
 
 Drivers and live observers follow their adapter's contracts. Input modality IDs
 are open model identifiers; a profile must choose a declared modality that the
@@ -233,8 +225,8 @@ contracts and the selected journey's requirements.
 
 ### Ways to compose a run
 
-**Programmatically:** supply components to `runJourney(...)`, then optionally
-publish a result bundle with `reportJourneyResult(...)` from
+**Programmatically:** supply components to `runJourney(...)`. To report on a
+host run, call `buildReport(runDirectory, { config })` from
 [`journey-reporter`](packages/journey-reporter/src/index.ts). See the
 [runner API](packages/journey-runner/src/index.ts) and
 [execution model](packages/journey-execution-model/src/index.ts).
@@ -248,7 +240,7 @@ flowchart LR
   plugins --> compile["Compile<br/>(compile: journeys → one plan with segments)"]
   compile --> assemble["Assemble<br/>(assemble: adapters, profiles, environment)"]
   assemble --> execute["Execute<br/>(execute: services, runJourney, observer outputs)"]
-  execute --> bundle["Write bundle + viewer"]
+  execute --> record["Write run record"]
 ```
 
 Every selected test is compiled and assembled before anything starts, so a
@@ -261,12 +253,32 @@ observer **automation** compatibility (`playwright`, `appium`). See the
 
 ```sh
 journey-mesh validate mesh.yaml [other.mesh.yaml ...] [--test <id>]
-journey-mesh test mesh.yaml [--test <id>] [--output <dir>]
-journey-mesh compare baseline/manifest.json candidate/manifest.json [--pairings <file>] [--title <text>] [--output <dir>]
-journey-mesh render report-directory [--output <dir>]
-journey-mesh report <dir>
+journey-mesh test mesh.yaml [--test <id>] [--output <dir>] [--no-report]
+journey-mesh report <run-dir> [--config mesh.yaml]          # rebuild report/ from the run record
+journey-mesh export <run-dir> [--output <file>] [--data]    # the report as one JSON value
+journey-mesh compare <baseline-run> <candidate-run> [--pairings <file>] [--title <text>] [--config mesh.yaml] [--output <dir>]
 journey-mesh services up|down mesh.yaml [--service <key>]
 ```
+
+Rendering is done by apps, for example
+[`apps/report-renderer`](apps/report-renderer/README.md):
+`pnpm --filter @openuji/report-renderer serve|site|markdown <run-dir>`.
+
+To view the Nextcloud example's generated results, run this from the repository
+root, then open <http://127.0.0.1:9323/>:
+
+```sh
+pnpm --filter @openuji/report-renderer serve examples/nextcloud-filesharing/test-results
+```
+
+Pass the run directory containing `report/` and the evidence files. Build the
+viewer once with `pnpm build` if needed. The server reads the existing results;
+viewing a report does not run the tests again. Stop it with Ctrl-C, or choose
+another port with `--port 9324`.
+
+`journey-mesh test` exits 0 when every test passed, 1 when a test failed, 2 for
+configuration errors, and 3 when the tests passed but the report could not be
+built.
 
 See [service composition](docs/service-composition.md) to declare a PR source once and compose reusable source, build, and installation routines through named service inputs/outputs. The suite `target` selects the verified installed identity. The [HTTP environment plugin](packages/journey-environment-http/README.md) supplies declarative fixtures and read-only checks of model-declared effects.
 
@@ -289,9 +301,11 @@ export const journeyMeshPlugin = defineObserverPlugin({
 });
 ```
 
-Kinds are `model`, `adapter`, `driver`, `observer`, `profile`, `environment`,
-`service` and `reporter`. Driver and automation contracts are typed, so an
-adapter receives its driver and observers without casts.
+Kinds are `model`, `adapter`, `driver`, `observer`, `profile`, `environment`
+and `service`. Driver and automation contracts are typed, so an adapter receives
+its driver and observers without casts. Reporting extensions are not plugins of
+the run: an observer's report-side code is an interpreter module exporting
+`journeyMeshInterpreter` (see [report model](docs/report-model.md)).
 
 The configuration host and CLI use Node.js. The runner's main entry has no Node
 builtin or automation-runtime imports, and is checked in a restricted VM by the
@@ -302,11 +316,11 @@ optional host tooling, independent of an individual journey execution.
 ## Comparison and reporting
 
 A configuration is a suite (`kind: suite`). It selects a model binding,
-journeys, adapters, profiles, observers, reporters and services, and may name the
-system under test with `label:`.
+journeys, adapters, profiles, observers and services, and may name the system
+under test with `label:`. Its `report` section configures the reporting layer.
 
-A comparison is not a configuration: it is a step over two saved suite runs.
-Run each subject as an ordinary suite, then compare their bundles:
+A comparison is not a configuration: it is a step over two run directories.
+Run each subject as an ordinary suite, then compare them:
 
 ```sh
 journey-mesh validate baseline.mesh.yaml candidate.mesh.yaml   # preflight both before either starts
@@ -315,12 +329,12 @@ journey-mesh test candidate.mesh.yaml
 journey-mesh compare baseline-results candidate-results --output comparison
 ```
 
-`compare` loads no plugins and executes nothing. It copies each subject's
-registered evidence to `subjects/<baseline|candidate>/`, pairs executions with
-equal test and profile IDs, and publishes the comparison bundle with the viewer
-atomically. The comparison shows both journey maps together for the selected
-scenario and profile; each links to its subject's own full report, which is
-published under `subjects/<side>/`. Different IDs need an explicit pairings file:
+`compare` executes nothing. It copies each subject's run record, evidence and
+report to `subjects/<baseline|candidate>/`, pairs executions with equal test and
+profile IDs, and writes the comparison model to `report/report.json` atomically.
+The viewer shows both journey maps together for the selected scenario and
+profile and links to each subject's full report. Different IDs need an explicit
+pairings file:
 
 ```yaml
 - id: same-purpose
@@ -328,9 +342,9 @@ published under `subjects/<side>/`. Different IDs need an explicit pairings file
   candidate: { test: different-journey, profile: keyboard }
 ```
 
-A failed subject keeps its evidence, and a missing subject bundle is reported as
-that subject's error without hiding the other. `compare` exits nonzero when
-either subject did not pass.
+A failed subject keeps its evidence, and a missing subject is reported as that
+subject's error without hiding the other. `compare` exits nonzero when either
+subject did not pass.
 
 Observers own their findings, metric definitions, values, and evidence.
 Numeric differences require matching metric identity, method, unit, aggregation,
@@ -343,10 +357,8 @@ The model binding resolves these during preparation; observers refer to
 can use the same alias names for different model operations. Generic execution,
 measurement, and reporting do not interpret UJG source identifiers.
 
-`journey-mesh render` republishes a saved suite or comparison bundle, with only
-its registered evidence and the viewer, into another directory. Configuration,
-plugin, and report contracts have one current shape, with no version fields or
-legacy readers.
+Publishing a run or comparison as a static site, with hosting limits, is a
+feature of the renderer app, not of the packages.
 
 ## Available integrations and examples
 

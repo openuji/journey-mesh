@@ -1,54 +1,24 @@
 # Journey reporter
 
-Publishing, comparison, and viewing of saved Journey Mesh results. These operations
-load saved data and registered evidence; they do not execute journeys or plugins.
+The reporting layer. It derives aggregated report data from
+[run records](../../docs/run-record.md) and never loads a journey, adapter or
+observer runtime. It never changes a test verdict. It renders and publishes
+nothing; that is up to the apps that consume its
+[report model](../../docs/report-model.md).
 
-- `writeReport(dir, bundle)` publishes a complete directory: `manifest.json`,
-  semantic JSON chunks, linked evidence, and the Vite viewer. It replaces stale
-  output atomically after the new report succeeds.
-- `readReport(dirOrManifest, kinds?)` reconstructs a logical suite or comparison.
-  Provider audit documents remain linked artifacts. `openReport(reader)` loads
-  only the index and provides `loadTest(id, profile?, includeEvidence?)` for lazy
-  consumers. The HTTP viewer does not load provider evidence for maps or metrics.
-- `publishReport(dirOrManifest, outputDir?)` republishes only registered evidence
-  and report data; omitted output means republish in place.
-- `compareBundles({baseline, candidate, outputDir, pairings?, title?})` accepts
-  report directories or manifests. Subjects are complete reports under
-  `subjects/<baseline|candidate>/`; the comparison references their manifests.
-- `testPassed` and `testFailures` provide the shared pass policy.
-- `fileArtifactStore(root, prefix?, maxFileBytes?)` enforces the resolved file
-  limit for every write. `writeJsonDocument` / `readJsonDocument` and
-  `writeHtmlPages` from `@openuji/journey-plugin` provide bounded structured
-  storage and provider pages without provider-specific logic in the host.
+| API | Purpose |
+| --- | --- |
+| `buildReport(runDir, { config })` | Interprets observer evidence and writes `<run>/report/` atomically: `report.json`, `tests/*.json`, `views/*.json` and interpreter `data/` |
+| `loadReportConfig(meshYaml)` / `parseReportConfig(raw)` | The `report:` sections of a suite configuration: `interpreters` and `excludedPhaseIds` (with per-test overrides) |
+| `defineInterpreter(...)` | Writes an observer interpreter, exported as `journeyMeshInterpreter` (subpath `./interpreter`) |
+| `compareRuns({ baseline, candidate, outputDir, pairings?, title? })` | Writes a comparison directory: subjects below `subjects/<side>/`, the comparison model in `report/report.json` |
+| `exportReport(dir, { data })` | Returns the whole report as one plain JSON value |
+| `@openuji/journey-reporter/model` | Browser-safe: model types, `loadReportModel(jsonReader)`, `jsonReader(byteReader)` |
 
-Configure the suite's policy in the mesh:
+`schema/report-model.schema.json` is generated from `src/model/types.ts` with
+`pnpm --filter @openuji/journey-reporter schema`. A test fails when the
+committed schema is out of date.
 
-```yaml
-report:
-  maxFileSizeMiB: 5
-  excludedPhaseIds: [urn:phase:setup]
-```
-
-The default is 5 MiB (5,242,880 bytes). Positive fractional MiB values are allowed.
-Test-level report settings control phase visibility, not storage. Republishing
-uses the saved byte limit; comparisons use the smaller limit of available
-subjects. Structured JSON is repacked when necessary. Opaque files, including
-existing HTML pages and binary assets, must fit the destination limit.
-
-All viewing uses HTTP; deploy the directory to a static host or run:
-
-```sh
-pnpm build
-journey-mesh compare baseline-results candidate-results --output comparison
-journey-mesh report comparison
-journey-mesh render comparison/manifest.json --output published
-```
-
-Legacy `bundle.json` inputs are rejected. Regenerate those runs to use the new
-format. For schema details see [report storage](../../docs/report-storage.md).
-
-For viewer development against a generated report:
-
-```sh
-JOURNEY_REPORT_DIRECTORY=/absolute/path/to/report pnpm --filter @openuji/journey-reporter dev
-```
+CLI: `journey-mesh report <run> [--config mesh.yaml]`,
+`journey-mesh export <run> [--data]`, `journey-mesh compare <a> <b>`.
+Rendering, for example, is in [`apps/report-renderer`](../../apps/report-renderer).

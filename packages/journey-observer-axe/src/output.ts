@@ -1,11 +1,11 @@
-import type { JourneyObserverOutput } from "@openuji/journey-core";
-import type { AxeEvidence, AxeOperationEvidence, AxeAuditEvidence } from "./observer/evidence.js";
-import type { AxePathAuditReport } from "./types.js";
-import type { JsonDocumentRef } from "@openuji/journey-plugin";
+import type { JourneyObserverOutput, Immutable } from "@openuji/journey-core";
+import type { AxeEvidence, AxeOperationEvidence, AxeAuditEvidence, AxeEvidenceRef } from "./observer/evidence.js";
+import type { AxeAuditMetadata } from "./types.js";
+import { axeObserverKind } from "./constants.js";
 
-/** The raw journal stays local to the observer; saved outputs contain audit references. */
+/** The raw journal stays local to the observer; recorded outputs reference the audit evidence files. */
 type LinkedOperation<T> = T extends { audit: AxeAuditEvidence }
-  ? Omit<T, "audit"> & { audit: Exclude<AxeAuditEvidence, { kind: "completed" }> | { kind: "completed"; document: JsonDocumentRef } } : T;
+  ? Omit<T, "audit"> & { audit: Exclude<AxeAuditEvidence, { kind: "completed" }> | { kind: "completed"; document: AxeEvidenceRef } } : T;
 export type LinkedAxeFact = Extract<AxeEvidence, { kind: "execution-started" }>
   | Readonly<{ kind: "operation-observed"; evidence: LinkedOperation<AxeOperationEvidence> }>;
 
@@ -21,14 +21,19 @@ export function linkedAxeJournal(journal: readonly AxeEvidence[]): readonly Link
   });
 }
 
-/** What the axe observer contributes to a test bundle. */
-export type AxeObserverOutput = JourneyObserverOutput & {
-  kind: "axe";
-  evidence: Readonly<{ journal: readonly LinkedAxeFact[]; pathReport: AxePathAuditReport }>;
-};
+/** What the axe observer records for a test: capture settings and the linked journal. */
+export type AxeRecordedEvidence = Readonly<{
+  reportId: string;
+  createdAt: string;
+  wcagTags: readonly string[];
+  metadata?: Immutable<AxeAuditMetadata>;
+  journal: readonly LinkedAxeFact[];
+}>;
 
-/** Saved bundles are plain JSON: check the shape before the reporter relies on it. */
+export type AxeObserverOutput = JourneyObserverOutput & { kind: typeof axeObserverKind; evidence: AxeRecordedEvidence };
+
+/** Recorded outputs are plain JSON: check the shape before relying on it. */
 export function isAxeOutput(output: JourneyObserverOutput): output is AxeObserverOutput {
-  const evidence = output.evidence as { journal?: unknown; pathReport?: unknown } | null;
-  return output.kind === "axe" && !!evidence && Array.isArray(evidence.journal) && !!evidence.pathReport && typeof evidence.pathReport === "object";
+  const evidence = output.evidence as Partial<AxeRecordedEvidence> | null;
+  return output.kind === axeObserverKind && !!evidence && Array.isArray(evidence.journal) && typeof evidence.reportId === "string";
 }

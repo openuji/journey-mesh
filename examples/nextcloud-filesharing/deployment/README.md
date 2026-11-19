@@ -1,50 +1,101 @@
-# Nextcloud Federation Example Stack
+# Nextcloud federation infrastructure
 
-Local infrastructure for the YAML-defined federated file-sharing journey tests.
+The example declares its deployment in [`../mesh.yaml`](../mesh.yaml) using
+`@openuji/journey-driver-nextcloud/stack/service`, the same packaged infrastructure
+used by `journey-checks` jobs. This directory contains Compose, database
+initialization, source environment defaults, and the scenario fixture.
 
-## Topology
-
-- Alice: `http://<runtime-host>:18081`
-- Bob: `http://<runtime-host>:18082`
-- Federated recipient: `bob@http://<runtime-host>:18082`
-
-The instances use one canonical host with separate published ports. `stack:up`
-discovers a host IPv4 address reachable from the host browser, containers, and
-Android, then writes the effective values to `../.runtime/stack.env`. On macOS
-this is a LAN address; on Linux it is normally the Docker bridge gateway.
-Override discovery with `NEXTCLOUD_STACK_HOST=<IPv4>`.
-
-Do not replace the generated URLs with `localhost` or `10.0.2.2`: those names do
-not identify the same host from every participant in the federated journey.
-
-## Start
-
-From the repository root:
-
-```sh
-pnpm --filter @openuji/example-nextcloud-filesharing stack:up
-pnpm --filter @openuji/example-nextcloud-filesharing stack:provision
-pnpm --filter @openuji/example-nextcloud-filesharing stack:seed
-```
-
-The scripts use `deployment/.env` when present and fall back to
-`deployment/.env.example`. Literal `host.docker.internal` values are replaced
-with the discovered runtime host. `NEXTCLOUD_STACK_ENV_FILE` can provide a
-complete source environment; `stack:up` materializes it into the generated
-runtime file so later YAML commands need no shell export.
+| Test service | Default Compose project | Canonical host | Alice / Bob ports |
+| --- | --- | --- | --- |
+| `web-stack` | `journey-mesh-filesharing-web` | `host.docker.internal` | 18081 / 18082 |
+| `android-stack` | `journey-mesh-filesharing-android` | `NEXTCLOUD_ANDROID_STACK_HOST` | 18083 / 18084 |
 
 ## Run
 
-```sh
-pnpm exec journey-mesh test examples/nextcloud-filesharing/mesh.yaml --test browser-sharing
-```
-
-The Journey Mesh HTML index links the functional evidence, axe path reports, and source screenshots under `test-results/<test-id>/`. Tests and their adapters are declared in [`mesh.yaml`](../mesh.yaml).
-
-## Reset
+From `examples/nextcloud-filesharing`:
 
 ```sh
-pnpm --filter @openuji/example-nextcloud-filesharing stack:reset
+pnpm e2e
+
+# Native: set this to a host IPv4 reachable by browser, containers, and emulator.
+export NEXTCLOUD_ANDROID_STACK_HOST=192.168.1.10
+pnpm android:up
+pnpm appium:up
+pnpm e2e:android
 ```
 
-Reset removes the containers, volumes, and generated stack runtime environment.
+`journey-mesh test mesh.yaml --test <id>` preflights the selected test, starts
+its stack, verifies the installed Nextcloud version and image identity,
+provisions accounts and federation settings, and runs every profile. It removes
+its stack's containers and volumes afterward, also after failure or cancellation.
+The host records the stack's credential-free provenance and identity evidence
+under `test-results/`. Validation parses components without starting services.
+
+The federated-sharing environment owns fixture setup, effect checks, and fixture
+cleanup per profile. No separate stack preparation or seeding command is needed.
+Android and Appium remain independently managed by their packaged services.
+
+## Configuration
+
+`envFiles` reads `.env.example`, then optional `.env` in this directory; shell
+values override both. `.runtime/android.env` and `.runtime/appium.env` supply
+native runtime settings. Generated Nextcloud files are never configuration
+inputs.
+
+Set `NEXTCLOUD_ANDROID_STACK_HOST` explicitly in `.env` or the shell for native
+tests. There is no discovery or default address. On macOS use your active
+interface's IPv4; on Linux with the emulator use a reachable host address such as
+Docker's default bridge gateway. CI exports that gateway before running the test.
+After a network change, update the value before the next run. The native browser,
+app, and containers all use the same canonical addresses.
+
+The browser defaults to `host.docker.internal`. It must resolve on the host;
+Linux may need `127.0.0.1 host.docker.internal` in `/etc/hosts`. Compose keeps
+`host.docker.internal:host-gateway` inside the containers. That mapping does not
+configure emulator DNS.
+
+YAML contains the pinned Nextcloud image/version and these overridable defaults:
+
+- `NEXTCLOUD_WEB_STACK_PROJECT`, `NEXTCLOUD_ANDROID_STACK_PROJECT`
+- `NEXTCLOUD_WEB_STACK_HOST` (browser only)
+- `NEXTCLOUD_WEB_ALICE_PORT`, `NEXTCLOUD_WEB_BOB_PORT`
+- `NEXTCLOUD_ANDROID_ALICE_PORT`, `NEXTCLOUD_ANDROID_BOB_PORT`
+
+Shared account and database defaults use the `NEXTCLOUD_ALICE_*`,
+`NEXTCLOUD_BOB_*`, `NEXTCLOUD_ADMIN_*`, and `POSTGRES_*` values in `.env.example`.
+YAML anchors share account and URL values across the stack, drivers, and fixture
+environment. Changing a host or port also changes the federated recipient.
+Projects and published ports must be distinct across concurrent deployments.
+
+The service writes its private Compose environment to
+`.runtime/stacks/<web|android>/stack.env` relative to the example. This file is
+owned by the package runtime and is not read back by the mesh. To change image
+pins, Compose files, or enabled apps, edit the service options in YAML.
+
+## Migrate persistent stacks
+
+The previous example scripts managed persistent projects named
+`ujg-nextcloud-federation` and `ujg-nextcloud-federation-android`. The new managed
+projects have different names and never adopt or delete those deployments.
+Stop any old containers using ports 18081–18084 before running the new tests.
+
+To retain the old volumes, stop the old deployment in Docker Desktop. To inspect
+its containers from the CLI:
+
+```sh
+docker ps --filter label=com.docker.compose.project=ujg-nextcloud-federation \
+  --format '{{.ID}} {{.Names}}'
+docker ps --filter label=com.docker.compose.project=ujg-nextcloud-federation-android \
+  --format '{{.ID}} {{.Names}}'
+```
+
+Use the actual project names if they were overridden. Stop only the selected
+old containers with `docker stop <container-id> ...`; this preserves their
+volumes. The mesh ignores old `compose.env`, `test.env`, `deployment.json`, and
+shared `.runtime/stack.env` files.
+
+The packaged service requires a fresh managed project. Existing containers or
+volumes under a selected managed project cause startup to fail without deleting
+them; choose an unused project name or explicitly remove that project's test
+resources before retrying. Reports, SDKs, APKs, Appium caches, and unrelated
+deployments are retained by normal test cleanup.

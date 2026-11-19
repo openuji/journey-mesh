@@ -1,14 +1,12 @@
 import type {
-  AxeAuditReport,
   AxeJourneyItem,
-  AxeJourneyOperation,
-  AxePathAuditItemInput,
-  AxePathSourceScreenshotFields
+  AxeJourneyOperation
 } from "../types.js";
 import { safeFileSegment } from "../shared/strings.js";
 import { metadataForOperation } from "./operation-metadata.js";
 import { immutableSnapshot } from "@openuji/journey-core";
 
+/** The stable identity of one audited operation: audit and item IDs, grouping, and plan metadata. */
 export function createAxeJourneyItem(
   profileId: string,
   executionId: string,
@@ -23,36 +21,4 @@ export function createAxeJourneyItem(
     groupLabel: `${profileId} ${operation.entry.label ?? operation.entry.id}`,
     metadata: metadataForOperation(profileId, executionId, operation)
   });
-}
-
-export function auditedAxePathItem(
-  journeyItem: AxeJourneyItem,
-  report: AxeAuditReport,
-  screenshots?: AxePathSourceScreenshotFields
-): AxePathAuditItemInput {
-  return {
-    itemId: journeyItem.itemId,
-    groupId: journeyItem.groupId,
-    groupLabel: journeyItem.groupLabel,
-    metadata: journeyItem.metadata,
-    report,
-    ...screenshots
-  };
-}
-
-export function unauditedAxePathItem(
-  journeyItem: AxeJourneyItem,
-  status: "skipped" | "not-applicable",
-  reason: string,
-  screenshots?: AxePathSourceScreenshotFields
-): AxePathAuditItemInput {
-  return {
-    itemId: journeyItem.itemId,
-    groupId: journeyItem.groupId,
-    groupLabel: journeyItem.groupLabel,
-    metadata: journeyItem.metadata,
-    status,
-    reason,
-    ...screenshots
-  };
 }

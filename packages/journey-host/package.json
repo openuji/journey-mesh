@@ -13,7 +13,7 @@
     "@openuji/journey-runner": "workspace:*",
     "yaml": "2.9.1",
     "@openuji/journey-core": "workspace:*",
-    "@openuji/journey-reporter": "workspace:*",
+    "@openuji/journey-run-record": "workspace:*",
     "@openuji/journey-plugin": "workspace:*"
   },
   "devDependencies": {

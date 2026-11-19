@@ -17,5 +17,5 @@ references and measure visibility and viewport containment without interaction.
 An unreached interval is unavailable. An interrupted interval retains its observed
 command count with partial status. Recorded commands remain evidence when later
 assertions fail. Every value is scoped by run, execution, profile, and operation.
-The host collects this output into the result bundle. The report viewer and
+The host records this output in the run record. Reports and
 comparisons consume its measurements without recalculation.

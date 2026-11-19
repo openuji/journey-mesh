@@ -1,8 +1,9 @@
 import { immutableSnapshot } from "@openuji/journey-core";
 import { dirname, resolve } from "node:path";
-import { fileArtifactStore } from "@openuji/journey-reporter";
+import { serviceFilesPrefix } from "@openuji/journey-run-record";
+import { fileEvidenceStore } from "@openuji/journey-run-record/node";
 import type { JourneyArtifactStore, JourneyService, ServicePlugin } from "@openuji/journey-plugin";
-import { sourceIdentityContract, reportFileLimit } from "@openuji/journey-plugin";
+import { sourceIdentityContract } from "@openuji/journey-plugin";
 import { loadSuiteConfig, JourneyConfigError, type LoadedSuiteConfig } from "./config/load.js";
 import type { ServiceConfig } from "./config/schema.js";
 import { pluginContext } from "./plugins/context.js";
@@ -43,7 +44,7 @@ export function orderServices(services: Readonly<Record<string, ServiceConfig>>,
 export async function loadServices(loaded: LoadedSuiteConfig, load: PluginLoader, keys: readonly string[], outputDir: string, checkTarget = false): Promise<LoadedService[]> {
   const result: LoadedService[] = [];
   for (const key of keys) {
-    const artifacts = fileArtifactStore(outputDir, `services/${key}`, reportFileLimit(loaded.config.report?.maxFileSizeMiB));
+    const artifacts = fileEvidenceStore(outputDir, serviceFilesPrefix(key));
     const context = pluginContext({ configPath: loaded.path, env: loaded.env, testId: "service", artifacts });
     const definition = loaded.config.services[key];
     const component = await load("service", definition, `services.${key}`, context);
