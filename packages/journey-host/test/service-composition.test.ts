@@ -56,3 +56,87 @@ test("failed installation cleans up attempted services in reverse order", async 
   const result = await runSuite(s.path); assert.equal(result.ok, false); assert.equal(result.target, undefined);
   assert.deepEqual((await readFile(join(s.directory, "events"), "utf8")).trim().split("\n"), ["source-up", "install-up", "install-down", "source-down"]);
 });
+
+async function inputSetup() {
+  const s = await setup();
+  const adapters = s.config.adapters as Record<string, unknown>;
+  adapters.native = { use: plugin("input-adapter"), inputs: { installed: { service: "install", output: "identity" } } };
+  // The adapter input alone selects the installation and its source.
+  Object.assign(s.config.tests.task, { services: [], journeys: [{ id: "task", source: "model.json", select: "task", adapter: "native" }] });
+  await s.save();
+  return s;
+}
+test("adapter inputs start their services and are readable once an execution starts", async () => {
+  const s = await inputSetup();
+  const result = await runSuite(s.path);
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  assert.equal(result.target?.sourceSha, "a".repeat(40));
+  assert.deepEqual((await readFile(join(s.directory, "events"), "utf8")).trim().split("\n"), [
+    "source-up", "install-up",
+    "configured: installed", `installed: ${"a".repeat(40)}`,
+    "install-down", "source-down"
+  ]);
+});
+test("adapter inputs with an incompatible contract or undeclared name fail preflight", async () => {
+  const s = await inputSetup();
+  Object.assign(s.config, { target: undefined });
+  const adapters = s.config.adapters as unknown as Record<string, { inputs: Record<string, unknown> }>;
+  adapters.native.inputs.installed = { service: "source", output: "source" }; await s.save();
+  await assert.rejects(validateSuite(s.path), /incompatible adapter input adapters\.native\.inputs\.installed/);
+  adapters.native.inputs = { other: { service: "install", output: "identity" } }; await s.save();
+  await assert.rejects(validateSuite(s.path), /adapters\.native\.inputs\.other is not an input of this plugin/);
+  adapters.native.inputs = { installed: { service: "missing", output: "identity" } }; await s.save();
+  await assert.rejects(validateSuite(s.path), /references unknown service missing/);
+  await assert.rejects(access(join(s.directory, "events")));
+});
+test("optional service inputs may be omitted but are still contract-checked", async () => {
+  const s = await setup();
+  const services = s.config.services as Record<string, Record<string, unknown>>;
+  services.combine = { use: plugin("optional-input-service"), inputs: { source: { service: "source", output: "source" } } };
+  Object.assign(s.config, { target: { service: "combine", output: "identity" } });
+  s.config.tests.task.services = ["combine"]; await s.save();
+  assert.equal((await runSuite(s.path)).ok, true);
+  assert.match(await readFile(join(s.directory, "events"), "utf8"), /combine-up sibling=no/);
+  (services.combine.inputs as Record<string, unknown>).sibling = { service: "source", output: "identity" }; await s.save();
+  await assert.rejects(validateSuite(s.path), /incompatible service input services\.combine\.inputs\.sibling/);
+  (services.combine.inputs as Record<string, unknown>).sibling = { service: "source", output: "source" }; await s.save();
+  assert.equal((await runSuite(s.path)).ok, true);
+  assert.match(await readFile(join(s.directory, "events"), "utf8"), /combine-up sibling=yes/);
+});
+
+test("a prepared suite can run twice with fresh inputs, components and evidence stores", async () => {
+  const { prepareSuite, executeSuite } = await import("../src/index.js");
+  const s = await inputSetup();
+  const prepared = await prepareSuite(s.path);
+  assert.ok(Object.isFrozen(prepared.loaded.config));
+  assert.equal("set" in prepared.tests[0].compiled.segments, false);
+  const first = await executeSuite(prepared, { outputDir: join(s.directory, "first") });
+  await writeFile(join(s.directory, "head"), "c".repeat(40));
+  const second = await executeSuite(prepared, { outputDir: join(s.directory, "second") });
+  assert.equal(first.ok, true); assert.equal(second.ok, true);
+  assert.equal(first.target?.sourceSha, "a".repeat(40));
+  assert.equal(second.target?.sourceSha, "c".repeat(40));
+  const events = await readFile(join(s.directory, "events"), "utf8");
+  assert.match(events, new RegExp(`installed: ${"a".repeat(40)}`));
+  assert.match(events, new RegExp(`installed: ${"c".repeat(40)}`));
+});
+
+test("a returned service lease is registered before declared outputs are validated", async () => {
+  const s = await setup();
+  Object.assign(s.config.services.source.options, { missingOutput: true }); await s.save();
+  const result = await runSuite(s.path);
+  assert.equal(result.ok, false);
+  assert.match(result.errors[0].message, /did not produce output source/);
+  assert.deepEqual((await readFile(join(s.directory, "events"), "utf8")).trim().split("\n"), ["source-up", "source-down"]);
+});
+
+test("all runtime tests are constructed before the first fixture or execution", async () => {
+  const s = await inputSetup();
+  Object.assign(s.config.adapters, { broken: { use: plugin("input-adapter"), options: { failConstruction: true } } });
+  Object.assign(s.config.tests, { later: { ...s.config.tests.task, journeys: [{ id: "later", source: "model.json", select: "task", adapter: "broken" }], profiles: [{ id: "default", journeys: { later: "default" } }] } });
+  await s.save();
+  const result = await runSuite(s.path);
+  assert.equal(result.ok, false); assert.equal(result.tests.length, 0);
+  assert.match(result.errors[0].message, /output-dependent construction failure/);
+  assert.deepEqual((await readFile(join(s.directory, "events"), "utf8")).trim().split("\n"), ["source-up", "install-up", "install-down", "source-down"]);
+});

@@ -1,13 +1,10 @@
-import { execFile, spawn } from "node:child_process";
-import { closeSync, existsSync, openSync } from "node:fs";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { runOwnedProcess, spawnOwnedProcess, stopProcessGroup } from "@openuji/journey-plugin/node";
+import { existsSync } from "node:fs";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { arch, homedir, platform } from "node:os";
 import { delimiter, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { promisify } from "node:util";
-
-const exec = promisify(execFile);
 
 /** The device pins a caller supplies — directly, as YAML `runtimes.<key>.options`, not a separate file. */
 export type AndroidRuntimeTarget = {
@@ -19,6 +16,8 @@ export type AndroidRuntimeTarget = {
   locale?: string;
   /** Packages the booted image must already include (e.g. a companion browser). */
   requiredPackages?: readonly string[];
+  /** Host TCP ports the device reaches as its own `localhost:<port>` (adb reverse), e.g. a local server stack. */
+  reversePorts?: readonly number[];
 };
 
 function requireString(value: unknown, label: string): string {
@@ -50,9 +49,18 @@ export function parseAndroidTarget(options: Record<string, unknown>): AndroidRun
     if (!Array.isArray(options.requiredPackages)) throw new Error("android target requiredPackages must be an array");
     requiredPackages = options.requiredPackages.map((value: unknown, index: number) => requireString(value, `requiredPackages[${index}]`));
   }
+  let reversePorts: readonly number[] | undefined;
+  if (options.reversePorts !== undefined) {
+    if (!Array.isArray(options.reversePorts)) throw new Error("android target reversePorts must be an array");
+    reversePorts = options.reversePorts.map((value: unknown) => {
+      const port = typeof value === "string" ? Number(value) : value;
+      if (typeof port !== "number" || !Number.isInteger(port) || port < 1 || port > 65535) throw new Error("android target reversePorts must be TCP ports");
+      return port;
+    });
+  }
   return {
     api, avd, image, ...(localImages ? { localImages } : {}), profile,
-    ...(locale !== undefined ? { locale } : {}), ...(requiredPackages ? { requiredPackages } : {})
+    ...(locale !== undefined ? { locale } : {}), ...(requiredPackages ? { requiredPackages } : {}), ...(reversePorts ? { reversePorts } : {})
   };
 }
 
@@ -197,31 +205,11 @@ async function emulatorPort(): Promise<number> {
   throw new Error("No free emulator port pair was found from 5554 through 5584");
 }
 
-async function writeEnvironment(path: string, values: Record<string, string>): Promise<void> {
-  await mkdir(resolve(path, ".."), { recursive: true });
-  const temporary = `${path}.tmp`;
-  await writeFile(temporary, Object.entries(values).map(([key, value]) => `${key}=${value}`).join("\n") + "\n", { mode: 0o600 });
-  await rename(temporary, path);
-}
-
 function defaultCapture(environment: NodeJS.ProcessEnv, cwd: string): Capture {
-  return async (command, args, { optional = false, timeout = 30_000 } = {}) => {
-    try { return await exec(command, args, { cwd, env: environment, timeout, maxBuffer: 4 * 1024 * 1024 }); }
-    catch (error) {
-      const err = error as NodeJS.ErrnoException & { stderr?: string };
-      if (optional) return { stdout: "", stderr: String(err.stderr ?? ""), failed: true };
-      throw new Error(`${command} failed${err.code === "ENOENT" ? " (command not found)" : ""}: ${String(err.stderr || err.message).trim()}`);
-    }
+  return async (command, args, options = {}) => {
+    try { return { stdout: await runOwnedProcess(command, args, { cwd, env: environment, timeoutMs: options.timeout ?? 30000 }), stderr: "" }; }
+    catch (error) { if (options.optional) return { stdout: "", stderr: String(error), failed: true }; throw error; }
   };
-}
-
-function defaultForeground(environment: NodeJS.ProcessEnv, cwd: string): Foreground {
-  return (command, args, { input } = {}) => new Promise((done, reject) => {
-    const child = spawn(command, args, { cwd, env: environment, stdio: [input === undefined ? "inherit" : "pipe", "inherit", "inherit"] });
-    child.once("error", reject);
-    child.once("exit", (code, signal) => code === 0 ? done() : reject(new Error(`${command} exited with ${code ?? signal}`)));
-    if (input !== undefined) child.stdin!.end(input);
-  });
 }
 
 async function provisionSdk({ sdk, image, environment, hostPlatform, capture, foreground }: {
@@ -260,6 +248,8 @@ export type AndroidUpOptions = {
   pause?: (ms: number) => Promise<void>;
   log?: (message: string) => void;
   avdHome?: string;
+  /** Cancels provisioning and boot, with compensation for acquired resources. */
+  signal?: AbortSignal;
 };
 
 export async function androidUp({
@@ -274,8 +264,9 @@ export async function androidUp({
   choosePort = emulatorPort,
   pause = delay,
   log = console.log,
-  avdHome: suppliedAvdHome
-}: AndroidUpOptions): Promise<{ serial: string; avd: string; image: string }> {
+  avdHome: suppliedAvdHome,
+  signal
+}: AndroidUpOptions): Promise<AndroidAcquisition> {
   if (!["darwin", "linux"].includes(hostPlatform)) throw new Error("android:up supports macOS and Linux");
   validateAndroidTarget(target);
   const avd = target.avd;
@@ -285,8 +276,10 @@ export async function androidUp({
   const discoveredJava = javaHome(env, hostPlatform);
   if (discoveredJava) { env.JAVA_HOME = discoveredJava; env.PATH = [resolve(discoveredJava, "bin"), env.PATH ?? ""].join(delimiter); }
   env.PATH = [resolve(sdk, "platform-tools"), resolve(sdk, "emulator"), env.PATH ?? ""].join(delimiter);
-  const capture = suppliedCapture ?? defaultCapture(env, root);
-  const foreground = suppliedForeground ?? defaultForeground(env, root);
+  const rawCapture = suppliedCapture ?? ((command, args, options = {}) => runOwnedProcess(command, args, { cwd: root, env, signal, timeoutMs: options.timeout ?? 30000 })
+    .then((stdout) => ({ stdout, stderr: "" }), (error: unknown) => { if (options.optional && !signal?.aborted) return { stdout: "", stderr: String(error), failed: true }; throw error; })) as Capture;
+  const capture: Capture = async (...args) => { signal?.throwIfAborted(); const result = await rawCapture(...args); signal?.throwIfAborted(); return result; };
+  const foreground: Foreground = suppliedForeground ?? (async (command, args, options) => { await runOwnedProcess(command, args, { cwd: root, env, signal, input: options?.input, onOutput: (text) => log(text) }); });
   log(`[android:up] SDK: ${sdk}; image: ${image}; AVD: ${avd}`);
   const { avdmanager } = await provisionSdk({ sdk, image, environment: env, hostPlatform, capture, foreground });
   const emulator = resolve(sdk, "emulator/emulator");
@@ -312,20 +305,15 @@ export async function androidUp({
     await mkdir(logDirectory, { recursive: true });
     logPath = resolve(logDirectory, `emulator-${new Date().toISOString().replace(/[:.]/g, "-")}.log`);
     log(`[android:up] Boot ${avd} as ${serial}; log: ${logPath}`);
-    if (background) owned = await background(emulator, ["-avd", avd, "-port", String(port), "-no-snapshot", "-no-boot-anim", "-no-window", "-no-audio", "-gpu", "swiftshader", "-feature", "-Vulkan"], { env, cwd: root, logPath });
-    else {
-      const output = openSync(logPath, "a", 0o600);
-      const child = spawn(emulator, ["-avd", avd, "-port", String(port), "-no-snapshot", "-no-boot-anim", "-no-window", "-no-audio", "-gpu", "swiftshader", "-feature", "-Vulkan"], { cwd: root, env, detached: true, stdio: ["ignore", output, output] });
-      closeSync(output);
-      child.unref();
-      owned = { pid: child.pid! };
-    }
+    owned = await (background ?? spawnOwnedProcess)(emulator, ["-avd", avd, "-port", String(port), "-no-snapshot", "-no-boot-anim", "-no-window", "-no-audio", "-gpu", "swiftshader", "-feature", "-Vulkan"], { env, cwd: root, logPath });
   } else log(`[android:up] Reuse ${serial}`);
+  let reversePorts: readonly number[] = Object.freeze([]);
   try {
     let booted = false;
     for (let attempt = 0; attempt < 150; attempt++) {
       const boot = await capture(adb, ["-s", serial, "shell", "getprop", "sys.boot_completed"], { optional: true, timeout: 5_000 });
       if (boot.stdout.trim() === "1") { booted = true; break; }
+      signal?.throwIfAborted();
       await pause(2_000);
     }
     if (!booted) throw new Error(`Timed out waiting for ${serial} to boot${logPath ? `; see ${logPath}` : ""}`);
@@ -340,46 +328,45 @@ export async function androidUp({
     for (const setting of ["window_animation_scale", "transition_animation_scale", "animator_duration_scale"]) {
       await capture(adb, ["-s", serial, "shell", "settings", "put", "global", setting, "0"]);
     }
-    await writeEnvironment(resolve(root, ".runtime/android.env"), { ANDROID_UDID: serial });
-    log(`[android:up] Ready: ${serial}`);
-    return { serial, avd, image };
-  } catch (error) {
-    if (owned) {
-      await capture(adb, ["-s", serial, "emu", "kill"], { optional: true, timeout: 10_000 });
-      if (owned.pid) { try { process.kill(-owned.pid, "SIGTERM"); } catch {} }
+    const mappings = (target.reversePorts?.length ? (await capture(adb, ["-s", serial, "reverse", "--list"])).stdout : "").split(/\r?\n/);
+    for (const port of target.reversePorts ?? []) {
+      const existing = mappings.map((line) => line.trim().split(/\s+/)).find((fields) => fields[1] === `tcp:${port}`);
+      if (existing) { if (existing[2] !== `tcp:${port}`) throw new Error(`Reverse port ${port} is already mapped elsewhere`); continue; }
+      await capture(adb, ["-s", serial, "reverse", `tcp:${port}`, `tcp:${port}`]);
+      reversePorts = [...reversePorts, port];
     }
+    log(`[android:up] Ready: ${serial}`);
+    return Object.freeze({ serial, avd, image, ...(owned ? { pid: owned.pid } : {}), reversePorts, sdk });
+  } catch (error) {
+    try { await releaseAndroidDevice({ serial, avd, image, sdk, ...(owned ? { pid: owned.pid } : {}), reversePorts }, { capture: suppliedCapture }); }
+    catch (cleanup) { throw new AggregateError([error, cleanup], "Android startup and cleanup failed"); }
     throw error;
   }
 }
 
-export type AndroidDownOptions = {
-  root?: string;
-  avd: string;
-  environment?: NodeJS.ProcessEnv;
-  capture?: Capture;
-  log?: (message: string) => void;
-};
-
-export async function androidDown({
-  root = process.cwd(),
-  avd,
-  environment = process.env,
-  capture: suppliedCapture,
-  log = console.log
-}: AndroidDownOptions): Promise<void> {
-  const statePath = resolve(root, ".runtime/android.env");
+/** Immutable acquisition accounting. A missing pid denotes a borrowed emulator. */
+export type AndroidAcquisition = Readonly<{ serial: string; avd: string; image: string; sdk: string; pid?: number; reversePorts: readonly number[] }>;
+export async function releaseAndroidDevice(device: AndroidAcquisition, options: { capture?: Capture; stop?: (pid: number) => Promise<void>; log?: (message: string) => void } = {}): Promise<void> {
+  const adb = resolve(device.sdk, "platform-tools/adb");
+  const capture = options.capture ?? defaultCapture(process.env, process.cwd());
+  const failures: unknown[] = [];
   try {
-    const sdk = await findSdk(environment);
-    const env: NodeJS.ProcessEnv = { ...environment, ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk };
-    const capture = suppliedCapture ?? defaultCapture(env, root);
-    const adb = resolve(sdk, "platform-tools/adb");
-    if (existsSync(adb)) {
-      const { matches } = await matchingDevices(adb, avd, capture);
-      for (const serial of matches) {
-        log(`[android:down] Stop ${avd} (${serial})`);
-        await capture(adb, ["-s", serial, "emu", "kill"], { optional: true, timeout: 10_000 });
-      }
-      if (!matches.length) log(`[android:down] ${avd} is not running`);
+    const { matches } = await matchingDevices(adb, device.avd, capture);
+    const online = matches.includes(device.serial);
+    const mappings = (online ? (await capture(adb, ["-s", device.serial, "reverse", "--list"], { optional: true })).stdout : "").split(/\r?\n/).map((line) => line.trim().split(/\s+/));
+    for (const port of device.reversePorts) if (mappings.some((fields) => fields[1] === `tcp:${port}` && fields[2] === `tcp:${port}`)) {
+      await capture(adb, ["-s", device.serial, "reverse", "--remove", `tcp:${port}`], { optional: true });
     }
-  } finally { await rm(statePath, { force: true }); }
+  } catch (error) { failures.push(error); }
+  // Process ownership is independent of ADB availability. Borrowed devices have no pid.
+  try {
+    if (device.pid) {
+      const command = await capture("ps", ["-p", String(device.pid), "-o", "command="], { optional: true });
+      if (command.stdout.includes("emulator") && command.stdout.includes(device.avd)) {
+        options.log?.(`[android:release] Stop ${device.avd} (${device.serial})`);
+        await (options.stop ?? stopProcessGroup)(device.pid);
+      }
+    }
+  } catch (error) { failures.push(error); }
+  if (failures.length) throw new AggregateError(failures, `Android cleanup failed: ${failures.map(String).join("; ")}`);
 }

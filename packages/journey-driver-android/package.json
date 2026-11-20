@@ -6,7 +6,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./service": "./src/runtime/plugin.ts"
+    "./service": "./src/runtime/plugin.ts",
+    "./apk-build/service": "./src/runtime/apk-build-plugin.ts",
+    "./installation": "./src/runtime/installation.ts"
   },
   "types": "./src/index.ts",
   "bin": {

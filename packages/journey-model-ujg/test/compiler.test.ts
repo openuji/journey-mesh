@@ -89,7 +89,7 @@ test("the journey map is projected from the executed JSON-LD: nested journeys, s
   const directory = await mkdtemp(join(tmpdir(), "ujg-view-"));
   const source = join(directory, "journey.ujg.jsonld");
   await writeFile(source, JSON.stringify(document));
-  const compiler = await journeyMeshPlugin.create(undefined, {} as never, {});
+  const compiler = await journeyMeshPlugin.create(undefined, {} as never);
   const view = await compiler.view!(source);
   assert.equal(view?.format, "journey-map");
   const map = view?.document as ReturnType<typeof toJourneyMapDocument>;

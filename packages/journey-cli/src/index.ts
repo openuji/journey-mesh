@@ -109,11 +109,8 @@ export async function main(args: string[]): Promise<number> {
     const { name, positionals, flags, switches } = parsed;
     const [path] = positionals;
     if (name === "services up" || name === "services down") {
-      // No SIGINT/SIGTERM handler: androidUp/appiumUp (and any other service
-      // plugin) do not check an abort signal mid-operation, so installing one
-      // here would only replace Node's default terminate-on-signal behavior
-      // with a no-op, making Ctrl-C appear to hang instead of exiting.
-      await runConfiguredServices(path, name === "services up" ? "up" : "down", { service: flags["--service"] });
+      process.once("SIGINT", interrupt); process.once("SIGTERM", interrupt);
+      await runConfiguredServices(path, name === "services up" ? "up" : "down", { service: flags["--service"], signal: controller.signal });
       return exitCodes.passed;
     }
     if (name === "report") {

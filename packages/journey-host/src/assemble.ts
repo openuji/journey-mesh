@@ -3,6 +3,7 @@ import { routedAdapter, type JourneyAdapter, type JourneyEnvironment, type Journ
 import { interpolate, type LoadedSuiteConfig } from "./config/load.js";
 import type { TestConfig } from "./config/schema.js";
 import { segmentOf, type CompiledTest } from "./compile.js";
+import { resolveInputs, type ServiceValues } from "./inputs.js";
 import { pluginContext } from "./plugins/context.js";
 import type { PluginLoader } from "./plugins/loader.js";
 
@@ -15,12 +16,13 @@ export type AssembledTest = Readonly<{
   profiles: readonly JourneyProfile[];
   environment?: JourneyEnvironment;
   observers: readonly JourneyObserverComponent[];
+  /** Listed services and those the test's adapter inputs reference. */
   services: readonly string[];
   artifacts: JourneyArtifactStore;
   timeoutMs: number;
 }>;
 
-type AssemblyInput = Readonly<{ loaded: LoadedSuiteConfig; load: PluginLoader; artifacts: JourneyArtifactStore }>;
+type AssemblyInput = Readonly<{ loaded: LoadedSuiteConfig; load: PluginLoader; artifacts: JourneyArtifactStore; values: ServiceValues }>;
 
 function compatible(adapter: AdapterPlugin, child: DriverPlugin | ObserverPlugin, label: string): void {
   if (child.kind === "driver") {
@@ -36,14 +38,15 @@ function compatible(adapter: AdapterPlugin, child: DriverPlugin | ObserverPlugin
 }
 
 /** One adapter instance per adapter name and test, with its driver and observers, scoped to its own segments. */
-async function assembleAdapters(compiled: CompiledTest, test: TestConfig, { loaded, load, artifacts }: AssemblyInput) {
+async function assembleAdapters(compiled: CompiledTest, test: TestConfig, { loaded, load, artifacts, values }: AssemblyInput) {
   const adapters = new Map<string, JourneyAdapter>();
   const observers: JourneyObserverComponent[] = [];
+
   for (const name of new Set(test.journeys.map((item) => item.adapter))) {
     const operations = compiled.plan.operations.filter((operation) => segmentOf(compiled, operation).adapter === name);
-    const context = pluginContext({ configPath: loaded.path, env: loaded.env, testId: test.id, artifacts, operations, aliases: compiled.aliases });
     const definition = loaded.config.adapters[name];
-    const adapter = await load("adapter", definition, `adapters.${name}`, context);
+    const context = pluginContext({ configPath: loaded.path, env: loaded.env, testId: test.id, artifacts, operations, aliases: compiled.aliases });
+    const adapter = await load("adapter", definition, `adapters.${name}`, context, undefined, Object.keys(definition.inputs));
     const driverLabel = `adapters.${name}.driver`;
     const driver = definition.driver
       ? await (await load("driver", definition.driver, driverLabel, context, (plugin) => compatible(adapter.plugin, plugin, driverLabel))).create()
@@ -54,7 +57,7 @@ async function assembleAdapters(compiled: CompiledTest, test: TestConfig, { load
       components.push(await (await load("observer", entry, label, context, (plugin) => compatible(adapter.plugin, plugin, label))).create());
     }
     observers.push(...components);
-    adapters.set(name, await adapter.create({ driver, observers: components.map((component) => component.observer) }));
+    adapters.set(name, await adapter.create({ driver, observers: components.map((component) => component.observer), inputs: resolveInputs(definition.inputs, values) }));
   }
   return { adapters, observers };
 }
@@ -105,8 +108,31 @@ export async function assembleTest(test: TestConfig, compiled: CompiledTest, inp
   const context = pluginContext({ configPath: loaded.path, env: loaded.env, testId: test.id, artifacts, operations: compiled.plan.operations, aliases: compiled.aliases });
   const environment = test.environment ? await (await load("environment", test.environment, `tests.${test.id}.environment`, context)).create() : undefined;
   return Object.freeze({
-    id: test.id, plan: compiled.plan, compiled, adapter, profiles, observers, services: test.services, artifacts,
+    id: test.id, plan: compiled.plan, compiled, adapter, profiles, observers, artifacts,
+    services: [...new Set([...test.services, ...test.journeys.flatMap((item) => Object.values(loaded.config.adapters[item.adapter].inputs).map((ref) => ref.service))])],
     ...(environment ? { environment } : {}),
     timeoutMs: positiveNumber(interpolate(test.timeoutMs, loaded.env, `tests.${test.id}.timeoutMs`), 600_000)
   });
+}
+
+/** Immutable prepared data; runtime components and evidence stores are never retained here. */
+export type PreparedTest = Readonly<{ id: string; config: TestConfig; compiled: CompiledTest; services: readonly string[] }>;
+
+export async function prepareTest(test: TestConfig, compiled: CompiledTest, input: Omit<AssemblyInput, "values">): Promise<PreparedTest> {
+  const { loaded, load, artifacts } = input;
+  for (const name of new Set(test.journeys.map((item) => item.adapter))) {
+    const operations = compiled.plan.operations.filter((operation) => segmentOf(compiled, operation).adapter === name);
+    const context = pluginContext({ configPath: loaded.path, env: loaded.env, testId: test.id, artifacts, operations, aliases: compiled.aliases });
+    const definition = loaded.config.adapters[name];
+    const adapter = await load("adapter", definition, `adapters.${name}`, context, undefined, Object.keys(definition.inputs));
+    const driver = definition.driver ? await (await load("driver", definition.driver, `adapters.${name}.driver`, context,
+      (plugin) => compatible(adapter.plugin, plugin, `adapters.${name}.driver`))).create() : undefined;
+    adapter.validate(driver);
+    for (const [index, observer] of definition.observers.entries()) await load("observer", observer, `adapters.${name}.observers[${index}]`, context,
+      (plugin) => compatible(adapter.plugin, plugin, `adapters.${name}.observers[${index}]`));
+  }
+  await assembleProfiles(compiled, test, { ...input, values: Object.freeze({}) });
+  if (test.environment) await load("environment", test.environment, `tests.${test.id}.environment`, pluginContext({ configPath: loaded.path, env: loaded.env, testId: test.id, artifacts, operations: compiled.plan.operations, aliases: compiled.aliases }));
+  return Object.freeze({ id: test.id, config: test, compiled, services: Object.freeze([...new Set([...test.services,
+    ...test.journeys.flatMap((item) => Object.values(loaded.config.adapters[item.adapter].inputs).map((ref) => ref.service))])]) });
 }

@@ -1,12 +1,12 @@
-import { suiteFilesPrefix, testFilesPrefix, type SuiteRun } from "@openuji/journey-run-record";
-import { fileEvidenceStore } from "@openuji/journey-run-record/node";
+import { type SuiteRun } from "@openuji/journey-run-record";
 import type { JourneyProgressSink } from "@openuji/journey-runner";
 import { JourneyConfigError, loadSuiteConfig } from "./config/load.js";
 import { compileTest } from "./compile.js";
-import { assembleTest, type AssembledTest } from "./assemble.js";
+import { prepareTest, type PreparedTest } from "./assemble.js";
 import { executeSuite, type PreparedSuite } from "./execute.js";
-import { pluginContext } from "./plugins/context.js";
+import { pluginContext, preflightArtifacts } from "./plugins/context.js";
 import { pluginLoader } from "./plugins/loader.js";
+import { validateInputs } from "./inputs.js";
 import { loadServices, orderServices, outputDirectory } from "./services.js";
 
 export type RunSuiteOptions = {
@@ -19,8 +19,8 @@ export type RunSuiteOptions = {
 };
 
 /**
- * Preflight: load the configuration, then compile and assemble every selected test. Plugins parse
- * and construct components, but nothing is started, so a broken test never leaves fixtures behind.
+ * Preflight compiles selected tests, parses immutable settings and checks operations.
+ * Runtime adapters, observers, services and their evidence stores are constructed per run.
  */
 export async function prepareSuite(path: string, options: RunSuiteOptions = {}): Promise<PreparedSuite> {
   const loaded = await loadSuiteConfig(path, options.env);
@@ -32,19 +32,25 @@ export async function prepareSuite(path: string, options: RunSuiteOptions = {}):
   try {
     const outputDir = outputDirectory(loaded, options.outputDir);
     const load = pluginLoader(loaded.path, loaded.env);
-    const artifacts = fileEvidenceStore(outputDir, suiteFilesPrefix);
+    const artifacts = preflightArtifacts;
     const suiteContext = (testId: string) => pluginContext({ configPath: loaded.path, env: loaded.env, testId, artifacts });
     const compiler = await (await load("model", config.model, "model", suiteContext("suite"))).create();
-    const tests: AssembledTest[] = [];
+    const tests: PreparedTest[] = [];
     for (const test of selected) {
       current = test.id;
       const compiled = await compileTest(test, compiler, loaded.path, loaded.env);
-      tests.push(await assembleTest(test, compiled, { loaded, load, artifacts: fileEvidenceStore(outputDir, testFilesPrefix(test.id)) }));
+      tests.push(await prepareTest(test, compiled, { loaded, load, artifacts: preflightArtifacts }));
     }
     current = undefined;
     const keys = [...new Set(tests.flatMap((test) => test.services))];
-    const services = await loadServices(loaded, load, orderServices(config.services, keys), outputDir, true);
-    return Object.freeze({ ...(config.target ? { target: config.target } : {}), ...(config.label ? { label: config.label } : {}), outputDir, tests, services, artifacts });
+    const services = await loadServices(loaded, load, orderServices(config.services, keys), true);
+    const contracts = Object.fromEntries(services.map((entry) => [entry.key, entry.component.plugin.outputs ?? {}]));
+    for (const test of tests) for (const name of new Set(test.config.journeys.map((item) => item.adapter))) {
+      const definition = config.adapters[name];
+      const component = await load("adapter", definition, `adapters.${name}`, suiteContext(test.id), undefined, Object.keys(definition.inputs));
+      validateInputs(component.plugin, definition.inputs, contracts, `adapters.${name}`);
+    }
+    return Object.freeze({ ...(config.target ? { target: config.target } : {}), ...(config.label ? { label: config.label } : {}), outputDir, tests: Object.freeze(tests), services: Object.freeze(services), loaded });
   } catch (error) {
     if (error instanceof JourneyConfigError && error.testIds.length) throw error;
     throw new JourneyConfigError(error instanceof Error ? error.message : "Invalid journey test configuration", { testId: current, testIds });

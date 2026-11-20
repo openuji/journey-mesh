@@ -8,6 +8,15 @@ import { contract } from "@openuji/journey-plugin";
 /** Adapters and drivers that both declare this contract can be combined. */
 export const androidDriverContract = contract<AndroidJourneyDriver>("@openuji/journey-driver-android/v1");
 
+/** A built, installable APK. `path` is runtime-only and never belongs in a run record. */
+export type AndroidApk = Readonly<{ path: string; sha256: string; package: string; versionCode: number; versionName: string }>;
+export const androidApkContract = contract<AndroidApk>("@openuji/android-apk/v1");
+
+/** Booted devices by the names a mesh gives them. */
+export type AndroidDevice = Readonly<{ udid: string; avd: string; api: number }>;
+export type AndroidDevices = Readonly<Record<string, AndroidDevice>>;
+export const androidDevicesContract = contract<AndroidDevices>("@openuji/android-devices/v1");
+
 export type AndroidApplicationEntryTarget = Readonly<{
   kind: "application";
 }>;

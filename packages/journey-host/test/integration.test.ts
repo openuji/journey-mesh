@@ -100,7 +100,7 @@ test("every evidence store writes below its own prefix of the run directory", as
   Object.assign(suite.config.tests.sharing, { services: ["bounded"] });
   await suite.save();
   const prepared = await prepareSuite(suite.path);
-  assert.equal("maxFileBytes" in prepared.artifacts, false);
+  assert.equal("artifacts" in prepared, false);
   const run = await runSuite(suite.path);
   assert.deepEqual(run.files.map((file) => file.href), ["services/bounded/bounded.identity.json"]);
   assert.deepEqual(run.tests[0].files.map((file) => file.href), ["tests/sharing/files/fixture-evidence.txt"]);
@@ -229,7 +229,7 @@ async function serviceEvents(directory: string) {
     .map((line) => JSON.parse(line) as { event: string; name: string });
 }
 
-test("services run in dependsOn order for up, reverse for down, and a single selection does not cascade", async () => {
+test("services run in dependsOn order for up, reverse for down, and a single selection includes its dependencies", async () => {
   const suite = await setup();
   const config = { ...suite.config, services: { a: serviceEntry("a"), b: serviceEntry("b", {}, ["a"]) } };
   await writeFile(suite.path, stringify(config));
@@ -239,7 +239,7 @@ test("services run in dependsOn order for up, reverse for down, and a single sel
   assert.deepEqual((await serviceEvents(suite.directory)).slice(2).map((event) => `${event.name}:${event.event}`), ["b:down", "a:down"]);
   await writeFile(join(suite.directory, "service-events.jsonl"), "");
   await runConfiguredServices(suite.path, "up", { service: "b" });
-  assert.deepEqual((await serviceEvents(suite.directory)).map((event) => `${event.name}:${event.event}`), ["b:up"]);
+  assert.deepEqual((await serviceEvents(suite.directory)).map((event) => `${event.name}:${event.event}`), ["a:up", "b:up"]);
 });
 
 test("services up stops at the first failure; down is best-effort across every entry", async () => {
@@ -249,12 +249,14 @@ test("services up stops at the first failure; down is best-effort across every e
     services: { a: serviceEntry("a", { failUp: true }), b: serviceEntry("b", {}, ["a"]) }
   }));
   await assert.rejects(runConfiguredServices(suite.path, "up"), /services\.a:.*up failure/);
-  assert.deepEqual((await serviceEvents(suite.directory)).map((event) => `${event.name}:${event.event}`), ["a:up"]);
+  assert.deepEqual((await serviceEvents(suite.directory)).map((event) => `${event.name}:${event.event}`), ["a:up", "a:down"]);
   await writeFile(join(suite.directory, "service-events.jsonl"), "");
   await writeFile(suite.path, stringify({
     ...suite.config,
     services: { a: serviceEntry("a", { failDown: true }), b: serviceEntry("b", { failDown: true }, ["a"]) }
   }));
+  await runConfiguredServices(suite.path, "up");
+  await writeFile(join(suite.directory, "service-events.jsonl"), "");
   await assert.rejects(runConfiguredServices(suite.path, "down"), (error: unknown) => {
     assert.match((error as Error).message, /services\.b:.*down failure/s);
     assert.match((error as Error).message, /services\.a:.*down failure/s);
@@ -295,4 +297,15 @@ test("operation aliases are resolved by the model binding before observers are c
   Object.assign(suite.config.tests.sharing.journeys[0], { operations: { arrival: "unknown-operation" } }); await suite.save();
   await assert.rejects(validateSuite(suite.path), /Unknown fixture operation/);
   await assert.rejects(access(join(suite.directory, "events.jsonl")));
+});
+
+test("explicit shutdown reads persisted ownership without parsing missing input or environment settings", async () => {
+  const suite = await setup();
+  const services = { a: serviceEntry("a"), b: serviceEntry("b", {}, ["a"]) };
+  await writeFile(suite.path, stringify({ ...suite.config, services }));
+  await runConfiguredServices(suite.path, "up", { service: "b" });
+  services.a.options.name = "${MISSING_SHUTDOWN_VALUE}";
+  await writeFile(suite.path, stringify({ ...suite.config, envFiles: [{ env: "MISSING_SHUTDOWN_ENV_FILE" }], services }));
+  await runConfiguredServices(suite.path, "down", { service: "b" });
+  assert.deepEqual((await serviceEvents(suite.directory)).map((event) => `${event.name}:${event.event}`), ["a:up", "b:up", "b:down", "a:down"]);
 });

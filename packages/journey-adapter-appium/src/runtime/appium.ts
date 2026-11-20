@@ -1,26 +1,11 @@
+import { runOwnedProcess, spawnOwnedProcess } from "@openuji/journey-plugin/node";
 import { findSdk } from "@openuji/journey-driver-android/service";
-import { closeSync, existsSync, openSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { spawn } from "node:child_process";
 import { ensureUiAutomator2Driver, ownAutomationVersions, resolveAppiumEntry } from "./appium-server.js";
-import { defaultCapture, defaultForeground, type Capture, type Foreground } from "./process.js";
-
-function parseEnvironment(source: string): Record<string, string> {
-  return Object.fromEntries(source.split(/\r?\n/).flatMap((line) => {
-    const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line.trim());
-    return match ? [[match[1]!, match[2]!]] : [];
-  }));
-}
-
-async function writeEnvironment(path: string, values: Record<string, string>): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  const temporary = `${path}.tmp`;
-  await writeFile(temporary, Object.entries(values).map(([key, value]) => `${key}=${value}`).join("\n") + "\n", { mode: 0o600 });
-  await rename(temporary, path);
-}
+import { defaultCapture, type Capture, type Foreground } from "./process.js";
 
 async function portAvailable(port: number): Promise<boolean> {
   const server = createServer();
@@ -44,7 +29,7 @@ function pidAlive(pid: number): boolean {
   catch { return false; }
 }
 
-type AppiumState = { pid: number; port: number; url: string; logPath: string; appiumHome: string };
+export type AppiumState = { pid: number; port: number; url: string; logPath: string; appiumHome: string };
 export type BackgroundHandle = { pid: number };
 export type Background = (
   command: string,
@@ -54,6 +39,8 @@ export type Background = (
 
 export type AppiumUpOptions = {
   root?: string;
+  statePath?: string;
+  abortSignal?: AbortSignal;
   environment?: NodeJS.ProcessEnv;
   port?: number;
   capture?: Capture;
@@ -65,9 +52,11 @@ export type AppiumUpOptions = {
   signal?: (pid: number, name: NodeJS.Signals) => void;
   pause?: (ms: number) => Promise<void>;
   log?: (message: string) => void;
+  /** Device UDIDs that must be online; without them, the one recorded in .runtime/android.env. */
+  devices?: readonly string[];
 };
 
-/** No example-specific knowledge: the Android device must already be online (.runtime/android.env). */
+/** No example-specific knowledge: the Android devices must already be online. */
 export async function appiumUp({
   root = process.cwd(),
   environment = process.env,
@@ -80,37 +69,40 @@ export async function appiumUp({
   isPortAvailable = portAvailable,
   signal = (pid, name) => process.kill(-pid, name),
   pause = delay,
-  log = console.log
-}: AppiumUpOptions = {}): Promise<AppiumState> {
+  log = console.log,
+  devices, statePath: suppliedStatePath, abortSignal
+}: AppiumUpOptions = {}): Promise<AppiumState & { owned: boolean }> {
+  abortSignal?.throwIfAborted();
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Appium port must be an integer from 1 through 65535");
   const runtimeDirectory = resolve(root, ".runtime");
-  const statePath = resolve(runtimeDirectory, "appium.json");
-  const envPath = resolve(runtimeDirectory, "appium.env");
-  const androidEnvironment = parseEnvironment(await readFile(resolve(runtimeDirectory, "android.env"), "utf8").catch(() => {
-    throw new Error("Android runtime is not prepared; run pnpm android:up first");
-  }));
-  if (!androidEnvironment.ANDROID_UDID) throw new Error("Android runtime state does not contain ANDROID_UDID; run pnpm android:up again");
+  const statePath = suppliedStatePath ?? resolve(runtimeDirectory, "appium.json");
+  if (!devices?.length) throw new Error("Appium needs at least one Android device");
   const sdk = await findSdk(environment);
   const { appium: appiumVersion, uiautomator2: uiautomator2Version } = await ownAutomationVersions();
-  const env: NodeJS.ProcessEnv = { ...environment, ...androidEnvironment, ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk };
+  const env: NodeJS.ProcessEnv = { ...environment, ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk };
   env.APPIUM_HOME ||= resolve(root, `.tmp/appium-${appiumVersion}-${uiautomator2Version}`);
-  const capture = suppliedCapture ?? defaultCapture(env, root);
-  const foreground = suppliedForeground ?? defaultForeground(env, root);
+  const rawCapture: Capture = suppliedCapture ?? (async (command, args, options = {}) => {
+    try { return { stdout: await runOwnedProcess(command, args, { env, cwd: root, signal: abortSignal, timeoutMs: options.timeout ?? 30000 }), stderr: "" }; }
+    catch (error) { if (options.optional && !abortSignal?.aborted) return { stdout: "", stderr: String(error), failed: true }; throw error; }
+  });
+  const capture: Capture = async (...args) => { abortSignal?.throwIfAborted(); const result = await rawCapture(...args); abortSignal?.throwIfAborted(); return result; };
+  const foreground = suppliedForeground ?? (async (command, args) => { await runOwnedProcess(command, args, { env, cwd: root, signal: abortSignal, onOutput: log }); });
   const adb = resolve(sdk, "platform-tools/adb");
-  const device = await capture(adb, ["-s", androidEnvironment.ANDROID_UDID!, "get-state"], { optional: true });
-  if (device.stdout.trim() !== "device") throw new Error(`Android device ${androidEnvironment.ANDROID_UDID} is not online; run pnpm android:up`);
+  for (const udid of devices) {
+    const device = await capture(adb, ["-s", udid, "get-state"], { optional: true });
+    if (device.stdout.trim() !== "device") throw new Error(`Android device ${udid} is not online; start the Android service first`);
+  }
   let existing: AppiumState | undefined;
   try { existing = JSON.parse(await readFile(statePath, "utf8")); } catch {}
   if (existing?.pid && alive(existing.pid)) {
     if (await ready(existing.url)) {
-      await writeEnvironment(envPath, { APPIUM_URL: existing.url });
       log(`[appium:up] Reuse ${existing.url} (pid ${existing.pid})`);
-      return existing;
+      if (existing.port !== port) throw new Error("Recorded Appium port differs from configuration");
+      return { ...existing, owned: false };
     }
     throw new Error(`Recorded Appium process ${existing.pid} is running but not ready; run pnpm appium:down before retrying`);
   }
   await rm(statePath, { force: true });
-  await rm(envPath, { force: true });
   if (!await isPortAvailable(port)) throw new Error(`Port ${port} is already in use; stop that service or pass --port <port>`);
   const appium = resolveAppiumEntry();
   await ensureUiAutomator2Driver({ appiumHome: env.APPIUM_HOME, capture, foreground });
@@ -118,40 +110,33 @@ export async function appiumUp({
   await mkdir(logDirectory, { recursive: true });
   const logPath = resolve(logDirectory, `appium-${new Date().toISOString().replace(/[:.]/g, "-")}.log`);
   const url = `http://127.0.0.1:${port}/`;
-  let processState: BackgroundHandle;
   const args = [appium, "--address", "127.0.0.1", "--port", String(port), "--log-level", "warn", "--log", logPath];
-  if (background) processState = await background(process.execPath, args, { env, cwd: root, logPath });
-  else {
-    const output = openSync(logPath, "a", 0o600);
-    const child = spawn(process.execPath, args, { cwd: root, env, detached: true, stdio: ["ignore", output, output] });
-    closeSync(output);
-    child.unref();
-    processState = { pid: child.pid! };
-  }
+  const processState = await (background ?? spawnOwnedProcess)(process.execPath, args, { env, cwd: root, logPath });
   const state: AppiumState = { pid: processState.pid, port, url, logPath, appiumHome: env.APPIUM_HOME };
-  await mkdir(runtimeDirectory, { recursive: true });
-  await writeFile(statePath, JSON.stringify(state, null, 2) + "\n", { mode: 0o600 });
   try {
+    await mkdir(dirname(statePath), { recursive: true });
+    await writeFile(statePath, JSON.stringify(state, null, 2) + "\n", { mode: 0o600 });
     let available = false;
     for (let attempt = 0; attempt < 60; attempt++) {
+      abortSignal?.throwIfAborted();
       if (!alive(state.pid)) throw new Error(`Appium exited before becoming ready; see ${logPath}`);
       if (await ready(url)) { available = true; break; }
       await pause(1_000);
     }
     if (!available) throw new Error(`Appium startup timed out; see ${logPath}`);
-    await writeEnvironment(envPath, { APPIUM_URL: url });
     log(`[appium:up] Ready: ${url}; log: ${logPath}`);
-    return state;
+    return { ...state, owned: true };
   } catch (error) {
-    try { signal(state.pid, "SIGTERM"); } catch {}
-    await rm(statePath, { force: true });
-    await rm(envPath, { force: true });
+    try { await appiumDown({ root, statePath, state, alive, signal, pause, capture: suppliedCapture, log }); }
+    catch (cleanup) { throw new AggregateError([error, cleanup], "Appium startup and cleanup failed"); }
     throw error;
   }
 }
 
 export type AppiumDownOptions = {
   root?: string;
+  statePath?: string;
+  state?: AppiumState;
   capture?: Capture;
   alive?: (pid: number) => boolean;
   signal?: (pid: number, name: NodeJS.Signals) => void;
@@ -160,35 +145,33 @@ export type AppiumDownOptions = {
 };
 
 export async function appiumDown({
-  root = process.cwd(),
-  capture: suppliedCapture,
-  alive = pidAlive,
-  signal = (pid, name) => process.kill(-pid, name),
-  pause = delay,
-  log = console.log
+  root = process.cwd(), capture: suppliedCapture, alive = pidAlive,
+  signal = (pid, name) => process.kill(-pid, name), pause = delay,
+  log = console.log, statePath: suppliedStatePath, state: suppliedState
 }: AppiumDownOptions = {}): Promise<void> {
-  const runtimeDirectory = resolve(root, ".runtime");
-  const statePath = resolve(runtimeDirectory, "appium.json");
-  const envPath = resolve(runtimeDirectory, "appium.env");
-  let state: AppiumState | undefined;
-  try { state = JSON.parse(await readFile(statePath, "utf8")); } catch {}
-  try {
-    if (!state?.pid || !alive(state.pid)) {
-      log("[appium:down] Appium is not running");
-      return;
-    }
-    const capture = suppliedCapture ?? defaultCapture(process.env, root);
-    const command = await capture("ps", ["-p", String(state.pid), "-o", "command="], { optional: true });
-    if (!command.stdout.includes("appium") || !command.stdout.includes(String(state.port))) {
-      log(`[appium:down] Recorded pid ${state.pid} no longer belongs to this Appium runtime`);
-      return;
-    }
-    log(`[appium:down] Stop ${state.url} (pid ${state.pid})`);
-    try { signal(state.pid, "SIGTERM"); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; }
-    for (let attempt = 0; attempt < 50 && alive(state.pid); attempt++) await pause(100);
-    if (alive(state.pid)) { try { signal(state.pid, "SIGKILL"); } catch {} }
-  } finally {
+  const statePath = suppliedStatePath ?? resolve(root, ".runtime/appium.json");
+  let state = suppliedState;
+  if (!state) try { state = JSON.parse(await readFile(statePath, "utf8")); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  if (!state?.pid || !alive(state.pid)) {
+    log("[appium:down] Appium is not running");
     await rm(statePath, { force: true });
-    await rm(envPath, { force: true });
+    return;
   }
+  const capture = suppliedCapture ?? defaultCapture(process.env, root);
+  const command = await capture("ps", ["-p", String(state.pid), "-o", "command="], { optional: true });
+  if (!command.stdout.includes("appium") || !command.stdout.includes(String(state.port))) {
+    log(`[appium:down] Recorded pid ${state.pid} no longer belongs to this Appium runtime`);
+    await rm(statePath, { force: true });
+    return;
+  }
+  log(`[appium:down] Stop ${state.url} (pid ${state.pid})`);
+  for (const name of ["SIGTERM", "SIGKILL"] as const) {
+    if (!alive(state.pid)) break;
+    try { signal(state.pid, name); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; }
+    for (let attempt = 0; attempt < 50 && alive(state.pid); attempt++) await pause(100);
+  }
+  if (alive(state.pid)) throw new Error(`Appium process ${state.pid} did not stop`);
+  // A failed stop retains the record so explicit shutdown can retry.
+  await rm(statePath, { force: true });
 }

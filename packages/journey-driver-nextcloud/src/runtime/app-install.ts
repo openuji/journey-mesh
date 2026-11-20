@@ -2,20 +2,18 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join, posix } from "node:path";
 import { randomUUID } from "node:crypto";
 import { execute, type Command } from "@openuji/journey-service-git";
-import { sourceIdentity, type JourneyService, type SourceIdentity } from "@openuji/journey-plugin";
+import { startedService, sourceIdentity, type JourneyService, type SourceIdentity } from "@openuji/journey-plugin";
 import type { AppBuild, ManagedStack } from "./contracts.js";
 
 export type InstallOptions = Readonly<{ directory: string; services: readonly string[]; enable: boolean }>;
 type AppList = { enabled?: Record<string, string>; disabled?: Record<string, string> };
-export function appInstall(options: InstallOptions, run: Command = execute): JourneyService {
+export function appInstall(options: InstallOptions, run: Command = execute, inputs: Readonly<Record<string, unknown>> = {}): JourneyService {
   options = structuredClone(options);
-  let identity: SourceIdentity | undefined;
   return {
-    name: "nextcloud-app-install", provenance: () => identity,
-    async up(input) {
-      identity = undefined;
-      const app = input?.inputs?.app as AppBuild | undefined;
-      const stack = input?.inputs?.stack as ManagedStack | undefined;
+    name: "nextcloud-app-install",
+    async start(input) {
+      const app = inputs.app as AppBuild | undefined;
+      const stack = inputs.stack as ManagedStack | undefined;
       if (!app || !/^[a-z_]+$/.test(app.id) || !stack) throw new Error("Missing app build or managed stack");
       const expected = sourceIdentity(app.identity);
       if (!expected.version) throw new Error("Missing app version");
@@ -52,8 +50,7 @@ export function appInstall(options: InstallOptions, run: Command = execute): Jou
           const apps = await listApps();
           if ((options.enable ? apps.enabled?.[app.id] : apps.enabled?.[app.id] ?? apps.disabled?.[app.id]) !== expected.version) throw new Error("Installed app version mismatch");
         }
-        identity = expected;
-        return { identity };
+        return startedService({ identity: expected }, expected);
       } catch (error) { failure = error; throw error; }
       finally {
         const failures: unknown[] = [];

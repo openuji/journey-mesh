@@ -79,3 +79,19 @@ stack can read the same JSON (see [report model](report-model.md)).
 | Capture new evidence | an observer plugin (`defineObserverPlugin`) with a types-only `./evidence` entry | execution |
 | Turn that evidence into report data | an interpreter module exporting `journeyMeshInterpreter` (`defineInterpreter`) | reporting |
 | Show it | a view keyed by the data's `format` in `apps/report-renderer/src/providers`, or your own template | rendering |
+
+## Configuration and resource ownership
+
+Preparation holds immutable configuration, compiled plans and plugin recipes.
+Parsing and operation validation are pure; they see neither runtime input values
+nor an artifact writer. The host resolves service-output references into deeply
+frozen constructor records for adapters and services. Drivers and observers do not
+share an input accessor. Runtime instances and evidence stores belong to one run.
+
+Infrastructure effects start at `JourneyService.start`, which returns outputs,
+a provenance snapshot and a release handle. Producers compensate partial failure;
+the host registers returned handles before checking output contracts. Resource
+owners distinguish acquisitions from borrowed resources. Explicit CLI shutdown
+uses persisted ownership separately from automatic release. Android build and
+installation evidence stay in the Android packages; the host and reporting layers
+contain no Android-specific branches. See [service composition](service-composition.md).

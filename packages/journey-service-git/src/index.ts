@@ -1,17 +1,10 @@
-import { spawn } from "node:child_process";
+import { runOwnedProcess } from "@openuji/journey-plugin/node";
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import type { JourneyService, SourceIdentity } from "@openuji/journey-plugin";
+import { startedService, type JourneyService, type SourceIdentity } from "@openuji/journey-plugin";
 
 export type Command = (command: string, args: readonly string[], cwd: string, signal?: AbortSignal) => Promise<string>;
-export const execute: Command = (command, args, cwd, signal) => new Promise((accept, reject) => {
-  const child = spawn(command, [...args], { cwd, signal, stdio: ["ignore", "pipe", "pipe"] });
-  let stdout = ""; let diagnostic = "";
-  child.stdout.on("data", (data) => { stdout += data; });
-  child.stderr.on("data", (data) => { diagnostic = (diagnostic + data).slice(-8000); });
-  child.once("error", reject);
-  child.once("close", (code) => code === 0 ? accept(stdout.trim()) : reject(new Error(`${command} failed (exit ${code}): ${diagnostic}`)));
-});
+export const execute: Command = (command, args, cwd, signal) => runOwnedProcess(command, args, { cwd, signal, stdoutOnly: true });
 export type GitOptions = Readonly<{ repository: string; directory: string; sha?: string; pullRequest?: number }>;
 export function validateGitSource(options: GitOptions): void {
   const url = new URL(options.repository);
@@ -23,15 +16,12 @@ export function validateGitSource(options: GitOptions): void {
 export function gitSource(options: GitOptions, run: Command = execute): JourneyService {
   options = structuredClone(options);
   validateGitSource(options);
-  let identity: SourceIdentity | undefined;
   return {
     name: "git-source",
-    provenance: () => identity,
-    async up(input) {
-      identity = undefined;
+    async start(input) {
       const command = (args: string[], cwd = options.directory) => run("git", args, cwd, input?.signal);
       await mkdir(dirname(options.directory), { recursive: true });
-      const top = await command(["rev-parse", "--show-toplevel"]).catch(() => undefined);
+      const top = await command(["rev-parse", "--show-toplevel"]).catch((error) => { input.signal?.throwIfAborted(); return undefined; });
       const reused = top && resolve(top) === resolve(options.directory);
       if (reused) {
         if (await command(["remote", "get-url", "origin"]) !== options.repository) throw new Error("Checkout origin does not match repository");
@@ -43,8 +33,8 @@ export function gitSource(options: GitOptions, run: Command = execute): JourneyS
       await command(["checkout", "--detach", sourceSha]);
       if (await command(["rev-parse", "HEAD"]) !== sourceSha) throw new Error("Source SHA mismatch");
       await command(["submodule", "update", "--init", "--depth", "1"]);
-      identity = Object.freeze({ repository: options.repository, sourceSha, ...(options.pullRequest === undefined ? {} : { pullRequest: options.pullRequest }) });
-      return { source: Object.freeze({ directory: options.directory, identity }), identity };
+      const identity = Object.freeze({ repository: options.repository, sourceSha, ...(options.pullRequest === undefined ? {} : { pullRequest: options.pullRequest }) });
+      return startedService({ source: Object.freeze({ directory: options.directory, identity }), identity }, identity);
     }
   };
 }

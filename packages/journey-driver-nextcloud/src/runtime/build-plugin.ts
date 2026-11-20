@@ -13,6 +13,6 @@ export function buildPlugin(server: boolean) {
         ...(server ? { runtimeImage: requiredString(options.runtimeImage, "runtimeImage") } : {}) };
       validateBuild(settings, server); return settings;
     },
-    create(settings) { return buildService(settings, server); }
+    create(settings, _context, { inputs }) { return buildService(settings, server, undefined, inputs); }
   });
 }

@@ -3,9 +3,12 @@ import { JourneyConfigError } from "./errors.js";
 
 /** A plugin reference. `use` and `options` may contain `${VAR}` and are interpolated only when selected. */
 export type ComponentConfig = Readonly<{ use: string; options: Readonly<Record<string, unknown>> }>;
-export type AdapterConfig = ComponentConfig & Readonly<{ driver?: ComponentConfig; observers: readonly ComponentConfig[] }>;
 /** Infrastructure managed by `journey-mesh services up|down` or started for the tests that list it. */
 export type ServiceOutputRef = Readonly<{ service: string; output: string }>;
+/** `inputs` bind service outputs; a test using the adapter also starts those services. */
+export type AdapterConfig = ComponentConfig & Readonly<{
+  driver?: ComponentConfig; observers: readonly ComponentConfig[]; inputs: Readonly<Record<string, ServiceOutputRef>>;
+}>;
 export type ServiceConfig = ComponentConfig & Readonly<{ dependsOn: readonly string[]; inputs: Readonly<Record<string, ServiceOutputRef>> }>;
 function outputRef(value: unknown, label: string): ServiceOutputRef {
   const item = optionsObject(value, label);
@@ -122,9 +125,10 @@ export function parseSuiteConfig(raw: Record<string, unknown>, testOrder: readon
   known(raw, ["kind", "label", "outputDir", "envFiles", "model", "adapters", "profiles", "services", "tests", "target", reportingSection], "configuration");
   if (raw.kind !== "suite") throw new Error("Configuration kind must be suite");
   const adapters = record(raw.adapters, "adapters", (value, name): AdapterConfig => {
-    const adapter = component(value, `adapters.${name}`, ["driver", "observers"]);
+    const adapter = component(value, `adapters.${name}`, ["driver", "observers", "inputs"]);
     return {
       use: adapter.use, options: adapter.options,
+      inputs: record(adapter.inputs, `adapters.${name}.inputs`, (ref, key) => outputRef(ref, `adapters.${name}.inputs.${key}`)),
       ...(adapter.driver !== undefined ? { driver: component(adapter.driver, `adapters.${name}.driver`) } : {}),
       observers: list(adapter.observers, `adapters.${name}.observers`).map((item, index) => component(item, `adapters.${name}.observers[${index}]`))
     };
@@ -140,6 +144,9 @@ export function parseSuiteConfig(raw: Record<string, unknown>, testOrder: readon
   });
   for (const [name, service] of Object.entries(services)) {
     for (const dependency of service.dependsOn) if (!Object.hasOwn(services, dependency)) throw new Error(`services.${name}.dependsOn references unknown service ${dependency}`);
+  }
+  for (const [name, adapter] of Object.entries(adapters)) {
+    for (const [key, ref] of Object.entries(adapter.inputs)) if (!Object.hasOwn(services, ref.service)) throw new Error(`adapters.${name}.inputs.${key} references unknown service ${ref.service}`);
   }
   const target = raw.target === undefined ? undefined : outputRef(raw.target, "target");
   if (target && !Object.hasOwn(services, target.service)) throw new Error(`Unknown target service ${target.service}`);

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
@@ -12,15 +12,16 @@ function digest(data: Uint8Array): string {
  * browser binary. Callers that already verified `path` has a matching
  * checksum pay only the cost of one hash over the cached file.
  */
-export async function ensureApk({ path, url, sha256 }: { path: string; url: string; sha256: string }): Promise<void> {
+export async function ensureApk({ path, url, sha256, signal }: { path: string; url: string; sha256: string; signal?: AbortSignal }): Promise<void> {
+  signal?.throwIfAborted();
   const existing = await readFile(path).catch(() => undefined);
   if (existing && digest(existing) === sha256) return;
   await mkdir(dirname(path), { recursive: true });
-  const response = await fetch(url);
+  const response = await fetch(url, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120000)]) : AbortSignal.timeout(120000) });
   if (!response.ok) throw new Error(`APK download failed: HTTP ${response.status}`);
   const data = new Uint8Array(await response.arrayBuffer());
   if (digest(data) !== sha256) throw new Error("APK checksum does not match the pinned configuration");
-  const temporary = `${path}.partial`;
+  const temporary = `${path}.${randomUUID()}.partial`;
   try { await writeFile(temporary, data); await rename(temporary, path); }
   finally { await rm(temporary, { force: true }); }
 }

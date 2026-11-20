@@ -33,13 +33,13 @@ async function fixture(t: TestContext, { stale = false }: { stale?: boolean } = 
 test("Appium lifecycle installs its driver, publishes readiness, reuses, and stops its process", async (t) => {
   const setup = await fixture(t);
   const options = {
-    root: setup.example, environment: { ANDROID_HOME: setup.sdk }, capture: setup.capture, foreground: setup.foreground,
+    devices: ["emulator-5554"], root: setup.example, environment: { ANDROID_HOME: setup.sdk }, capture: setup.capture, foreground: setup.foreground,
     background: setup.background, alive: setup.alive, signal: setup.signal, ready: async () => true, isPortAvailable: async () => true, pause: async () => {}, log: () => {}
   };
   const state = await appiumUp(options);
   assert.equal(state.pid, 222);
   assert.ok(setup.events.some((event) => event.kind === "foreground" && event.args?.includes("install")));
-  assert.equal((await readFile(join(setup.example, ".runtime/appium.env"), "utf8")).trim(), "APPIUM_URL=http://127.0.0.1:4723/");
+  await assert.rejects(readFile(join(setup.example, ".runtime/appium.env")), /ENOENT/);
   await appiumUp(options);
   assert.equal(setup.events.filter((event) => event.kind === "background").length, 1);
   await appiumDown({ root: setup.example, capture: setup.capture, alive: setup.alive, signal: setup.signal, pause: async () => {}, log: () => {} });
@@ -50,10 +50,19 @@ test("Appium lifecycle installs its driver, publishes readiness, reuses, and sto
 test("Appium lifecycle replaces dead state and rejects an occupied port", async (t) => {
   const setup = await fixture(t, { stale: true });
   const base = {
-    root: setup.example, environment: { ANDROID_HOME: setup.sdk }, capture: setup.capture, foreground: setup.foreground,
+    devices: ["emulator-5554"], root: setup.example, environment: { ANDROID_HOME: setup.sdk }, capture: setup.capture, foreground: setup.foreground,
     background: setup.background, alive: setup.alive, ready: async () => true, pause: async () => {}, log: () => {}
   };
   await assert.rejects(appiumUp({ ...base, isPortAvailable: async () => false }), /already in use/);
   const state = await appiumUp({ ...base, isPortAvailable: async () => true });
   assert.equal(state.pid, 222);
+});
+
+test("failed Appium shutdown retains its ownership record for a later retry", async (t) => {
+  const setup = await fixture(t);
+  await appiumUp({ devices: ["emulator-5554"], root: setup.example, environment: { ANDROID_HOME: setup.sdk },
+    capture: setup.capture, foreground: setup.foreground, background: setup.background, alive: setup.alive,
+    ready: async () => true, isPortAvailable: async () => true, pause: async () => {}, log: () => {} });
+  await assert.rejects(appiumDown({ root: setup.example, capture: setup.capture, alive: () => true, signal: () => {}, pause: async () => {}, log: () => {} }), /did not stop/);
+  assert.equal(JSON.parse(await readFile(join(setup.example, ".runtime/appium.json"), "utf8")).pid, 222);
 });

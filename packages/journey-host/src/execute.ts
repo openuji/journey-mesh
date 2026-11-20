@@ -1,25 +1,30 @@
 import { sourceIdentity } from "@openuji/journey-plugin";
-import { startService } from "./services.js";
+import { startService, serviceOutputs } from "./services.js";
 import type { ServiceOutputRef } from "./config/schema.js";
 import { immutableSnapshot, type JourneyObserverOutput } from "@openuji/journey-core";
-import type { JourneyArtifactStore, JourneyObserverComponent, JourneyService } from "@openuji/journey-plugin";
+import type { JourneyArtifactStore, JourneyObserverComponent } from "@openuji/journey-plugin";
 import { testPassed, testRecordFormat, type SuiteRun, type TestRecord } from "@openuji/journey-run-record";
 import { writeRunRecord } from "@openuji/journey-run-record/node";
 import { errorToJourneyRunError, runJourney, type JourneyProgressSink, type JourneyRunError, type RunResult } from "@openuji/journey-runner";
-import type { AssembledTest } from "./assemble.js";
-import type { LoadedService } from "./services.js";
+import { assembleTest, type AssembledTest, type PreparedTest } from "./assemble.js";
+import type { LoadedService, ActiveService } from "./services.js";
+import { pluginLoader } from "./plugins/loader.js";
+import { fileEvidenceStore } from "@openuji/journey-run-record/node";
+import { testFilesPrefix, serviceFilesPrefix } from "@openuji/journey-run-record";
+import type { LoadedSuiteConfig } from "./config/load.js";
+import type { ServiceValues } from "./inputs.js";
 
 /** A suite ready to run: every selected test passed preflight and no resource has been allocated. */
 export type PreparedSuite = Readonly<{
   label?: string;
   target?: ServiceOutputRef;
   outputDir: string;
-  tests: readonly AssembledTest[];
+  tests: readonly PreparedTest[];
   /** Services the selected tests need, dependencies first. */
   services: readonly LoadedService[];
-  artifacts: JourneyArtifactStore;
+  loaded: LoadedSuiteConfig;
 }>;
-export type ExecuteOptions = { signal?: AbortSignal; progress?: readonly JourneyProgressSink[] };
+export type ExecuteOptions = { signal?: AbortSignal; progress?: readonly JourneyProgressSink[]; outputDir?: string };
 
 /**
  * Ask every observer for its output and check it against the run. Only the contract fields are kept.
@@ -82,39 +87,48 @@ export async function executeSuite(prepared: PreparedSuite, options: ExecuteOpti
   const startedAt = new Date().toISOString();
   const tests: TestRecord[] = [];
   const errors: JourneyRunError[] = [];
-  const started: JourneyService[] = [];
-  const values = new Map<string, Readonly<Record<string, unknown>>>();
+  let active: readonly ActiveService[] = Object.freeze([]);
+  let attempts: readonly JourneyArtifactStore[] = Object.freeze([]);
+  let provenance: Readonly<Record<string, unknown>> = Object.freeze({});
+  let values: ServiceValues = Object.freeze({});
+  const outputDir = options.outputDir ?? prepared.outputDir;
+  let runtimeTests: readonly AssembledTest[] = Object.freeze([]);
   let target: SuiteRun["target"];
   let ready = true;
   try {
     for (const entry of prepared.services) {
-      const { service } = entry;
       options.signal?.throwIfAborted();
-      // Include partially started services in cleanup.
-      started.push(service);
-      await startService(entry, values, options.signal);
+      const artifacts = fileEvidenceStore(outputDir, serviceFilesPrefix(entry.key));
+      attempts = [...attempts, artifacts];
+      const acquired = await startService(entry, prepared.loaded, values, outputDir, options.signal, artifacts);
+      active = [...active, acquired];
+      values = Object.freeze({ ...values, [entry.key]: serviceOutputs(entry, acquired.lease) });
+      if (acquired.lease.provenance !== undefined) provenance = Object.freeze({ ...provenance, [entry.key]: immutableSnapshot(acquired.lease.provenance) });
       options.signal?.throwIfAborted();
     }
-    if (prepared.target) target = sourceIdentity(values.get(prepared.target.service)?.[prepared.target.output]);
+    if (prepared.target) target = sourceIdentity(values[prepared.target.service]?.[prepared.target.output]);
+    const load = pluginLoader(prepared.loaded.path, prepared.loaded.env);
+    for (const test of prepared.tests) runtimeTests = [...runtimeTests, await assembleTest(test.config, test.compiled, {
+      loaded: prepared.loaded, load, values, artifacts: fileEvidenceStore(outputDir, testFilesPrefix(test.id))
+    })];
   } catch (error) { ready = false; errors.push(errorToJourneyRunError(error)); }
   try {
-    for (const test of prepared.tests) {
+    for (const test of runtimeTests) {
       if (!ready || options.signal?.aborted) break;
       tests.push(await executeTest(test, options));
     }
   } catch (error) { errors.push(errorToJourneyRunError(error)); }
   finally {
-    for (const service of [...started].reverse()) try { await service.down?.(); } catch (error) { errors.push(errorToJourneyRunError(error)); }
+    for (const service of [...active].reverse()) try { await service.lease.release(); } catch (error) { errors.push(errorToJourneyRunError(error)); }
   }
   // Service stores live below the run directory, so their hrefs are already run-relative.
-  const files = [...prepared.artifacts.files, ...prepared.services.flatMap((service) => service.artifacts.files)];
-  const provenance = Object.fromEntries(prepared.services.filter(({ service }) => service.provenance).map(({ key, service }) => [key, service.provenance!()]));
+  const files = attempts.flatMap((artifacts) => artifacts.files);
   if (options.signal?.aborted) errors.push(errorToJourneyRunError(options.signal.reason ?? new Error("Suite cancelled")));
   const ok = !errors.length && !options.signal?.aborted && tests.length === prepared.tests.length && tests.every((test) => test.ok);
   const run: SuiteRun = immutableSnapshot({
     ...(prepared.label ? { label: prepared.label } : {}), ...(target ? { target } : {}), ok,
     startedAt, finishedAt: new Date().toISOString(), errors, provenance, files, tests
   });
-  await writeRunRecord(prepared.outputDir, run);
+  await writeRunRecord(outputDir, run);
   return run;
 }

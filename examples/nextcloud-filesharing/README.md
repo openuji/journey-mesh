@@ -142,8 +142,8 @@ device profile match the pins. These device pins — `api`, `avd`, `image`,
 `localImages`, `profile`, `locale`, `requiredPackages` — live directly in
 `mesh.yaml`'s `services.android.options`; there is no separate manifest file.
 
-`appium:up` runs the `@openuji/journey-adapter-appium/service` plugin, verifies that
-device, installs the pinned UiAutomator2 driver into a versioned repository
+`appium:up` includes its Android dependency, then runs the
+`@openuji/journey-adapter-appium/service` plugin, verifies the device, installs the pinned UiAutomator2 driver into a versioned repository
 cache, starts Appium on port 4723, waits for readiness, and writes
 `.runtime/appium.env`. It neither starts Nextcloud nor runs a journey — nor
 does it download the Nextcloud APK; the Appium adapter does that when its first
@@ -245,16 +245,17 @@ pnpm exec journey-mesh test examples/nextcloud-filesharing/mesh.yaml --test nati
 
 ## Stop local services
 
-Stop the optional native services in reverse order:
+Stop the native Appium service and its Android dependency:
 
 ```sh
 pnpm appium:down
-pnpm android:down
 ```
 
-These commands stop only the processes recorded for this example. They retain
-the AVD, Android SDK packages, APK, Appium cache, and reports.
-`ANDROID_AVD_NAME=another-dedicated-avd pnpm android:down` stops a named override.
+Shutdown uses the ownership records for this configuration and service, so it
+needs no repeated environment overrides or build inputs. It stops recorded owned
+processes and preserves borrowed emulators. `pnpm android:down` selects just the
+Android service. Both commands retain the AVD, SDK packages, APK, Appium cache,
+and reports.
 
 Nextcloud containers and volumes are removed by the test's service lifecycle.
 Existing persistent deployments are not adopted or deleted automatically; see
