@@ -29,8 +29,11 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Register host.docker.internal
-        run: echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+      - name: Configure stack host
+        run: |
+          stack_host=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
+          test -n "$stack_host"
+          echo "NEXTCLOUD_WEB_STACK_HOST=$stack_host" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

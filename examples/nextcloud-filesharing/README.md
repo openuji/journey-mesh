@@ -82,7 +82,9 @@ the federated recipient are derived from this one value in YAML.
 Browser runs do not require native configuration. The default browser hostname
 must resolve on the host; on Linux this may require adding
 `127.0.0.1 host.docker.internal` to `/etc/hosts`. Compose supplies the container
-host mapping.
+host mapping. Browser CI supplies the Docker bridge gateway through
+`NEXTCLOUD_WEB_STACK_HOST`, giving the browser and both containers one reachable
+address, as the native CI job does.
 
 Shared account and database defaults come from `deployment/.env.example`, then
 optional `deployment/.env`; shell values take precedence. The image pin, version,
@@ -218,7 +220,11 @@ flowchart TB
 
 Both drivers are deterministic entry/value resolvers; browser and device
 resources belong to their adapters. The Android model supplies native locators
-and application entry bindings. Selecting an adapter does not translate web
+and application entry bindings. Login uses the application entry. Subsequent
+journeys enter Files through the client's `/app/openFiles` HTTPS app link, which
+resumes the Files activity and refreshes its notification status. This keeps the
+entry contract explicit when the app was already open during Alice's steps.
+Selecting an adapter does not translate web
 locators into native ones. See the [native journey model](ujg/filesharing.android.ujg.jsonld)
 and [Android driver](../../packages/journey-driver-nextcloud/src/android.ts).
 

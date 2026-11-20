@@ -27,11 +27,11 @@ test("example pins its Nextcloud deployment image to a versioned digest", async 
   assert.doesNotMatch(compose, /image: nextcloud:/);
 });
 
-test("native scenario enters the application and models notification navigation", async () => {
+test("native scenario enters Files explicitly and models notification navigation", async () => {
   const plan = await compileUjgJourneyPlan(new URL("../ujg/filesharing.android.ujg.jsonld", import.meta.url), {
     journeyId: "urn:journey:bob-remote-share"
   });
-  assert.ok(plan.operations.some((operation) => operation.entryBinding?.value === "nextcloud.android.application"));
+  assert.deepEqual([...new Set(plan.operations.flatMap((operation) => operation.entryBinding ? [operation.entryBinding.value] : []))], ["nextcloud.android.files"]);
   assert.ok(plan.operations.some((operation) => operation.source?.references?.graphNodeId === "urn:transition:bob-opens-native-notifications"));
   assert.ok(Object.isFrozen(plan.operations));
 });
@@ -98,6 +98,7 @@ test("native selection requires a host and shares overridden URLs and accounts a
   for (const name of ["web-native", "android"]) {
     const driver = interpolate(config.adapters[name].driver!.options, env, name) as {
       touchpoints: Record<string, { baseURL: string }>; users: Record<string, { username: string; password: string }>;
+      entries: Record<string, unknown>;
       transitionValues: Record<string, unknown>;
     };
     assert.equal(driver.touchpoints["urn:touchpoint:nextcloud-a"].baseURL, environment.sharerTouchpoint.baseURL);
@@ -105,6 +106,9 @@ test("native selection requires a host and shares overridden URLs and accounts a
     assert.equal(driver.users["urn:user:bob"].username, stack.services.bob.username);
     assert.equal(driver.users["urn:user:bob"].password, stack.services.bob.password);
     if (name === "web-native") assert.equal(driver.transitionValues["urn:transition:alice-enters-remote-bob"], "custom-bob@http://192.0.2.40:19084");
+    if (name === "android") assert.deepEqual(driver.entries["nextcloud.android.files"], {
+      kind: "deep-link", route: "https://192.0.2.40:19084/app/openFiles"
+    });
   }
 });
 

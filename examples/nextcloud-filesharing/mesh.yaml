@@ -319,6 +319,11 @@ adapters:
         users: *users
         entries:
           nextcloud.android.application: application
+          # The client registers /app/* HTTPS links as internal navigation intents.
+          # Enter Files explicitly so returning from Alice's journey refreshes Bob's activity.
+          nextcloud.android.files:
+            kind: deep-link
+            route: https://${NEXTCLOUD_ANDROID_STACK_HOST}:${NEXTCLOUD_ANDROID_BOB_PORT:-18084}/app/openFiles
         transitionValues:
           urn:transition:android-enters-server:
             source: touchpoint.baseURL
