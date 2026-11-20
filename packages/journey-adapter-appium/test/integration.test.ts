@@ -38,8 +38,8 @@ class Session implements AppiumSession {
   readonly id = "session";
   readonly calls: string[] = [];
   closeError?: Error;
-  async findElements() { this.calls.push("find"); return [{ elementId: "target" }]; }
-  async tap() { this.calls.push("tap"); }
+  async findElements(_query: string) { this.calls.push("find"); return [{ elementId: "target" }]; }
+  async tap(_id: string) { this.calls.push("tap"); }
   async setValue(_id: string, value: string) { this.calls.push(`type:${value}`); }
   async source() { this.calls.push("source"); return "<hierarchy/>"; }
   async screenshot() { this.calls.push("screenshot"); return ""; }
@@ -119,6 +119,48 @@ test("complete construction values reach the Appium session", async () => {
   assert.equal(capabilities["appium:app"], "/built.apk");
   assert.equal(capabilities["appium:udid"], "emulator-5556");
   assert.equal(input?.port, 4799);
+});
+
+test("a platform prompt disappearing before its tap does not fail the modeled state", async () => {
+  const session = new Session();
+  const taps: string[] = [];
+  session.findElements = async (query) => [{ elementId: query.includes("permission_allow_button") ? "prompt" : "target" }];
+  session.tap = async (id) => {
+    taps.push(id);
+    if (id === "prompt") throw Object.assign(new Error("Prompt was dismissed"), { name: "stale element reference" });
+  };
+  const result = await runJourney({
+    plan: { ...plan, operations: [state] }, profiles: [{ id: "profile" }], adapter: appiumAdapter(options(session))
+  });
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  assert.deepEqual(taps, ["prompt"]);
+  assert.equal(session.calls.at(-1), "close");
+});
+
+test("platform interruption handling preserves session failures", async () => {
+  const session = new Session();
+  session.tap = async () => { throw Object.assign(new Error("Session is gone"), { name: "invalid session id" }); };
+  const result = await runJourney({
+    plan: { ...plan, operations: [state] }, profiles: [{ id: "profile" }], adapter: appiumAdapter(options(session))
+  });
+  assert.equal(result.ok, false);
+  assert.match(JSON.stringify(result.errors), /Session is gone/);
+});
+
+test("stale modeled actions still fail without being retried", async () => {
+  const session = new Session();
+  let taps = 0;
+  session.findElements = async (query) => query.includes("permission_allow_button") ? [] : [{ elementId: "target" }];
+  session.tap = async () => { taps++; throw Object.assign(new Error("Modeled target is stale"), { name: "stale element reference" }); };
+  const touchProfile = { id: "touch", modalities: [{ id: touchTapInputModalityId }] };
+  const result = await runJourney({
+    plan: { ...plan, operations: [{ ...transition, activation: { ...transition.activation, requiredInputModalityProfiles: [touchProfile] } }] },
+    profiles: [{ id: "profile", selectInputModality: () => ({ profileId: "profile", inputModalityProfile: touchProfile, modality: touchProfile.modalities[0]! }) }],
+    adapter: appiumAdapter(options(session))
+  });
+  assert.equal(result.ok, false);
+  assert.match(JSON.stringify(result.errors), /Modeled target is stale/);
+  assert.equal(taps, 1);
 });
 
 test("an execution without a resolved APK or UDID, or with a shared device, fails when it starts", async () => {

@@ -154,10 +154,13 @@ for the web adapter — see "One-time prerequisites" above), from the `applicati
 block already declared in `adapters.android.options`. Appium logs are stored
 under `.tmp/appium-runtime/`; emulator logs are under `.tmp/android-runtime/`.
 
-The mixed journey also writes `test-results/alice-sharing.har` with Alice's
-sharing API requests and responses. It contains the last executed profile and
-is included in the CI artifact, so a share-creation failure retains the server's
-response as well as the journey's effect-verification error.
+Both browser and mixed journeys write `.tmp/diagnostics/alice-sharing.<scope>.har`
+relative to the working directory, with sharing API requests and responses.
+Each run, profile execution, and actor/touchpoint session gets its own scope so
+later contexts retain earlier failure evidence. Appium keeps debug logs in its
+log file while printing only warnings to the console. CI includes these files
+alongside five-second CPU/memory samples and kernel warnings. These diagnostics stay
+outside the managed run output, which only publishes registered evidence files.
 
 The native infrastructure is prepared separately from per-profile execution:
 

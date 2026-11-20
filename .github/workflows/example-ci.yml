@@ -47,7 +47,19 @@ jobs:
       - name: Run Nextcloud filesharing example
         env:
           UJG_EXAMPLE_TIMEOUT_MS: 600000
-        run: pnpm --filter @openuji/example-nextcloud-filesharing e2e
+        run: |
+          mkdir -p .tmp/ci-logs
+          vmstat -w 5 > .tmp/ci-logs/resources.log &
+          resource_pid=$!
+          trap 'kill "$resource_pid" 2>/dev/null || true' EXIT
+          pnpm --filter @openuji/example-nextcloud-filesharing e2e
+
+      - name: Capture runner diagnostics
+        if: always()
+        run: |
+          mkdir -p .tmp/ci-logs
+          free -h > .tmp/ci-logs/memory-after.txt
+          sudo -n dmesg --level=err,warn > .tmp/ci-logs/kernel.log 2>&1 || true
 
       - name: Upload Journey Mesh artifacts
         if: always()
@@ -57,3 +69,5 @@ jobs:
           if-no-files-found: ignore
           path: |
             examples/nextcloud-filesharing/test-results
+            examples/nextcloud-filesharing/.tmp/diagnostics
+            .tmp/ci-logs

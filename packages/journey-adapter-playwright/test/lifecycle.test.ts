@@ -112,6 +112,32 @@ test("duplicate allocation compensation keeps the original context tracked", asy
   assert.deepEqual(contexts.map((context) => context.closeCalls), [1, 1]);
 });
 
+test("HAR evidence has a distinct path for each actor, profile, and run", async () => {
+  const paths: string[] = [];
+  const recordHar = { path: "/tmp/diagnostics/sharing.har", content: "embed" as const, urlFilter: "**/shares**" };
+  const browser = {
+    async newContext(options: import("playwright").BrowserContextOptions) {
+      paths.push(options.recordHar!.path);
+      assert.equal(options.recordHar!.content, "embed");
+      assert.equal(options.recordHar!.urlFilter, "**/shares**");
+      return { async newPage() { return { async goto() {}, async close() {} }; }, async close() {} };
+    }
+  };
+  const adapter = playwrightAdapter({ driver, browser: browser as never, contextOptions: { recordHar } });
+  for (const [runId, executionId] of [["run-1", "profile-1"], ["run-1", "profile-2"], ["run-2", "profile-1"]]) {
+    const execution = adapter.createExecution({ context: { runId, executionId, profile: { id: executionId }, plan } });
+    await execution.start();
+    await execution.openEntry(operation);
+    await execution.openEntry(operation);
+    await execution.openEntry({ ...operation, actorId: "another-actor" });
+    await execution.close({ executionFailed: true });
+  }
+  assert.equal(paths.length, 6, "An existing session reuses its context");
+  assert.equal(new Set(paths).size, paths.length, "No context may overwrite another context's HAR");
+  assert.ok(paths.every((path) => path.startsWith("/tmp/diagnostics/sharing.") && path.endsWith(".har")));
+  assert.equal(recordHar.path, "/tmp/diagnostics/sharing.har");
+});
+
 test("unsupported Playwright bindings fail before browser allocation", async () => {
   let launches = 0;
   const invalid = structuredClone(plan);

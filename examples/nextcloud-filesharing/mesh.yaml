@@ -225,6 +225,11 @@ adapters:
       headless: ${HEADLESS:-true}
       actionTimeoutMs: 30000
       navigationTimeoutMs: 30000
+      contextOptions: &sharing-browser-context
+        recordHar:
+          path: ./.tmp/diagnostics/alice-sharing.har
+          urlFilter: "**/ocs/v2.php/apps/files_sharing/api/v1/shares**"
+          content: embed
     driver:
       use: "@openuji/journey-driver-nextcloud/web/plugin"
       options:
@@ -265,11 +270,7 @@ adapters:
       headless: ${HEADLESS:-true}
       actionTimeoutMs: 30000
       navigationTimeoutMs: 30000
-      contextOptions:
-        recordHar:
-          path: ./test-results/alice-sharing.har
-          urlFilter: "**/ocs/v2.php/apps/files_sharing/api/v1/shares**"
-          content: embed
+      contextOptions: *sharing-browser-context
     driver:
       use: "@openuji/journey-driver-nextcloud/web/plugin"
       options:

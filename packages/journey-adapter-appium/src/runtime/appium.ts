@@ -110,7 +110,7 @@ export async function appiumUp({
   await mkdir(logDirectory, { recursive: true });
   const logPath = resolve(logDirectory, `appium-${new Date().toISOString().replace(/[:.]/g, "-")}.log`);
   const url = `http://127.0.0.1:${port}/`;
-  const args = [appium, "--address", "127.0.0.1", "--port", String(port), "--log-level", "warn", "--log", logPath];
+  const args = [appium, "--address", "127.0.0.1", "--port", String(port), "--log-level", "warn:debug", "--log", logPath];
   const processState = await (background ?? spawnOwnedProcess)(process.execPath, args, { env, cwd: root, logPath });
   const state: AppiumState = { pid: processState.pid, port, url, logPath, appiumHome: env.APPIUM_HOME };
   try {

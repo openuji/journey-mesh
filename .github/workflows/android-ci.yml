@@ -77,4 +77,5 @@ jobs:
           if-no-files-found: warn
           path: |
             examples/nextcloud-filesharing/test-results
+            examples/nextcloud-filesharing/.tmp/diagnostics
             .tmp/android-logs

@@ -269,7 +269,14 @@ class AppiumExecution implements JourneyAdapterExecution {
 async function dismissPlatformInterruption(session: AppiumSession): Promise<void> {
   const query = "//*[@resource-id='com.android.permissioncontroller:id/permission_allow_button' or @resource-id='com.android.chrome:id/signin_fre_dismiss_button' or @resource-id='com.android.chrome:id/terms_accept' or @resource-id='com.android.chrome:id/ack_button' or @resource-id='com.android.chrome:id/negative_button']";
   const prompts = await session.findElements(query);
-  if (prompts.length === 1) await session.tap(prompts[0]!.elementId);
+  if (prompts.length === 1) {
+    try { await session.tap(prompts[0]!.elementId); }
+    catch (error) {
+      // Chrome or Android can dismiss the prompt between lookup and tap.
+      // Continue with the modeled state check; other command failures stay fatal.
+      if (!(error instanceof Error) || error.name !== "stale element reference") throw error;
+    }
+  }
 }
 
 function freezeOptions(options: AppiumAdapterOptions): AppiumAdapterOptions {
