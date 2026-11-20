@@ -103,8 +103,7 @@ export async function findSdk(environment: NodeJS.ProcessEnv = process.env): Pro
 
 export function androidAvdHome(environment: NodeJS.ProcessEnv = process.env): string {
   if (environment.ANDROID_AVD_HOME) return resolve(environment.ANDROID_AVD_HOME);
-  if (environment.ANDROID_USER_HOME) return resolve(environment.ANDROID_USER_HOME, "avd");
-  return resolve(homedir(), ".android/avd");
+  return resolve(environment.ANDROID_EMULATOR_HOME || environment.ANDROID_USER_HOME || resolve(homedir(), ".android"), "avd");
 }
 
 export async function findSdkTool(sdk: string, name: string): Promise<string | undefined> {
@@ -272,7 +271,8 @@ export async function androidUp({
   const avd = target.avd;
   const image = selectSystemImage(target, hostPlatform, hostArch);
   const sdk = await findSdk(environment);
-  const env: NodeJS.ProcessEnv = { ...environment, ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk };
+  const avdHome = resolve(suppliedAvdHome ?? androidAvdHome(environment));
+  const env: NodeJS.ProcessEnv = { ...environment, ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk, ANDROID_AVD_HOME: avdHome };
   const discoveredJava = javaHome(env, hostPlatform);
   if (discoveredJava) { env.JAVA_HOME = discoveredJava; env.PATH = [resolve(discoveredJava, "bin"), env.PATH ?? ""].join(delimiter); }
   env.PATH = [resolve(sdk, "platform-tools"), resolve(sdk, "emulator"), env.PATH ?? ""].join(delimiter);
@@ -284,12 +284,12 @@ export async function androidUp({
   const { avdmanager } = await provisionSdk({ sdk, image, environment: env, hostPlatform, capture, foreground });
   const emulator = resolve(sdk, "emulator/emulator");
   const adb = resolve(sdk, "platform-tools/adb");
+  await mkdir(avdHome, { recursive: true });
   const configured = (await capture(emulator, ["-list-avds"])).stdout.split(/\r?\n/).filter(Boolean);
-  const avdHome = suppliedAvdHome ?? androidAvdHome(env);
   if (configured.includes(avd)) await validateAvd({ avd, avdHome, target, image });
   else {
     log(`[android:up] Create ${avd}`);
-    await foreground(avdmanager, ["create", "avd", "--name", avd, "--package", image, "--device", target.profile], { input: "no\n" });
+    await foreground(avdmanager, ["create", "avd", "--name", avd, "--path", resolve(avdHome, `${avd}.avd`), "--package", image, "--device", target.profile], { input: "no\n" });
     await validateAvd({ avd, avdHome, target, image });
   }
   await capture(emulator, ["-accel-check"]);

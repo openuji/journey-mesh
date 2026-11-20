@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test, { type TestContext } from "node:test";
 import {
-  releaseAndroidDevice, androidUp, parseAndroidTarget, selectSystemImage, validateAndroidTarget, type AndroidRuntimeTarget
+  releaseAndroidDevice, androidAvdHome, androidUp, parseAndroidTarget, selectSystemImage, validateAndroidTarget, type AndroidRuntimeTarget
 } from "../src/runtime/android.js";
 
 const target: AndroidRuntimeTarget = {
@@ -26,7 +26,7 @@ async function fixture(t: TestContext, { existing, incompatible = false }: { exi
   const put = async (path: string, value = ""): Promise<void> => { await mkdir(dirname(path), { recursive: true }); await writeFile(path, value); };
   for (const path of ["emulator/emulator", "platform-tools/adb", "cmdline-tools/latest/bin/avdmanager"]) await put(join(sdk, path));
   await mkdir(join(sdk, "system-images/android-35/google_apis/arm64-v8a"), { recursive: true });
-  const writeAvd = async (bad = false) => put(join(avdHome, `${target.avd}.avd/config.ini`), [
+  const writeAvd = async (bad = false, directory = join(avdHome, `${target.avd}.avd`)) => put(join(directory, "config.ini"), [
     "target=android-35", "tag.id=google_apis", `abi.type=${bad ? "x86_64" : "arm64-v8a"}`, "hw.device.name=pixel_6", ""
   ].join("\n"));
   if (existing) await writeAvd(incompatible);
@@ -44,9 +44,15 @@ async function fixture(t: TestContext, { existing, incompatible = false }: { exi
   };
   const foreground = async (command: string, args: readonly string[]) => {
     events.push({ kind: "foreground", command, args: [...args] });
-    if (args.includes("create") && args.includes("avd")) { state.configured.push(target.avd); await writeAvd(); }
+    if (args.includes("create") && args.includes("avd")) {
+      state.configured.push(target.avd);
+      const path = args.indexOf("--path");
+      // Model avdmanager's Linux default, which can differ from the emulator's.
+      await writeAvd(false, path < 0 ? join(root, ".config/.android/avd", `${target.avd}.avd`) : args[path + 1]);
+    }
   };
-  const background = async (_command: string, args: readonly string[]) => {
+  const background = async (_command: string, args: readonly string[], options: { env: NodeJS.ProcessEnv }) => {
+    assert.equal(options.env.ANDROID_AVD_HOME, resolve(avdHome));
     events.push({ kind: "background", args: [...args] });
     const serial = `emulator-${args[args.indexOf("-port") + 1]}`;
     state.devices.push({ serial, name: target.avd });
@@ -75,10 +81,17 @@ test("system image selection follows the host architecture", () => {
   assert.throws(() => selectSystemImage(target, "linux", "arm64"), /Unsupported/);
 });
 
+test("AVD directory follows the Android tools' environment precedence", () => {
+  const environment = { ANDROID_USER_HOME: "/user", ANDROID_EMULATOR_HOME: "/emulator", ANDROID_AVD_HOME: "/avds" };
+  assert.equal(androidAvdHome(environment), "/avds");
+  assert.equal(androidAvdHome({ ...environment, ANDROID_AVD_HOME: "" }), "/emulator/avd");
+  assert.equal(androidAvdHome({ ANDROID_USER_HOME: environment.ANDROID_USER_HOME }), "/user/avd");
+});
+
 test("android lifecycle creates, boots, reuses, and stops only its managed AVD", async (t) => {
   const setup = await fixture(t);
   const options = {
-    root: setup.example, target, environment: { ANDROID_HOME: setup.sdk }, hostPlatform: "darwin", hostArch: "arm64", avdHome: setup.avdHome,
+    root: setup.example, target, environment: Object.freeze({ ANDROID_HOME: setup.sdk, XDG_CONFIG_HOME: join(setup.root, ".config") }), hostPlatform: "darwin", hostArch: "arm64", avdHome: setup.avdHome,
     capture: setup.capture, foreground: setup.foreground, background: setup.background, choosePort: async () => 5568, pause: async () => {}, log: () => {}
   };
   const first = await androidUp(options);
