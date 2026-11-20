@@ -27,6 +27,7 @@ import {
 
 export type * from "./contracts.js";
 export { appiumAutomation } from "./automation.js";
+export { appiumServerContract, type AppiumServer } from "./server.js";
 export { appiumCommandForModality, appiumLocatorQuery, appiumObservationQuery, touchTapInputModalityId, xpathLiteral } from "./queries.js";
 export type { AppiumInteractionCommand } from "./queries.js";
 export { initialAppiumLifecycleState, reduceAppiumLifecycle } from "./lifecycle.js";
@@ -42,34 +43,32 @@ export type AppiumAdapterOptions = Readonly<{
   executionObservers?: readonly AppiumExecutionObserver[];
   assertionTimeoutMs?: number;
   pollIntervalMs?: number;
-  /** Provisions what executions need (e.g. the pinned APK); runs once, when the first execution starts. */
-  prepare?: () => Promise<void>;
+  /** Idempotent APK materialization/checksum verification, with no configuration overrides. */
+  prepare?: (signal?: AbortSignal) => Promise<void>;
+  /** Local installation evidence is collected before the first modeled interaction on each device. */
+  verifyInstallation?: (input: { udid: string; execution: ReturnType<typeof executionDescriptor>; signal?: AbortSignal }) => Promise<void>;
+  preserveApkSignature?: boolean;
 }>;
+
+export function validateAppiumOperation(operation: JourneyPlanOperation): void {
+  if (operation.kind === "state") {
+    if (!Number.isInteger(operation.target.expectedMatchCount) || operation.target.expectedMatchCount < 0) throw new Error(`Invalid native match count ${operation.target.expectedMatchCount}`);
+    appiumObservationQuery(operation.target.bindings);
+  } else if (operation.kind === "transition" && operation.activation.requiredInputModalityProfiles.length > 0) appiumObservationQuery(operation.activation.bindings);
+}
 
 export function appiumSessionKey(operation: JourneyPlanOperation): string {
   return JSON.stringify([operation.actorId, operation.touchpointId]);
 }
 
 export function appiumAdapter(options: AppiumAdapterOptions): JourneyAdapter {
-  let prepared: Promise<void> | undefined;
-  const prepare = options.prepare && (() => {
-    prepared ??= options.prepare!().catch((error) => { prepared = undefined; throw error; });
-    return prepared;
-  });
-  const configured = freezeOptions({ ...options, ...(prepare ? { prepare } : {}) });
+  const configured = freezeOptions(options);
   return Object.freeze({
     name: appiumAdapterName,
     version: "0.1.0",
     describeOperation(operation) {
       if (!configured.devices[operation.touchpointId]) throw new Error(`No Appium device for touchpoint ${operation.touchpointId}`);
-      if (operation.kind === "state") {
-        if (!Number.isInteger(operation.target.expectedMatchCount) || operation.target.expectedMatchCount < 0) {
-          throw new Error(`Invalid native match count ${operation.target.expectedMatchCount}`);
-        }
-        appiumObservationQuery(operation.target.bindings);
-      } else if (operation.kind === "transition" && operation.activation.requiredInputModalityProfiles.length > 0) {
-        appiumObservationQuery(operation.activation.bindings);
-      }
+      validateAppiumOperation(operation);
       return Object.freeze({ name: appiumAdapterName, version: "0.1.0" });
     },
     createExecution: (input) => new AppiumExecution(input, configured)
@@ -91,7 +90,7 @@ class AppiumExecution implements JourneyAdapterExecution {
   async start(): Promise<void> {
     this.state = reduceAppiumLifecycle(this.state, { type: "start" });
     try {
-      await this.options.prepare?.();
+      await this.options.prepare?.(this.input.context.signal);
       this.input.context.signal?.throwIfAborted();
       for (const observer of this.options.executionObservers ?? []) {
         await observer.onExecutionStarted?.({ execution: this.execution });
@@ -109,11 +108,6 @@ class AppiumExecution implements JourneyAdapterExecution {
     const target = this.options.driver.resolveEntry(operation);
     this.input.context.signal?.throwIfAborted();
     if (target.kind === "application") {
-      // Enter from a deterministic stopped process. Merely activating an
-      // already-foreground app is a no-op and can leave server-backed state
-      // stale between composed journeys.
-      await session.terminateApplication(this.options.application.package, 5_000);
-      this.input.context.signal?.throwIfAborted();
       await session.activateApplication(this.options.application.package);
     } else await session.openDeepLink(target.url, this.options.application.package);
     this.input.context.signal?.throwIfAborted();
@@ -200,6 +194,7 @@ class AppiumExecution implements JourneyAdapterExecution {
       ...this.options.connection,
       capabilities: {
         ...(device.capabilities ?? {}),
+        ...(this.options.preserveApkSignature ? { "appium:noSign": true } : {}),
         "appium:udid": device.udid,
         "appium:app": this.options.application.apk,
         "appium:appPackage": this.options.application.package,
@@ -222,6 +217,7 @@ class AppiumExecution implements JourneyAdapterExecution {
       session
     });
     await this.registerAllocated(resource);
+    await this.options.verifyInstallation?.({ udid: device.udid, execution: this.execution, signal: this.input.context.signal });
     // Chrome custom-tab state is adapter-owned runtime preconditioning.
     await session.terminateApplication("com.android.chrome", 5_000);
     await session.clearApplication("com.android.chrome");
@@ -273,7 +269,14 @@ class AppiumExecution implements JourneyAdapterExecution {
 async function dismissPlatformInterruption(session: AppiumSession): Promise<void> {
   const query = "//*[@resource-id='com.android.permissioncontroller:id/permission_allow_button' or @resource-id='com.android.chrome:id/signin_fre_dismiss_button' or @resource-id='com.android.chrome:id/terms_accept' or @resource-id='com.android.chrome:id/ack_button' or @resource-id='com.android.chrome:id/negative_button']";
   const prompts = await session.findElements(query);
-  if (prompts.length === 1) await session.tap(prompts[0]!.elementId);
+  if (prompts.length === 1) {
+    try { await session.tap(prompts[0]!.elementId); }
+    catch (error) {
+      // Chrome or Android can dismiss the prompt between lookup and tap.
+      // Continue with the modeled state check; other command failures stay fatal.
+      if (!(error instanceof Error) || error.name !== "stale element reference") throw error;
+    }
+  }
 }
 
 function freezeOptions(options: AppiumAdapterOptions): AppiumAdapterOptions {
@@ -283,9 +286,12 @@ function freezeOptions(options: AppiumAdapterOptions): AppiumAdapterOptions {
     ...device,
     ...(device.capabilities ? { capabilities: deepFreeze(structuredClone(device.capabilities)) } : {})
   })])));
-  if (!application.apk || !application.package || !application.activity) throw new Error("Appium requires APK, package, and activity configuration");
+  if (!application.package || !application.activity) throw new Error("Appium requires package and activity configuration");
   if (!Object.keys(devices).length) throw new Error("Appium requires at least one device");
-  for (const [id, device] of Object.entries(devices)) if (!device.udid) throw new Error(`Appium device ${id} requires a UDID`);
+  for (const [touchpoint, device] of Object.entries(devices)) if (!device.udid) throw new Error(`Appium device for ${touchpoint} has no UDID`);
+  const udids = Object.values(devices).map((device) => device.udid);
+  if (new Set(udids).size !== udids.length) throw new Error("Each touchpoint needs its own Appium device");
+  if (!application.apk) throw new Error("Appium requires an APK");
   return Object.freeze({
     ...options,
     application,

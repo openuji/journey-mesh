@@ -22,6 +22,11 @@ export const journeyMeshPlugin = defineAdapterPlugin({
       navigationTimeoutMs: positiveNumber(options.navigationTimeoutMs, 30_000)
     };
   },
+  validateOperations(_settings, context, { driver }) {
+    if (!driver) throw new Error("Playwright requires a driver");
+    const adapter = playwrightAdapter({ driver });
+    for (const operation of context.operations) adapter.describeOperation?.(operation);
+  },
   create({ browser, ...settings }, _context, { driver, observers }) {
     if (!driver) throw new Error("Playwright requires a driver");
     return playwrightAdapter({ ...settings, driver, executionObservers: observers, browserType: browsers[browser] });

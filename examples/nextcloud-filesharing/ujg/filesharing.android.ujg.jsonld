@@ -34,14 +34,14 @@
       "@id": "urn:entry-binding:bob-remote-share",
       "label": "Bob remote-share entry boot",
       "entryRef": "urn:entry:bob-remote-share",
-      "value": "nextcloud.android.application"
+      "value": "nextcloud.android.files"
     },
     {
       "@type": "EntryBinding",
       "@id": "urn:entry-binding:bob-remote-share-offer",
       "label": "Bob remote-share offer entry boot",
       "entryRef": "urn:entry:bob-remote-share-offer",
-      "value": "nextcloud.android.application"
+      "value": "nextcloud.android.files"
     },
     {
       "@type": "CompositeState",

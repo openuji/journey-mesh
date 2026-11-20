@@ -4,7 +4,13 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileEvidenceStore } from "@openuji/journey-run-record/node";
-import { nextcloudStackRuntime, validateStackOptions, type StackOptions, type StackExecutor } from "../src/runtime/stack.js";
+import { executeStackCommand, nextcloudStackRuntime, validateStackOptions, type StackOptions, type StackExecutor } from "../src/runtime/stack.js";
+
+test("stack commands parse stdout separately while retaining stderr on failure", async () => {
+  const output = await executeStackCommand(process.execPath, ["-e", 'console.error("warning"); console.log(JSON.stringify({ installed: true }))'], { cwd: process.cwd(), env: process.env });
+  assert.deepEqual(JSON.parse(output), { installed: true });
+  await assert.rejects(executeStackCommand(process.execPath, ["-e", 'console.error("command diagnostic"); process.exit(1)'], { cwd: process.cwd(), env: process.env }), /command diagnostic/);
+});
 
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), "nextcloud-runtime-"));
@@ -25,11 +31,11 @@ test("Nextcloud lifecycle owns provisioning, verifies image identity, and publis
   const { options, artifacts, calls, execute } = await fixture();
   const runtime = nextcloudStackRuntime(options, artifacts, execute);
   assert.equal(calls.length, 0);
-  await runtime.up(); await runtime.down!();
+  const lease = await runtime.start({}); await lease.release();
   assert.ok(calls.every((call) => call[0] !== "docker" || call[1] === "image" || call[1] === "inspect" || call.includes(options.project) || call.includes(`label=com.docker.compose.project=${options.project}`)));
   assert.ok(calls.some((call) => call.includes("allow_local_remote_servers")));
   assert.ok(calls.some((call) => call.includes("--volumes")));
-  const identity = JSON.stringify(runtime.provenance!());
+  const identity = JSON.stringify(lease.provenance);
   assert.match(identity, /sha256:actual-image/);
   assert.doesNotMatch(identity, /private-password|literal\$/);
   assert.equal(artifacts.files.length, 1);
@@ -39,14 +45,14 @@ test("Nextcloud lifecycle owns provisioning, verifies image identity, and publis
 test("identity mismatch fails verification rather than publishing a successful deployment", async () => {
   const { options, artifacts, execute } = await fixture();
   const runtime = nextcloudStackRuntime(options, artifacts, async (command, args, context) => args[0] === "image" ? "sha256:unexpected" : execute(command, args, context));
-  await assert.rejects(runtime.up(), /image mismatch/);
+  await assert.rejects(runtime.start({}), /image mismatch/);
   assert.equal(artifacts.files.length, 0);
 });
 
 test("declared system settings preserve boolean and integer types", async () => {
   const { options, artifacts, calls, execute } = await fixture();
   const runtime = nextcloudStackRuntime({ ...options, systemConfig: { "fixture.enabled": false, "fixture.limit": 3 } }, artifacts, execute);
-  await runtime.up(); await runtime.down!();
+  const lease = await runtime.start({}); await lease.release();
   assert.ok(calls.some((args) => args.includes("fixture.enabled") && args.includes("--type=boolean") && args.includes("--value=false")));
   assert.ok(calls.some((args) => args.includes("fixture.limit") && args.includes("--type=integer") && args.includes("--value=3")));
   assert.throws(() => validateStackOptions({ ...options, systemConfig: { invalid: 0.5 } }), /systemConfig/);
@@ -61,8 +67,7 @@ test("untrusted source pins and shared service origins are rejected before alloc
 test("rejecting an existing project does not delete its containers or volumes during cleanup", async () => {
   const { options, artifacts, calls, execute } = await fixture();
   const runtime = nextcloudStackRuntime(options, artifacts, async (command, args, context) => args.includes("ps") ? "existing-container" : execute(command, args, context));
-  await assert.rejects(runtime.up(), /already has containers/);
-  await runtime.down!();
+  await assert.rejects(runtime.start({}), /already has containers/);
   assert.ok(!calls.some((call) => call.includes("down") || call.includes("up")));
 });
 
@@ -90,21 +95,21 @@ async function pullRequestFixture(version = "36.0.0 dev", sha = head) {
 test("a pull request is resolved to its head commit, which names the image and sets the expected version", async () => {
   const { options, artifacts, calls, execute } = await pullRequestFixture();
   const runtime = nextcloudStackRuntime(options, artifacts, async (command, args, context) => args.includes("status") && command === "docker" ? JSON.stringify({ installed: true, versionstring: "36.0.0 dev" }) : execute(command, args, context));
-  await runtime.up();
+  const lease = await runtime.start({});
   const image = `journey/nextcloud:pr66147-${head.slice(0, 12)}`;
   assert.ok(calls.some((call) => call.join(" ") === "git fetch origin refs/pull/66147/head"), "fetches the pull request ref, not a commit");
   const build = calls.find((call) => call[0] === "docker" && call[1] === "build")!;
   assert.deepEqual(build.slice(build.indexOf("--build-arg"), build.indexOf("--build-arg") + 2), ["--build-arg", `SOURCE_SHA=${head}`]);
   assert.equal(build[build.indexOf("-t") + 1], image);
   assert.match(await readFile(join(options.directory, "stack.env"), "utf8"), new RegExp(`NEXTCLOUD_IMAGE='${image}'`));
-  assert.deepEqual(JSON.parse(JSON.stringify(runtime.provenance!())), { project: "isolated-stack", image, pullRequest: 66147, verifiedAt: (runtime.provenance!() as { verifiedAt: string }).verifiedAt, services: [{ service: "first", version: "36.0.0 dev", imageId: "sha256:actual-image", sourceSha: head, apps: { notifications: "1.0" } }] });
+  assert.deepEqual(JSON.parse(JSON.stringify(lease.provenance)), { project: "isolated-stack", image, pullRequest: 66147, verifiedAt: (lease.provenance as { verifiedAt: string }).verifiedAt, services: [{ service: "first", version: "36.0.0 dev", imageId: "sha256:actual-image", sourceSha: head, apps: { notifications: "1.0" } }] });
 });
 
 test("a pull request built on another Nextcloud is checked against that version, not a pinned one", async () => {
   const { options, artifacts, execute } = await pullRequestFixture("36.0.0 dev");
   // The installed server reports a different version than the source says it is.
   const runtime = nextcloudStackRuntime(options, artifacts, async (command, args, context) => args.includes("status") && command === "docker" ? JSON.stringify({ installed: true, versionstring: "34.0.2" }) : execute(command, args, context));
-  await assert.rejects(runtime.up(), /installed version does not match 36\.0\.0 dev/);
+  await assert.rejects(runtime.start({}), /installed version does not match 36\.0\.0 dev/);
 });
 
 test("a pull request that does not exist fails naming the ref, before any container is created", async () => {
@@ -113,7 +118,7 @@ test("a pull request that does not exist fails naming the ref, before any contai
     if (command === "git" && args[0] === "fetch") throw new Error("git fetch failed (128): fatal: couldn't find remote ref refs/pull/404/head");
     return execute(command, args, context);
   });
-  await assert.rejects(runtime.up(), /Cannot fetch refs\/pull\/404\/head from https:\/\/example\.test\/server\.git/);
+  await assert.rejects(runtime.start({}), /Cannot fetch refs\/pull\/404\/head from https:\/\/example\.test\/server\.git/);
   assert.ok(!calls.some((call) => call.includes("up") || call[1] === "build"));
 });
 
@@ -137,7 +142,7 @@ test("a fresh clone is built even though git reports an empty checkout as modifi
     return execute(command, args, context);
   };
   const installed = (inner: StackExecutor): StackExecutor => (command, args, context) => command === "docker" && args.includes("status") ? Promise.resolve(JSON.stringify({ installed: true, versionstring: "36.0.0 dev" })) : inner(command, args, context);
-  await nextcloudStackRuntime(options, artifacts, installed(git(""))).up();
+  await nextcloudStackRuntime(options, artifacts, installed(git(""))).start({});
   const reused = await pullRequestFixture();
-  await assert.rejects(nextcloudStackRuntime(reused.options, reused.artifacts, installed(git((reused.options.build as { directory: string }).directory))).up(), /Refusing to build modified source/);
+  await assert.rejects(nextcloudStackRuntime(reused.options, reused.artifacts, installed(git((reused.options.build as { directory: string }).directory))).start({}), /Refusing to build modified source/);
 });

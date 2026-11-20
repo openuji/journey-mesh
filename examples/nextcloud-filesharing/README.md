@@ -82,7 +82,9 @@ the federated recipient are derived from this one value in YAML.
 Browser runs do not require native configuration. The default browser hostname
 must resolve on the host; on Linux this may require adding
 `127.0.0.1 host.docker.internal` to `/etc/hosts`. Compose supplies the container
-host mapping.
+host mapping. Browser CI supplies the Docker bridge gateway through
+`NEXTCLOUD_WEB_STACK_HOST`, giving the browser and both containers one reachable
+address, as the native CI job does.
 
 Shared account and database defaults come from `deployment/.env.example`, then
 optional `deployment/.env`; shell values take precedence. The image pin, version,
@@ -142,8 +144,8 @@ device profile match the pins. These device pins — `api`, `avd`, `image`,
 `localImages`, `profile`, `locale`, `requiredPackages` — live directly in
 `mesh.yaml`'s `services.android.options`; there is no separate manifest file.
 
-`appium:up` runs the `@openuji/journey-adapter-appium/service` plugin, verifies that
-device, installs the pinned UiAutomator2 driver into a versioned repository
+`appium:up` includes its Android dependency, then runs the
+`@openuji/journey-adapter-appium/service` plugin, verifies the device, installs the pinned UiAutomator2 driver into a versioned repository
 cache, starts Appium on port 4723, waits for readiness, and writes
 `.runtime/appium.env`. It neither starts Nextcloud nor runs a journey — nor
 does it download the Nextcloud APK; the Appium adapter does that when its first
@@ -151,6 +153,14 @@ execution starts (same as Chromium
 for the web adapter — see "One-time prerequisites" above), from the `application`
 block already declared in `adapters.android.options`. Appium logs are stored
 under `.tmp/appium-runtime/`; emulator logs are under `.tmp/android-runtime/`.
+
+Both browser and mixed journeys write `.tmp/diagnostics/alice-sharing.<scope>.har`
+relative to the working directory, with sharing API requests and responses.
+Each run, profile execution, and actor/touchpoint session gets its own scope so
+later contexts retain earlier failure evidence. Appium keeps debug logs in its
+log file while printing only warnings to the console. CI includes these files
+alongside five-second CPU/memory samples and kernel warnings. These diagnostics stay
+outside the managed run output, which only publishes registered evidence files.
 
 The native infrastructure is prepared separately from per-profile execution:
 
@@ -218,7 +228,11 @@ flowchart TB
 
 Both drivers are deterministic entry/value resolvers; browser and device
 resources belong to their adapters. The Android model supplies native locators
-and application entry bindings. Selecting an adapter does not translate web
+and application entry bindings. Login uses the application entry. Subsequent
+journeys enter Files through the client's `/app/openFiles` HTTPS app link, which
+resumes the Files activity and refreshes its notification status. This keeps the
+entry contract explicit when the app was already open during Alice's steps.
+Selecting an adapter does not translate web
 locators into native ones. See the [native journey model](ujg/filesharing.android.ujg.jsonld)
 and [Android driver](../../packages/journey-driver-nextcloud/src/android.ts).
 
@@ -245,16 +259,17 @@ pnpm exec journey-mesh test examples/nextcloud-filesharing/mesh.yaml --test nati
 
 ## Stop local services
 
-Stop the optional native services in reverse order:
+Stop the native Appium service and its Android dependency:
 
 ```sh
 pnpm appium:down
-pnpm android:down
 ```
 
-These commands stop only the processes recorded for this example. They retain
-the AVD, Android SDK packages, APK, Appium cache, and reports.
-`ANDROID_AVD_NAME=another-dedicated-avd pnpm android:down` stops a named override.
+Shutdown uses the ownership records for this configuration and service, so it
+needs no repeated environment overrides or build inputs. It stops recorded owned
+processes and preserves borrowed emulators. `pnpm android:down` selects just the
+Android service. Both commands retain the AVD, SDK packages, APK, Appium cache,
+and reports.
 
 Nextcloud containers and volumes are removed by the test's service lifecycle.
 Existing persistent deployments are not adopted or deleted automatically; see

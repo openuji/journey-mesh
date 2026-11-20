@@ -1,4 +1,6 @@
-import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { ownershipPath, readJsonRecord, writeJsonRecord, removeOwnership, runOwnedProcess } from "@openuji/journey-plugin/node";
+import { startedService, type JourneyPluginContext } from "@openuji/journey-plugin";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import type { SourceIdentity } from "@openuji/journey-plugin";
 import { dirname, resolve } from "node:path";
@@ -23,16 +25,24 @@ export type StackOptions = Readonly<{
   sourceIdentity?: SourceIdentity;
 }>;
 export type StackExecutor = (command: string, args: readonly string[], options: { cwd: string; env: Record<string, string | undefined>; signal?: AbortSignal }) => Promise<string>;
-export const executeStackCommand: StackExecutor = (command, args, options) => new Promise((accept, reject) => {
-  const child = spawn(command, [...args], { ...options, stdio: ["ignore", "pipe", "pipe"] });
-  let output = ""; let diagnostic = "";
-  child.stdout.on("data", (chunk) => { output += chunk; });
-  child.stderr.on("data", (chunk) => { diagnostic = (diagnostic + chunk).slice(-12000); });
-  child.once("error", reject);
-  child.once("exit", (code) => code === 0 ? accept(output.trim()) : reject(new Error(`${command} ${args[0] ?? ""} failed (${code}): ${diagnostic}`)));
-});
+export const executeStackCommand: StackExecutor = (command, args, options) => runOwnedProcess(command, args, { ...options, stdoutOnly: true });
 
-export function validateStackOptions(options: StackOptions): void {
+type StackOwnership = Readonly<{ token: string; project: string; composeFiles: readonly string[]; envFile: string; directory: string; containers?: readonly string[] }>;
+async function releaseStack(path: string, expectedToken?: string, execute: StackExecutor = executeStackCommand): Promise<void> {
+  const owned = await readJsonRecord<StackOwnership>(path);
+  if (!owned || expectedToken && owned.token !== expectedToken) return;
+  const env = { ...process.env, NEXTCLOUD_STACK_ENV_FILE: owned.envFile };
+  const args = ["compose", "--project-name", owned.project, "--env-file", owned.envFile, ...owned.composeFiles.flatMap((file) => ["-f", file])];
+  if (owned.containers?.length) {
+    const current = await execute("docker", [...args, "ps", "--all", "--quiet"], { cwd: owned.directory, env, signal: AbortSignal.timeout(30000) });
+    if (current.split(/\s+/).filter(Boolean).some((id) => !owned.containers!.includes(id))) throw new Error(`Compose project ${owned.project} no longer belongs to this acquisition`);
+  }
+  await execute("docker", [...args, "down", "--volumes"], { cwd: owned.directory, env, signal: AbortSignal.timeout(60000) });
+  await removeOwnership(path);
+}
+export async function stopNextcloudStack(context: JourneyPluginContext): Promise<void> { await releaseStack(ownershipPath(context.configPath, context.componentId)); }
+
+export function validateStackConfiguration(options: Pick<StackOptions, "project" | "composeFiles" | "services" | "systemConfig" | "environment">): void {
   for (const [key, value] of Object.entries(options.systemConfig ?? {})) {
     if (!/^[A-Za-z0-9_.-]+$/.test(key) || !(typeof value === "string" || typeof value === "boolean" || Number.isSafeInteger(value))) throw new Error("Invalid systemConfig entry");
   }
@@ -45,6 +55,10 @@ export function validateStackOptions(options: StackOptions): void {
     if (!["http:", "https:"].includes(url.protocol) || urls.has(url.origin)) throw new Error("Services require distinct HTTP origins");
     urls.add(url.origin);
   }
+  for (const [key, value] of Object.entries(options.environment)) if (!/^[A-Z_][A-Z0-9_]*$/.test(key) || /[\r\n]/.test(value)) throw new Error("Invalid stack environment entry");
+}
+export function validateStackOptions(options: StackOptions): void {
+  validateStackConfiguration(options);
   const pin = (source: PinnedSource) => { if (!/^[a-f0-9]{40}$/.test(source.sha) || !/^https:\/\//.test(source.repository)) throw new Error("Sources require an HTTPS repository and exact commit SHA"); };
   if (options.build) {
     const { repository, sha, pullRequest } = options.build as { repository: string; sha?: string; pullRequest?: number };
@@ -57,7 +71,7 @@ export function validateStackOptions(options: StackOptions): void {
     }
     for (const app of options.build.apps) { pin(app); if (!/^[a-z_]+$/.test(app.id)) throw new Error("Invalid app identifier"); }
   } else if (!options.expectedVersion) throw new Error("expectedVersion is required unless the stack is built from source");
-  for (const [key, value] of Object.entries(options.environment)) if (!/^[A-Z_][A-Z0-9_]*$/.test(key) || /[\r\n]/.test(value)) throw new Error("Invalid stack environment entry");
+
 }
 
 /** The version Nextcloud reports for a source checkout, e.g. `36.0.0 dev`; `occ status` prints the same string. */
@@ -67,49 +81,43 @@ async function sourceVersion(directory: string): Promise<string> {
   return match[1];
 }
 
-export function nextcloudStackRuntime(options: StackOptions, artifacts: JourneyArtifactStore, execute: StackExecutor = executeStackCommand): JourneyService {
+export function nextcloudStackRuntime(options: StackOptions, artifacts: JourneyArtifactStore, execute: StackExecutor = executeStackCommand, ownershipFile = resolve(options.directory, "ownership.json")): JourneyService {
   options = structuredClone(options);
   validateStackOptions(options);
-  const envFile = resolve(options.directory, "stack.env");
-  const env: Record<string, string | undefined> = { ...process.env, ...options.environment, NEXTCLOUD_IMAGE: options.image, NEXTCLOUD_STACK_ENV_FILE: envFile };
-  // A pull request's image tag and version are only known once its head commit has been fetched.
-  let image = options.image;
-  let sourceSha: string | null = options.sourceIdentity?.sourceSha ?? null;
-  let pullRequest: number | null = null;
-  const compose = ["compose", "--project-name", options.project, "--env-file", envFile, ...options.composeFiles.flatMap((file) => ["-f", file])];
-  let identity: unknown = null;
-  let attemptedUp = false;
-  let ownsStack = false;
-  let activeSignal: AbortSignal | undefined;
-  const run = (command: string, args: readonly string[], cwd = options.directory) => execute(command, args, { cwd, env, signal: activeSignal });
-  const docker = (...args: string[]) => run("docker", [...compose, ...args]);
-  const occ = (service: string, ...args: string[]) => docker("exec", "-T", "-u", "www-data", service, "php", "occ", ...args);
-  /** Fetch `ref` into the clone at `directory`, check out what it points at, and return that commit. */
-  const checkout = async (repository: string, ref: string, directory: string): Promise<string> => {
-    const head = await run("git", ["rev-parse", "--show-toplevel"], directory).catch(() => null);
-    const reused = !!head && resolve(head) === resolve(directory);
-    if (!reused) {
-      await mkdir(dirname(directory), { recursive: true });
-      await run("git", ["clone", "--no-checkout", "--filter=blob:none", repository, directory]);
-    }
-    // Only a checkout that already existed can hold local changes. A fresh --no-checkout clone has an empty index,
-    // so `git status` reports every tracked file as deleted.
-    if (reused && await run("git", ["status", "--porcelain", "--untracked-files=no"], directory)) throw new Error("Refusing to build modified source");
-    await run("git", ["fetch", "origin", ref], directory).catch((error: Error) => { throw new Error(`Cannot fetch ${ref} from ${repository}: ${error.message}`); });
-    const sha = await run("git", ["rev-parse", "FETCH_HEAD^{commit}"], directory);
-    await run("git", ["checkout", "--detach", sha], directory);
-    if (await run("git", ["rev-parse", "HEAD"], directory) !== sha) throw new Error("Source checkout SHA mismatch");
-    return sha;
-  };
-  const checkoutPinned = async (source: PinnedSource, directory: string) => {
-    if (await checkout(source.repository, source.sha, directory) !== source.sha) throw new Error("Source checkout SHA mismatch");
-  };
   return {
     name: `nextcloud-stack:${options.project}`,
-    provenance() { return identity; },
-    async up(input) {
-      attemptedUp = true;
-      activeSignal = input?.signal;
+    async start(input) {
+      const envFile = resolve(options.directory, "stack.env");
+      const env: Record<string, string | undefined> = { ...process.env, ...options.environment, NEXTCLOUD_IMAGE: options.image, NEXTCLOUD_STACK_ENV_FILE: envFile };
+      // A pull request's image tag and version are only known once its head commit has been fetched.
+      let image = options.image;
+      let sourceSha: string | null = options.sourceIdentity?.sourceSha ?? null;
+      let pullRequest: number | null = null;
+      const compose = ["compose", "--project-name", options.project, "--env-file", envFile, ...options.composeFiles.flatMap((file) => ["-f", file])];
+      const activeSignal = input.signal;
+      const run = (command: string, args: readonly string[], cwd = options.directory) => execute(command, args, { cwd, env, signal: activeSignal });
+      const docker = (...args: string[]) => run("docker", [...compose, ...args]);
+      const occ = (service: string, ...args: string[]) => docker("exec", "-T", "-u", "www-data", service, "php", "occ", ...args);
+      /** Fetch `ref` into the clone at `directory`, check out what it points at, and return that commit. */
+      const checkout = async (repository: string, ref: string, directory: string): Promise<string> => {
+        const head = await run("git", ["rev-parse", "--show-toplevel"], directory).catch(() => null);
+        const reused = !!head && resolve(head) === resolve(directory);
+        if (!reused) {
+          await mkdir(dirname(directory), { recursive: true });
+          await run("git", ["clone", "--no-checkout", "--filter=blob:none", repository, directory]);
+        }
+        // Only a checkout that already existed can hold local changes. A fresh --no-checkout clone has an empty index,
+        // so `git status` reports every tracked file as deleted.
+        if (reused && await run("git", ["status", "--porcelain", "--untracked-files=no"], directory)) throw new Error("Refusing to build modified source");
+        await run("git", ["fetch", "origin", ref], directory).catch((error: Error) => { throw new Error(`Cannot fetch ${ref} from ${repository}: ${error.message}`); });
+        const sha = await run("git", ["rev-parse", "FETCH_HEAD^{commit}"], directory);
+        await run("git", ["checkout", "--detach", sha], directory);
+        if (await run("git", ["rev-parse", "HEAD"], directory) !== sha) throw new Error("Source checkout SHA mismatch");
+        return sha;
+      };
+      const checkoutPinned = async (source: PinnedSource, directory: string) => {
+        if (await checkout(source.repository, source.sha, directory) !== source.sha) throw new Error("Source checkout SHA mismatch");
+      };
       await mkdir(options.directory, { recursive: true });
       let expectedVersion = options.expectedVersion;
       if (options.build) {
@@ -135,57 +143,60 @@ export function nextcloudStackRuntime(options: StackOptions, artifacts: JourneyA
       await writeFile(envFile, Object.entries({ ...options.environment, NEXTCLOUD_IMAGE: image }).map(([key, value]) => `${key}='${value.replaceAll("'", "\\'")}'`).join("\n") + "\n", { mode: 0o600 });
       if (await docker("ps", "--all", "--quiet")) throw new Error(`Compose project ${options.project} already has containers; select a fresh managed project`);
       if (await run("docker", ["volume", "ls", "--filter", `label=com.docker.compose.project=${options.project}`, "--quiet"])) throw new Error(`Compose project ${options.project} already has volumes; select a fresh managed project`);
-      ownsStack = true;
-      await docker("up", "-d");
-      const services: unknown[] = [];
-      for (const [service, account] of Object.entries(options.services)) {
-        let status: { installed?: boolean; versionstring?: string } | undefined;
-        for (let attempt = 0; attempt < 120; attempt++) {
-          activeSignal?.throwIfAborted();
-          status = await occ(service, "status", "--output=json").then((text) => JSON.parse(text)).catch(() => undefined);
-          if (status?.installed) break;
-          await new Promise<void>((accept) => setTimeout(accept, 2000));
-        }
-        if (!status?.installed || !(status.versionstring === expectedVersion || status.versionstring?.startsWith(`${expectedVersion} `))) throw new Error(`${service}: installed version does not match ${expectedVersion}`);
-        const url = new URL(account.baseURL);
-        for (const app of ["federation", "files_sharing", ...options.enabledApps]) await occ(service, "app:enable", app);
-        await occ(service, "app:disable", "firstrunwizard").catch(() => {});
-        for (const [key, value] of Object.entries({ "trusted_domains 0": url.hostname, "trusted_domains 1": url.host, "trusted_domains 2": service, "overwritehost": url.host, "overwriteprotocol": url.protocol.slice(0, -1), "overwrite.cli.url": url.origin })) await occ(service, "config:system:set", ...key.split(" "), `--value=${value}`);
-        await occ(service, "config:system:set", "allow_local_remote_servers", "--type=boolean", "--value=true");
-        for (const [key, value] of Object.entries(options.systemConfig ?? {})) {
-          const type = typeof value === "boolean" ? "boolean" : typeof value === "number" ? "integer" : "string";
-          await occ(service, "config:system:set", key, `--type=${type}`, `--value=${value}`);
-        }
-        for (const key of ["incoming_server2server_share_enabled", "outgoing_server2server_share_enabled"]) await occ(service, "config:app:set", "files_sharing", key, "--value=yes");
-        const exists = await occ(service, "user:info", account.username).then(() => true).catch(() => false);
-        if (!exists) await docker("exec", "-T", "-e", `OC_PASS=${account.password}`, "-u", "www-data", service, "php", "occ", "user:add", "--password-from-env", account.username);
-        if (options.build || options.sourceIdentity) {
-          const sha = await docker("exec", "-T", service, "cat", "/var/www/html/.journey-source-sha");
-          if (sha !== sourceSha) throw new Error(`${service}: installed source SHA mismatch`);
-          for (const app of options.build?.apps ?? []) {
-            await docker("exec", "-T", service, "cp", "-a", `/usr/src/nextcloud/custom_apps/${app.id}`, "/var/www/html/custom_apps/");
-            await docker("exec", "-T", service, "chown", "-R", "www-data:www-data", `/var/www/html/custom_apps/${app.id}`);
+      const token = randomUUID();
+      const owned: StackOwnership = { token, project: options.project, composeFiles: options.composeFiles, envFile, directory: options.directory };
+      await writeJsonRecord(ownershipFile, owned);
+      try {
+        await docker("up", "-d");
+        const containers = (await docker("ps", "--all", "--quiet")).split(/\s+/).filter(Boolean);
+        await writeJsonRecord(ownershipFile, { ...owned, containers });
+        const services: unknown[] = [];
+        for (const [service, account] of Object.entries(options.services)) {
+          let status: { installed?: boolean; versionstring?: string } | undefined;
+          for (let attempt = 0; attempt < 120; attempt++) {
+            activeSignal?.throwIfAborted();
+            status = await occ(service, "status", "--output=json").then((text) => JSON.parse(text)).catch(() => undefined);
+            if (status?.installed) break;
+            await new Promise<void>((accept) => setTimeout(accept, 2000));
           }
+          if (!status?.installed || !(status.versionstring === expectedVersion || status.versionstring?.startsWith(`${expectedVersion} `))) throw new Error(`${service}: installed version does not match ${expectedVersion}`);
+          const url = new URL(account.baseURL);
+          for (const app of ["federation", "files_sharing", ...options.enabledApps]) await occ(service, "app:enable", app);
+          await occ(service, "app:disable", "firstrunwizard").catch(() => {});
+          for (const [key, value] of Object.entries({ "trusted_domains 0": url.hostname, "trusted_domains 1": url.host, "trusted_domains 2": service, "overwritehost": url.host, "overwriteprotocol": url.protocol.slice(0, -1), "overwrite.cli.url": url.origin })) await occ(service, "config:system:set", ...key.split(" "), `--value=${value}`);
+          await occ(service, "config:system:set", "allow_local_remote_servers", "--type=boolean", "--value=true");
+          for (const [key, value] of Object.entries(options.systemConfig ?? {})) {
+            const type = typeof value === "boolean" ? "boolean" : typeof value === "number" ? "integer" : "string";
+            await occ(service, "config:system:set", key, `--type=${type}`, `--value=${value}`);
+          }
+          for (const key of ["incoming_server2server_share_enabled", "outgoing_server2server_share_enabled"]) await occ(service, "config:app:set", "files_sharing", key, "--value=yes");
+          const exists = await occ(service, "user:info", account.username).then(() => true).catch(() => false);
+          if (!exists) await docker("exec", "-T", "-e", `OC_PASS=${account.password}`, "-u", "www-data", service, "php", "occ", "user:add", "--password-from-env", account.username);
+          if (options.build || options.sourceIdentity) {
+            const sha = await docker("exec", "-T", service, "cat", "/var/www/html/.journey-source-sha");
+            if (sha !== sourceSha) throw new Error(`${service}: installed source SHA mismatch`);
+            for (const app of options.build?.apps ?? []) {
+              await docker("exec", "-T", service, "cp", "-a", `/usr/src/nextcloud/custom_apps/${app.id}`, "/var/www/html/custom_apps/");
+              await docker("exec", "-T", service, "chown", "-R", "www-data:www-data", `/var/www/html/custom_apps/${app.id}`);
+            }
+          }
+          const apps = JSON.parse(await occ(service, "app:list", "--output=json"));
+          for (const app of options.enabledApps) if (!apps.enabled[app]) throw new Error(`${service}: ${app} must be enabled`);
+          for (const app of options.build?.apps ?? []) if (apps.enabled[app.id] !== app.version) throw new Error(`${service}: app version mismatch for ${app.id}`);
+          const container = await docker("ps", "-q", service);
+          const imageId = await run("docker", ["inspect", "--format", "{{.Image}}", container]);
+          const expectedImageId = await run("docker", ["image", "inspect", "--format", "{{.Id}}", image]);
+          if (imageId !== expectedImageId) throw new Error(`${service}: installed image mismatch`);
+          services.push({ service, version: status.versionstring, imageId, sourceSha, apps: Object.fromEntries(options.enabledApps.map((app) => [app, apps.enabled[app]])) });
         }
-        const apps = JSON.parse(await occ(service, "app:list", "--output=json"));
-        for (const app of options.enabledApps) if (!apps.enabled[app]) throw new Error(`${service}: ${app} must be enabled`);
-        for (const app of options.build?.apps ?? []) if (apps.enabled[app.id] !== app.version) throw new Error(`${service}: app version mismatch for ${app.id}`);
-        const container = await docker("ps", "-q", service);
-        const imageId = await run("docker", ["inspect", "--format", "{{.Image}}", container]);
-        const expectedImageId = await run("docker", ["image", "inspect", "--format", "{{.Id}}", image]);
-        if (imageId !== expectedImageId) throw new Error(`${service}: installed image mismatch`);
-        services.push({ service, version: status.versionstring, imageId, sourceSha, apps: Object.fromEntries(options.enabledApps.map((app) => [app, apps.enabled[app]])) });
+        const identity = { project: options.project, image, ...(pullRequest === null ? {} : { pullRequest }), verifiedAt: new Date().toISOString(), services };
+        await artifacts.write({ name: `${options.project}.identity.json`, data: JSON.stringify(identity, null, 2), contentType: "application/json" });
+        return startedService({ stack: { project: options.project, composeFiles: options.composeFiles, envFile, services: Object.keys(options.services) },
+          ...(options.sourceIdentity ? { identity: options.sourceIdentity } : {}) }, identity, () => releaseStack(ownershipFile, token, execute));
+      } catch (error) {
+        try { await releaseStack(ownershipFile, token, execute); } catch (cleanup) { throw new AggregateError([error, cleanup], "Nextcloud startup and cleanup failed"); }
+        throw error;
       }
-      identity = { project: options.project, image, ...(pullRequest === null ? {} : { pullRequest }), verifiedAt: new Date().toISOString(), services };
-      await artifacts.write({ name: `${options.project}.identity.json`, data: JSON.stringify(identity, null, 2), contentType: "application/json" });
-      return { stack: { project: options.project, composeFiles: options.composeFiles, envFile, services: Object.keys(options.services) },
-        ...(options.sourceIdentity ? { identity: options.sourceIdentity } : {}) };
-    },
-    async down() {
-      if (attemptedUp && !ownsStack) return;
-      activeSignal = undefined;
-      await mkdir(options.directory, { recursive: true });
-      await docker("down", "--volumes");
     }
   };
 }

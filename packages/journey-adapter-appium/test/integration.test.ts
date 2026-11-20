@@ -38,8 +38,8 @@ class Session implements AppiumSession {
   readonly id = "session";
   readonly calls: string[] = [];
   closeError?: Error;
-  async findElements() { this.calls.push("find"); return [{ elementId: "target" }]; }
-  async tap() { this.calls.push("tap"); }
+  async findElements(_query: string) { this.calls.push("find"); return [{ elementId: "target" }]; }
+  async tap(_id: string) { this.calls.push("tap"); }
   async setValue(_id: string, value: string) { this.calls.push(`type:${value}`); }
   async source() { this.calls.push("source"); return "<hierarchy/>"; }
   async screenshot() { this.calls.push("screenshot"); return ""; }
@@ -95,9 +95,80 @@ test("Appium owns fresh installation, Chrome reset, deterministic application en
   assert.equal(capabilities?.["appium:noReset"], false);
   assert.equal(capabilities?.["appium:udid"], "device-1");
   assert.deepEqual(session.calls, [
-    "terminate:com.android.chrome", "clear:com.android.chrome", "terminate:test.application", "activate:test.application",
+    "terminate:com.android.chrome", "clear:com.android.chrome", "activate:test.application",
     "find", "tap", "find", "find", "tap", "find", "type:alice", "close"
   ]);
+});
+
+test("complete construction values reach the Appium session", async () => {
+  const session = new Session();
+  let input: Record<string, unknown> | undefined;
+  const result = await runJourney({
+    plan,
+    profiles: [{ id: "profile", selectInputModality: () => ({ profileId: "profile", inputModalityProfile: inputProfile, modality: inputProfile.modalities[0]! }) }],
+    adapter: appiumAdapter({
+      ...options(session),
+      application: { apk: "/built.apk", package: "test.application", activity: "test.Activity" },
+      devices: { touchpoint: { udid: "emulator-5556" } },
+      connection: { hostname: "127.0.0.1", port: 4799, path: "/" },
+      sessionFactory: async (value) => { input = value; return session; }
+    })
+  });
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  const capabilities = input?.capabilities as Record<string, unknown>;
+  assert.equal(capabilities["appium:app"], "/built.apk");
+  assert.equal(capabilities["appium:udid"], "emulator-5556");
+  assert.equal(input?.port, 4799);
+});
+
+test("a platform prompt disappearing before its tap does not fail the modeled state", async () => {
+  const session = new Session();
+  const taps: string[] = [];
+  session.findElements = async (query) => [{ elementId: query.includes("permission_allow_button") ? "prompt" : "target" }];
+  session.tap = async (id) => {
+    taps.push(id);
+    if (id === "prompt") throw Object.assign(new Error("Prompt was dismissed"), { name: "stale element reference" });
+  };
+  const result = await runJourney({
+    plan: { ...plan, operations: [state] }, profiles: [{ id: "profile" }], adapter: appiumAdapter(options(session))
+  });
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  assert.deepEqual(taps, ["prompt"]);
+  assert.equal(session.calls.at(-1), "close");
+});
+
+test("platform interruption handling preserves session failures", async () => {
+  const session = new Session();
+  session.tap = async () => { throw Object.assign(new Error("Session is gone"), { name: "invalid session id" }); };
+  const result = await runJourney({
+    plan: { ...plan, operations: [state] }, profiles: [{ id: "profile" }], adapter: appiumAdapter(options(session))
+  });
+  assert.equal(result.ok, false);
+  assert.match(JSON.stringify(result.errors), /Session is gone/);
+});
+
+test("stale modeled actions still fail without being retried", async () => {
+  const session = new Session();
+  let taps = 0;
+  session.findElements = async (query) => query.includes("permission_allow_button") ? [] : [{ elementId: "target" }];
+  session.tap = async () => { taps++; throw Object.assign(new Error("Modeled target is stale"), { name: "stale element reference" }); };
+  const touchProfile = { id: "touch", modalities: [{ id: touchTapInputModalityId }] };
+  const result = await runJourney({
+    plan: { ...plan, operations: [{ ...transition, activation: { ...transition.activation, requiredInputModalityProfiles: [touchProfile] } }] },
+    profiles: [{ id: "profile", selectInputModality: () => ({ profileId: "profile", inputModalityProfile: touchProfile, modality: touchProfile.modalities[0]! }) }],
+    adapter: appiumAdapter(options(session))
+  });
+  assert.equal(result.ok, false);
+  assert.match(JSON.stringify(result.errors), /Modeled target is stale/);
+  assert.equal(taps, 1);
+});
+
+test("an execution without a resolved APK or UDID, or with a shared device, fails when it starts", async () => {
+  const start = async (overrides: Record<string, unknown>) => appiumAdapter({ ...options(new Session()), ...overrides })
+    .createExecution({ context: { runId: "run", executionId: "execution", plan: { id: "plan", operations: [] }, profile: { id: "profile" } } }).start();
+  await assert.rejects(start({ application: { apk: "", package: "p", activity: "a" } }), /requires an APK/);
+  await assert.rejects(start({ devices: { touchpoint: { udid: "" } } }), /has no UDID/);
+  await assert.rejects(start({ devices: { a: { udid: "same" }, b: { udid: "same" } } }), /its own Appium device/);
 });
 
 test("lifecycle reducer replaces frozen states and rejects late registration", () => {
@@ -194,4 +265,17 @@ test("native action observations retain commands when a later state assertion fa
   assert.equal(actions[0].operationId, transition.id);
   assert.equal(Object.isFrozen(actions[0]), true);
   assert.doesNotMatch(JSON.stringify(actions), /alice/);
+});
+
+test("installation verification precedes modeled interaction and a mismatch closes the allocated session", async () => {
+  const session = new Session();
+  let verified = 0;
+  const result = await runJourney({ plan, profiles: [{ id: "profile", selectInputModality: () => ({ profileId: "profile", inputModalityProfile: inputProfile, modality: inputProfile.modalities[0]! }) }],
+    adapter: appiumAdapter({ ...options(session), preserveApkSignature: true,
+      sessionFactory: async (input) => { assert.equal(input.capabilities["appium:noSign"], true); return session; },
+      verifyInstallation: async ({ udid, execution }) => { verified++; assert.equal(udid, "device-1"); assert.equal(execution.profile.id, "profile"); throw new Error("installed APK mismatch"); }
+    }) });
+  assert.equal(result.ok, false); assert.equal(verified, 1);
+  assert.deepEqual(session.calls, ["close"]);
+  assert.match(JSON.stringify(result.errors), /installed APK mismatch/);
 });

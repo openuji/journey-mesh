@@ -13,7 +13,7 @@ test("the same PR source resolves a fresh head on every run", async () => {
     if (args[0] === "rev-parse" && args[1] !== "--show-toplevel") return head;
     return "";
   });
-  const first = await source.up(); head = "b".repeat(40); const second = await source.up();
+  const first = (await source.start({})).outputs; head = "b".repeat(40); const second = (await source.start({})).outputs;
   assert.equal((first?.source as { identity: { sourceSha: string } }).identity.sourceSha, "a".repeat(40));
   assert.equal((second?.source as { identity: { sourceSha: string } }).identity.sourceSha, head);
   assert.deepEqual(fetches, Array(2).fill(["fetch", "origin", "refs/pull/42/head"]));

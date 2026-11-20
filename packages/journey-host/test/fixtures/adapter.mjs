@@ -3,6 +3,9 @@ import { appendFile } from "node:fs/promises";
 export const journeyMeshPlugin = {
   kind: "adapter", automation: { id: "fixture" },
   parse(options) { if (!options.name || !options.log) throw new Error("Fixture adapter needs name and log"); return options; },
+  validateOperations(options, context) {
+    for (const operation of context.operations) if (options.unsupported === operation.segment) throw new Error("Unsupported fixture target");
+  },
   create(options, context, dependencies) {
     const log = (event, item) => appendFile(context.resolvePath(options.log), JSON.stringify({ event, name: options.name, item }) + "\n");
     return {

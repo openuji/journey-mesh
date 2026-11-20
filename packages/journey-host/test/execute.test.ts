@@ -70,3 +70,20 @@ test("recorded observer outputs keep only contract fields, so no presentation da
   const { outputs } = await collectObserverOutputs([observer(() => ({ ...valid("extra"), nodes: [{ executionId: "execution", operationId: "op", metrics: { kind: "axe" } }], html: "<p>" }))], result);
   assert.deepEqual(Object.keys(outputs[0]).sort(), ["errors", "evidence", "id", "kind", "measurements"]);
 });
+
+test("evidence written by a service before failed startup remains in the failed run", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "journey-failed-service-"));
+  const path = join(directory, "mesh.yaml");
+  await writeFile(join(directory, "model.json"), JSON.stringify({ journeys: ["task"] }));
+  await writeFile(path, stringify({
+    kind: "suite", model: { use: fixture("model") },
+    services: { stack: { use: fixture("service"), options: { name: "stack", log: "events.jsonl", failUp: true, identity: { version: "failed-start" } } } },
+    adapters: { adapter: { use: fixture("adapter"), options: { name: "adapter", log: "events.jsonl" } } },
+    profiles: { default: { use: fixture("profile") } },
+    tests: { task: { services: ["stack"], journeys: [{ id: "task", source: "model.json", select: "task", adapter: "adapter" }], profiles: [{ id: "default", journeys: { task: "default" } }] } }
+  }));
+  const run = await runSuite(path);
+  assert.equal(run.ok, false); assert.equal(run.tests.length, 0);
+  assert.match(run.errors[0].message, /up failure/);
+  assert.deepEqual(run.files.map((file) => file.href), ["services/stack/stack.identity.json"]);
+});

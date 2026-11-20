@@ -1,3 +1,4 @@
+import { immutableSnapshot } from "@openuji/journey-core";
 import { basename, dirname, relative, resolve, sep } from "node:path";
 import { immutableJourneyPlan } from "@openuji/journey-execution-model";
 import type { JourneyModelCompiler, JourneyModelView } from "@openuji/journey-plugin";
@@ -64,5 +65,17 @@ export async function compileTest(test: TestConfig, compiler: JourneyModelCompil
     source: { model: "journey-mesh-test", references: { testId: test.id, config: basename(configPath) } },
     operations
   });
-  return Object.freeze({ plan, segments, aliases, views });
+  return Object.freeze({ plan, segments: immutableMap(segments), aliases: immutableMap(aliases), views: immutableMap(views) });
+}
+
+/** Expose a read-only facade, not a frozen Map whose .set() still mutates it. */
+function immutableMap<K, V>(source: ReadonlyMap<K, V>): ReadonlyMap<K, V> {
+  const data = new Map([...source].map(([key, value]) => [key, immutableSnapshot(value) as V]));
+  const facade: ReadonlyMap<K, V> = Object.freeze({
+    size: data.size, get: (key: K) => data.get(key), has: (key: K) => data.has(key),
+    keys: () => data.keys(), values: () => data.values(), entries: () => data.entries(),
+    [Symbol.iterator]: () => data[Symbol.iterator](),
+    forEach: (callback: (value: V, key: K, map: ReadonlyMap<K, V>) => void, thisArg?: unknown) => data.forEach((value, key) => callback.call(thisArg, value, key, facade))
+  });
+  return facade;
 }

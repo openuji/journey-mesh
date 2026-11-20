@@ -3,19 +3,6 @@ import type { JourneyPlan, JourneyPlanOperation } from "@openuji/journey-executi
 import type { JourneyAdapter, JourneyEnvironment, JourneyProfile, RunResult } from "@openuji/journey-runner";
 import type { JourneyArtifactStore } from "./artifacts.js";
 
-export type JourneyPluginContext = {
-  readonly artifacts: JourneyArtifactStore;
-  readonly configPath: string;
-  /** The test a component belongs to, or `suite` / `service` for suite-wide components. */
-  readonly testId: string;
-  /** The operations this component will see: an adapter's own segments, or the whole test plan. */
-  readonly operations: readonly JourneyPlanOperation[];
-  readonly env: Readonly<Record<string, string | undefined>>;
-  resolvePath(path: string): string;
-  /** Resolve a configured `<journey item>.<alias>` or a plan operation ID of this test. */
-  resolveOperation(reference: string): JourneyPlanOperation;
-};
-
 /**
  * A named compatibility contract between plugins. The host only compares `id`s;
  * the type parameter types what crosses the contract, so adapters receive typed drivers and observers.
@@ -25,14 +12,42 @@ export function contract<T>(id: string): Contract<T> {
   return Object.freeze({ id });
 }
 
-/** Infrastructure a test needs (a server stack, an emulator, an Appium server), managed independently of executions. */
-export type JourneyService = {
-  readonly name: string;
-  up(input?: { signal?: AbortSignal; inputs?: Readonly<Record<string, unknown>> }): Promise<void | Readonly<Record<string, unknown>>>;
-  down?(): Promise<void>;
-  /** Identity of what the service provided, recorded in the run record. Must not contain credentials. */
-  provenance?(): unknown;
+/** Configuration-only context. Parsing cannot write evidence or access runtime inputs. */
+export type JourneyConfigContext = {
+  readonly configPath: string;
+  readonly testId: string;
+  readonly operations: readonly JourneyPlanOperation[];
+  readonly env: Readonly<Record<string, string | undefined>>;
+  resolvePath(path: string): string;
+  resolveOperation(reference: string): JourneyPlanOperation;
 };
+
+/** Runtime ports belong to the component being constructed, never to input lookup. */
+export type JourneyPluginContext = JourneyConfigContext & {
+  readonly artifacts: JourneyArtifactStore;
+  /** Stable within a configuration; separates persistent ownership of different services. */
+  readonly componentId: string;
+};
+export type InputDeclarations = {
+  readonly inputs?: Readonly<Record<string, Contract<unknown>>>;
+  readonly optionalInputs?: Readonly<Record<string, Contract<unknown>>>;
+};
+type ContractValue<C> = C extends Contract<infer T> ? T : never;
+export type ResolvedInputs<R extends Record<string, Contract<unknown>> = Record<string, Contract<unknown>>, O extends Record<string, Contract<unknown>> = {}> =
+  Readonly<{ [K in keyof R]: ContractValue<R[K]> } & { [K in keyof O]?: ContractValue<O[K]> }>;
+export type InputMetadata = Readonly<{ names: readonly string[] }>;
+export type ServiceDependencies<I = ResolvedInputs> = Readonly<{ inputs: I }>;
+
+/** A successful acquisition. Producers compensate partial failures before throwing. */
+export type StartedService = Readonly<{
+  outputs: Readonly<Record<string, unknown>>;
+  provenance?: unknown;
+  release(): Promise<void>;
+}>;
+export type JourneyService = Readonly<{
+  name: string;
+  start(input: Readonly<{ signal?: AbortSignal }>): Promise<StartedService>;
+}>;
 
 /** A snapshot of the model document behind a journey source (e.g. format `journey-map`), recorded with the run. */
 export type JourneyModelView = Readonly<{ format: string; document: unknown }>;
@@ -49,21 +64,22 @@ export type JourneyObserverComponent<O = unknown> = {
   output(input: { result: RunResult }): JourneyObserverOutput | Promise<JourneyObserverOutput>;
 };
 
-export type AdapterDependencies<D = unknown, O = unknown> = { driver?: D; observers: readonly O[] };
+export type AdapterDependencies<D = unknown, O = unknown, I = ResolvedInputs> = Readonly<{ driver?: D; observers: readonly O[]; inputs: I }>;
 
 /**
  * `parse` validates raw options into settings; `create` builds the component from them.
- * Neither may allocate automation resources or mutate services: `journey-mesh validate` calls both.
+ * Parsing and operation validation run before startup. Construction is resource-free and receives resolved inputs only at runtime.
  */
-type Plugin<K extends string, S, T, D = Record<never, never>> = {
+type Plugin<K extends string, S, T, D = undefined> = {
   readonly kind: K;
-  parse(options: Record<string, unknown>, context: JourneyPluginContext): S | Promise<S>;
-  create(settings: S, context: JourneyPluginContext, dependencies: D): T | Promise<T>;
+  parse(options: Record<string, unknown>, context: JourneyConfigContext, metadata?: InputMetadata): S | Promise<S>;
+  create: D extends undefined ? (settings: S, context: JourneyPluginContext) => T | Promise<T> : (settings: S, context: JourneyPluginContext, dependencies: D) => T | Promise<T>;
 };
 
-export type AdapterPlugin<S = unknown, D = unknown, O = unknown> = Plugin<"adapter", S, JourneyAdapter, AdapterDependencies<D, O>> & {
+export type AdapterPlugin<S = unknown, D = unknown, O = unknown, I = ResolvedInputs> = Plugin<"adapter", S, JourneyAdapter, AdapterDependencies<D, O, I>> & InputDeclarations & {
   /** Observers must declare the same automation. */
   readonly automation: Contract<O>;
+  validateOperations?(settings: S, context: JourneyConfigContext, dependencies: Readonly<{ driver?: D }>): void;
   /** Drivers must declare the same contract; omitted when the adapter needs no driver. */
   readonly driverContract?: Contract<D>;
 };
@@ -72,8 +88,9 @@ export type ObserverPlugin<S = unknown, O = unknown> = Plugin<"observer", S, Jou
 export type ModelPlugin<S = unknown> = Plugin<"model", S, JourneyModelCompiler>;
 export type ProfilePlugin<S = unknown> = Plugin<"profile", S, JourneyProfile>;
 export type EnvironmentPlugin<S = unknown> = Plugin<"environment", S, JourneyEnvironment>;
-export type ServicePlugin<S = unknown> = Plugin<"service", S, JourneyService> & {
-  readonly inputs?: Readonly<Record<string, Contract<unknown>>>;
+export type ServicePlugin<S = unknown, I = ResolvedInputs> = Plugin<"service", S, JourneyService, ServiceDependencies<I>> & InputDeclarations & {
+  /** Explicit CLI shutdown reads persisted ownership, never fabricated runtime inputs. */
+  stopConfigured?(context: JourneyPluginContext): Promise<void>;
   readonly outputs?: Readonly<Record<string, Contract<unknown>>>;
 };
 
@@ -82,10 +99,16 @@ export type JourneyMeshPlugin = AdapterPlugin | DriverPlugin | ObserverPlugin | 
 export type JourneyPluginKind = JourneyMeshPlugin["kind"];
 export type PluginOfKind<K extends JourneyPluginKind> = Extract<JourneyMeshPlugin, { kind: K }>;
 
-export const defineAdapterPlugin = <S, D = unknown, O = unknown>(plugin: AdapterPlugin<S, D, O>) => plugin;
+type Contracts = Record<string, Contract<unknown>>;
+type DeclaredInputs<R extends Contracts, O extends Contracts> = { readonly inputs?: R; readonly optionalInputs?: O };
+export const defineAdapterPlugin = <S, D = unknown, Observer = unknown, R extends Contracts = {}, O extends Contracts = {}>(
+  plugin: Omit<AdapterPlugin<S, D, Observer, ResolvedInputs<R, O>>, "inputs" | "optionalInputs"> & DeclaredInputs<R, O>
+) => plugin;
 export const defineDriverPlugin = <S, D>(plugin: DriverPlugin<S, D>) => plugin;
 export const defineObserverPlugin = <S, O>(plugin: ObserverPlugin<S, O>) => plugin;
 export const defineModelPlugin = <S>(plugin: ModelPlugin<S>) => plugin;
 export const defineProfilePlugin = <S>(plugin: ProfilePlugin<S>) => plugin;
 export const defineEnvironmentPlugin = <S>(plugin: EnvironmentPlugin<S>) => plugin;
-export const defineServicePlugin = <S>(plugin: ServicePlugin<S>) => plugin;
+export const defineServicePlugin = <S, R extends Contracts = {}, O extends Contracts = {}>(
+  plugin: Omit<ServicePlugin<S, ResolvedInputs<R, O>>, "inputs" | "optionalInputs"> & DeclaredInputs<R, O>
+) => plugin;

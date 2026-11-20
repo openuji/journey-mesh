@@ -108,9 +108,10 @@ failures are retained alongside the original failure.
 
 A **service** is infrastructure a test needs, managed independently of any
 single execution: a pinned Nextcloud stack, an Android emulator, an Appium
-server. `JourneyService` exposes `up()`, an optional `down()`, and an optional
-`provenance()` that records what was provided (versions, image digests) in the
-run record.
+server. `JourneyService.start()` returns immutable outputs and provenance with
+an explicit `release()` handle. The host registers each acquisition before
+validating its outputs and releases handles in reverse order. Explicit CLI
+shutdown reads component-scoped ownership records.
 
 ```mermaid
 flowchart TB
@@ -210,7 +211,7 @@ Catalogue documents provide a `JourneyEntryIndex` with the entries to discover.
 | --- | --- | --- |
 | Model binding | Parse and validate a source model; produce a plan and source references | When translating a journey description into a plan |
 | Execution adapter | Execute operations, check states, manage execution resources and cleanup | Required; may route to several child adapters |
-| Service | Prepare and manage infrastructure across executions; expose `up()`, optional `down()` and `provenance()` | Optional; infrastructure may be managed externally |
+| Service | Prepare infrastructure across executions; return outputs, provenance and a release handle from `start()` | Optional; infrastructure may be managed externally |
 | Application driver | Resolve application entry targets and transition values | When required by the selected adapter |
 | Interaction profile | Assess applicability and select declared input modalities | At least one profile per run |
 | Environment | Set up shared fixtures, verify effects, and tear down fixtures | Optional |
@@ -288,7 +289,12 @@ A plugin module exports `journeyMeshPlugin`, built with a typed helper from
 [`@openuji/journey-plugin`](packages/journey-plugin/src/index.ts). `parse`
 validates the raw YAML options into typed settings; `create` builds the
 component from them. Neither may allocate automation resources or mutate
-services, because `journey-mesh validate` calls both.
+services. Validation parses settings and calls the adapter's pure
+`validateOperations` hook. Runtime adapters, observers and environments are
+constructed after services start, with fresh instances for each run.
+Services and adapters receive frozen constructor input records; parsers receive
+only configured input names. See [service composition](docs/service-composition.md)
+for the plugin API migration and resource ownership rules.
 
 ```ts
 import { defineObserverPlugin, knownOptions, requiredString } from "@openuji/journey-plugin";

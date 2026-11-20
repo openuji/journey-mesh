@@ -29,7 +29,7 @@ async function serve(flags: Record<string, string>): Promise<void> {
   const appium = resolveAppiumEntry();
   const address = flags.address ?? "127.0.0.1";
   const port = flags.port ?? "4723";
-  const args = [appium, "--address", address, "--port", port, "--log-level", "warn", ...(flags.log ? ["--log", flags.log] : [])];
+  const args = [appium, "--address", address, "--port", port, "--log-level", flags.log ? "warn:debug" : "warn", ...(flags.log ? ["--log", flags.log] : [])];
   await new Promise<void>((done, reject) => {
     const child = spawn(process.execPath, args, { stdio: "inherit", env: process.env });
     // This wrapper is itself a spawned Node process (via tsx), not the

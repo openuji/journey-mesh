@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test, { type TestContext } from "node:test";
 import {
-  androidDown, androidUp, parseAndroidTarget, selectSystemImage, validateAndroidTarget, type AndroidRuntimeTarget
+  releaseAndroidDevice, androidUp, parseAndroidTarget, selectSystemImage, validateAndroidTarget, type AndroidRuntimeTarget
 } from "../src/runtime/android.js";
 
 const target: AndroidRuntimeTarget = {
@@ -32,6 +32,7 @@ async function fixture(t: TestContext, { existing, incompatible = false }: { exi
   if (existing) await writeAvd(incompatible);
   const capture = async (command: string, args: readonly string[]) => {
     events.push({ kind: "capture", command, args: [...args] });
+    if (command === "ps") return { stdout: `emulator -avd ${target.avd}`, stderr: "" };
     if (args.includes("-list-avds")) return { stdout: state.configured.join("\n") + "\n", stderr: "" };
     if (args[0] === "devices") return { stdout: "List of devices attached\n" + state.devices.map((item) => `${item.serial}\tdevice`).join("\n"), stderr: "" };
     if (args.includes("emu") && args.includes("name")) return { stdout: `${state.devices.find((item) => item.serial === args[1])?.name ?? ""}\nOK\n`, stderr: "" };
@@ -83,13 +84,32 @@ test("android lifecycle creates, boots, reuses, and stops only its managed AVD",
   const first = await androidUp(options);
   assert.equal(first.serial, "emulator-5568");
   assert.ok(setup.events.some((event) => event.kind === "foreground" && event.args.includes("create")));
-  assert.equal((await readFile(join(setup.example, ".runtime/android.env"), "utf8")).trim(), "ANDROID_UDID=emulator-5568");
+  await assert.rejects(readFile(join(setup.example, ".runtime/android.env")), /ENOENT/, "low-level acquisition does not publish environment files");
   const starts = setup.events.filter((event) => event.kind === "background").length;
-  await androidUp(options);
+  const borrowed = await androidUp(options);
+  await releaseAndroidDevice(borrowed, { capture: setup.capture });
+  assert.equal(setup.state.devices.length, 1, "borrowed emulators survive release");
   assert.equal(setup.events.filter((event) => event.kind === "background").length, starts);
-  await androidDown({ root: setup.example, avd: target.avd, environment: { ANDROID_HOME: setup.sdk }, capture: setup.capture, log: () => {} });
+  await releaseAndroidDevice(first, { capture: setup.capture, log: () => {}, stop: async (pid) => {
+    assert.equal(pid, 4242);
+    setup.state.devices = [];
+  } });
   assert.equal(setup.state.devices.length, 0);
   await assert.rejects(readFile(join(setup.example, ".runtime/android.env")), /ENOENT/);
+});
+
+test("ADB discovery failure still stops the verified owned emulator and retains the error", async () => {
+  const stopped: number[] = [];
+  const device = { serial: "emulator-5556", avd: target.avd, image: target.image, sdk: "/sdk", pid: 4242, reversePorts: [] };
+  const capture = async (command: string) => {
+    if (command === "ps") return { stdout: `emulator -avd ${target.avd}`, stderr: "" };
+    throw new Error("ADB is unavailable");
+  };
+  const stop = async (pid: number) => { stopped.push(pid); };
+  await assert.rejects(releaseAndroidDevice(device, { capture, stop }), /ADB is unavailable/);
+  assert.deepEqual(stopped, [4242]);
+  await assert.rejects(releaseAndroidDevice({ ...device, pid: undefined }, { capture, stop }), /ADB is unavailable/);
+  assert.deepEqual(stopped, [4242], "borrowed emulators are never stopped");
 });
 
 test("android lifecycle refuses an incompatible pre-existing AVD", async (t) => {
@@ -99,4 +119,43 @@ test("android lifecycle refuses an incompatible pre-existing AVD", async (t) => 
     capture: setup.capture, foreground: setup.foreground, background: setup.background, pause: async () => {}, log: () => {}
   }), /incompatible.*abi=x86_64/);
   assert.ok(!setup.events.some((event) => event.kind === "background"));
+});
+
+test("reverse ports give the device localhost access to host services, on every boot or reuse", async (t) => {
+  const setup = await fixture(t);
+  const reversed = { ...target, reversePorts: [18446] };
+  assert.deepEqual(parseAndroidTarget({ ...target, reversePorts: ["18446"] }).reversePorts, [18446]);
+  assert.throws(() => parseAndroidTarget({ ...target, reversePorts: [70000] }), /TCP ports/);
+  const options = {
+    root: setup.example, target: reversed, environment: { ANDROID_HOME: setup.sdk }, hostPlatform: "darwin", hostArch: "arm64", avdHome: setup.avdHome,
+    capture: setup.capture, foreground: setup.foreground, background: setup.background, choosePort: async () => 5568, pause: async () => {}, log: () => {},
+    environmentFile: false
+  };
+  await androidUp(options);
+  await androidUp(options);
+  const reverses = setup.events.filter((event) => event.args.includes("reverse") && !event.args.includes("--list"));
+  assert.equal(reverses.length, 2);
+  assert.deepEqual(reverses[0]!.args, ["-s", "emulator-5568", "reverse", "tcp:18446", "tcp:18446"]);
+  await assert.rejects(readFile(join(setup.example, ".runtime/android.env")), /ENOENT/);
+});
+
+test("borrowed device release preserves pre-existing reverse mappings and removes only acquired mappings", async (t) => {
+  const setup = await fixture(t, { existing: true });
+  const mappings = new Map([[18446, 18446]]);
+  const capture = async (command: string, args: readonly string[]) => {
+    if (args.includes("reverse")) {
+      if (args.includes("--list")) return { stdout: [...mappings].map(([from, to]) => `emulator-5570 tcp:${from} tcp:${to}`).join("\n"), stderr: "" };
+      const ports = args.filter((arg) => arg.startsWith("tcp:")).map((arg) => Number(arg.slice(4)));
+      if (args.includes("--remove")) mappings.delete(ports[0]!); else mappings.set(ports[0]!, ports[1]!);
+      return { stdout: "", stderr: "" };
+    }
+    return setup.capture(command, args);
+  };
+  const acquired = await androidUp({ root: setup.example, target: { ...target, reversePorts: [18446, 18447] }, environment: { ANDROID_HOME: setup.sdk }, hostPlatform: "darwin", hostArch: "arm64", avdHome: setup.avdHome,
+    capture, foreground: setup.foreground, background: setup.background, pause: async () => {}, log: () => {} });
+  assert.equal(acquired.pid, undefined);
+  assert.deepEqual(acquired.reversePorts, [18447]);
+  await releaseAndroidDevice(acquired, { capture });
+  assert.deepEqual([...mappings], [[18446, 18446]]);
+  assert.equal(setup.state.devices.length, 1);
 });

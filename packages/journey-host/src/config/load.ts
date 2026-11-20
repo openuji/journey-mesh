@@ -1,3 +1,4 @@
+import { immutableSnapshot } from "@openuji/journey-core";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { isMap, isScalar, parseDocument } from "yaml";
@@ -12,7 +13,7 @@ export type Environment = Readonly<Record<string, string | undefined>>;
 export type LoadedSuiteConfig = Readonly<{ config: SuiteConfig; path: string; env: Environment }>;
 
 /** Parse the YAML and its env files once. Component options stay uninterpolated until a component is selected. */
-export async function loadSuiteConfig(path: string, environment: Record<string, string | undefined> = process.env): Promise<LoadedSuiteConfig> {
+export async function loadSuiteConfig(path: string, environment: Record<string, string | undefined> = process.env, readEnvFiles = true): Promise<LoadedSuiteConfig> {
   const absolutePath = resolve(path);
   try {
     const document = parseDocument(await readFile(absolutePath, "utf8"), { uniqueKeys: true });
@@ -21,8 +22,8 @@ export async function loadSuiteConfig(path: string, environment: Record<string, 
     // JavaScript objects reorder numeric-looking keys; YAML declaration order is authoritative.
     const tests = document.get("tests", true);
     const testOrder = isMap(tests) ? tests.items.map((pair) => requiredString(isScalar(pair.key) ? pair.key.value : undefined, "test ID")) : [];
-    const config = parseSuiteConfig(raw, testOrder);
-    const env = await readEnvironment(config.envFiles, dirname(absolutePath), environment);
+    const config = immutableSnapshot(parseSuiteConfig(raw, testOrder));
+    const env = readEnvFiles ? await readEnvironment(config.envFiles, dirname(absolutePath), environment) : immutableSnapshot(environment);
     return Object.freeze({ config, path: absolutePath, env });
   } catch (error) {
     if (error instanceof JourneyConfigError) throw error;

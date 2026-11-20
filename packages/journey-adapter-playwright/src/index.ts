@@ -1,4 +1,6 @@
 import type { JourneyInputAction } from "@openuji/journey-core";
+import { createHash } from "node:crypto";
+import { basename, dirname, extname, join } from "node:path";
 import {
   chromium,
   type Browser,
@@ -265,7 +267,16 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     const existing = this.state.resources.find((resource) => resource.kind === "session" && resource.id === `session:${key}`);
     if (existing) return existing.value as PlaywrightSession;
     const browser = this.browser();
-    const context = await browser.newContext(this.options.contextOptions);
+    let contextOptions = this.options.contextOptions;
+    if (contextOptions?.recordHar) {
+      // Closing a context writes its HAR. A shared path lets a later profile
+      // (or another actor) replace the evidence from an earlier failure.
+      const { path, ...recordHar } = contextOptions.recordHar;
+      const scope = createHash("sha256").update(JSON.stringify([this.execution.runId, this.execution.executionId, key])).digest("hex").slice(0, 16);
+      const extension = extname(path);
+      contextOptions = { ...contextOptions, recordHar: { ...recordHar, path: join(dirname(path), `${basename(path, extension)}.${scope}${extension}`) } };
+    }
+    const context = await browser.newContext(contextOptions);
     await this.registerAllocated(Object.freeze({
       id: `context:${key}`,
       kind: "context" as const,

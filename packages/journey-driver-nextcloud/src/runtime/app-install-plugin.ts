@@ -9,5 +9,5 @@ export const journeyMeshPlugin = defineServicePlugin({
     if (!services.length || services.some((name) => !/^[a-z][a-z0-9_-]*$/.test(name))) throw new Error("Installation services must be nonempty service names");
     return { directory: context.resolvePath(requiredString(options.directory, "directory")), services, enable: booleanOption(options.enable, true) };
   },
-  create: (settings) => appInstall(settings)
+  create: (settings, _context, { inputs }) => appInstall(settings, undefined, inputs)
 });

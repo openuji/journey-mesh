@@ -27,8 +27,8 @@ test("app recipe builds the supplied source without modifying it and carries its
       recipe = await readFile(args[2], "utf8");
       assert.equal(await readlink(join(dirname(args[2]), "relative-link")), "appinfo");
       return "";
-    });
-  const result = await build.up({ inputs: { source: { directory: source, identity } } });
+    }, { source: { directory: source, identity } });
+  const result = (await build.start({})).outputs;
   const app = result!.app as AppBuild;
   assert.equal(app.id, "example"); assert.equal(app.identity.version, "1.2.3");
   assert.equal(app.identity.sourceSha, identity.sourceSha);
@@ -45,8 +45,8 @@ test("app recipe builds the supplied source without modifying it and carries its
     if (args.includes("cat")) return identity.sourceSha;
     if (args.includes("app:list")) return JSON.stringify({ enabled: copied ? { example: "1.2.3" } : {} });
     return "";
-  });
-  const installed = await install.up({ inputs: { app, stack } });
+  }, { app, stack });
+  const installed = (await install.start({})).outputs;
   assert.deepEqual(installed!.identity, app.identity);
   const copy = calls.findIndex((call) => call[0] === "compose" && call.includes("cp"));
   const enable = calls.findIndex((call) => call.includes("app:enable"));
@@ -61,11 +61,10 @@ test("installation never reports success on a source mismatch and still cleans u
     if (args.includes("app:list")) return JSON.stringify({ enabled: {} });
     if (args.includes("app:getpath")) return "/var/www/html/custom_apps/example";
     return args.includes("cat") ? "b".repeat(40) : "";
-  });
-  await assert.rejects(installer.up({ inputs: { app, stack } }), /source mismatch/);
+  }, { app, stack });
+  await assert.rejects(installer.start({}), /source mismatch/);
   assert.ok(calls.some((call) => call[0] === "rm"));
   assert.ok(!calls.some((call) => call.includes("app:enable")));
-  assert.equal(installer.provenance!(), undefined);
 });
 
 test("installation replaces each instance's resolved app without leaving a competing copy", async () => {
@@ -90,8 +89,8 @@ test("installation replaces each instance's resolved app without leaving a compe
     }
     if (args.includes("app:enable")) enabled.add(service);
     return "";
-  });
-  const result = await installer.up({ inputs: { app, stack } });
+  }, { app, stack });
+  const result = (await installer.start({})).outputs;
   assert.deepEqual(result!.identity, app.identity);
   assert.deepEqual([...enabled], Object.keys(paths));
 });
@@ -106,10 +105,9 @@ test("installation rejects a shadowed copy before enabling it or publishing its 
     if (args.includes("cat")) return app.identity.sourceSha;
     if (args.includes("app:enable")) enabled = true;
     return "";
-  });
-  await assert.rejects(installer.up({ inputs: { app, stack } }), /app path mismatch/);
+  }, { app, stack });
+  await assert.rejects(installer.start({}), /app path mismatch/);
   assert.equal(enabled, false); assert.equal(cleaned, true);
-  assert.equal(installer.provenance!(), undefined);
 });
 
 test("installation refuses an invalid resolved path before removing any app files", async () => {
@@ -120,7 +118,7 @@ test("installation refuses an invalid resolved path before removing any app file
     if (args.includes("app:getpath")) return "/var/www/html";
     if (args[0] === "compose" && args.includes("rm")) removed = true;
     return "";
-  });
-  await assert.rejects(installer.up({ inputs: { app, stack } }), /Invalid installed app path/);
+  }, { app, stack });
+  await assert.rejects(installer.start({}), /Invalid installed app path/);
   assert.equal(removed, false);
 });

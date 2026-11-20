@@ -225,6 +225,11 @@ adapters:
       headless: ${HEADLESS:-true}
       actionTimeoutMs: 30000
       navigationTimeoutMs: 30000
+      contextOptions: &sharing-browser-context
+        recordHar:
+          path: ./.tmp/diagnostics/alice-sharing.har
+          urlFilter: "**/ocs/v2.php/apps/files_sharing/api/v1/shares**"
+          content: embed
     driver:
       use: "@openuji/journey-driver-nextcloud/web/plugin"
       options:
@@ -265,6 +270,7 @@ adapters:
       headless: ${HEADLESS:-true}
       actionTimeoutMs: 30000
       navigationTimeoutMs: 30000
+      contextOptions: *sharing-browser-context
     driver:
       use: "@openuji/journey-driver-nextcloud/web/plugin"
       options:
@@ -319,6 +325,11 @@ adapters:
         users: *users
         entries:
           nextcloud.android.application: application
+          # The client registers /app/* HTTPS links as internal navigation intents.
+          # Enter Files explicitly so returning from Alice's journey refreshes Bob's activity.
+          nextcloud.android.files:
+            kind: deep-link
+            route: https://${NEXTCLOUD_ANDROID_STACK_HOST}:${NEXTCLOUD_ANDROID_BOB_PORT:-18084}/app/openFiles
         transitionValues:
           urn:transition:android-enters-server:
             source: touchpoint.baseURL
