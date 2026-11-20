@@ -35,6 +35,9 @@ if [ "$ready" != 1 ]; then
   exit 1
 fi
 adb -s "$ANDROID_UDID" shell getprop > "$log_dir/device-properties.txt"
+# A fresh Google APIs image can leave a launcher ANR dialog above the app.
+# Clear that launcher before the journey, keeping Nextcloud errors visible.
+adb -s "$ANDROID_UDID" shell am force-stop com.google.android.apps.nexuslauncher
 pnpm --filter @openuji/example-nextcloud-filesharing android:check
 journey_args=(test mesh.yaml)
 if [ -n "${JOURNEY_MESH_TEST-native-recipient-sharing}" ]; then
