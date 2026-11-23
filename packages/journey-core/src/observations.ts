@@ -27,7 +27,10 @@ export type JourneyObserverOutput = Readonly<{
   errors: readonly Readonly<{ name: string; message: string }>[];
 }>;
 
-/** One adapter command, not a physical keystroke or a modeled transition. */
+/**
+ * One adapter command, not a modeled transition. An adapter that performs a declared
+ * materialization records one command per step and names the step and the gesture it used.
+ */
 export type JourneyInputAction = Readonly<{
   id: string;
   runId: string;
@@ -36,6 +39,12 @@ export type JourneyInputAction = Readonly<{
   operationId: string;
   modalityId: string;
   command: string;
+  /** IRI of the TransitionMaterialization being performed, when there is one. */
+  materializationId?: string;
+  /** IRI of the materialization step this command performs. */
+  stepId?: string;
+  /** The concrete platform gesture, such as a key name or a pointer press. */
+  gesture?: string;
   unit: "adapter-command";
   status: "attempted" | "completed" | "failed";
   error?: Readonly<{ name: string; message: string }>;

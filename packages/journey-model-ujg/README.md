@@ -87,13 +87,20 @@ materializations may omit details; the compiler never supplies missing moves,
 locators, shortcuts, or text entry. Text entry is outside RC4 Operability and may
 use an explicitly declared producer modality.
 
-This release compiles materializations; existing adapters do not execute or verify
-their steps. The default and keyboard-only profiles support RC4 keyboard activation and the
-producer-defined text-entry modality for the bundled browser example. Explicit
-materialization step execution and verification remain unimplemented, with no new
-adapter guards. Compilation success does not establish a materialization's
-runtime result.
-Existing RC3 jobs must use an older mesh release until separately migrated.
+Profiles choose which materialization runs. After a profile selects a modality, it
+selects the one materialization through that modality. If there are several, it
+takes the first that `materializationPreference` lists; source order never decides.
+It rejects a transition that has none, unless the modality is producer text entry or
+the profile sets `requireMaterialization: false`. Preflight runs this selection
+before any service starts.
+
+The Playwright adapter performs the selected steps and checks each one as
+Operability §7 requires. See its [README](../journey-adapter-playwright/README.md).
+The Appium adapter refuses materializations through the modalities it supports
+until it can perform them. Compilation succeeding says nothing about a
+materialization's runtime result.
+
+Existing RC3 jobs must use an older mesh release until they are migrated.
 
 ## Another specification version
 

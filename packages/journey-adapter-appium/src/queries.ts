@@ -16,6 +16,9 @@ const features: readonly string[] = Object.freeze(["resource-id", "class", "text
 
 export const touchTapInputModalityId = "urn:openuji:input:touch-tap";
 export type AppiumInteractionCommand = "tap" | "type";
+export function appiumSupportsModality(id: string): boolean {
+  return id === touchTapInputModalityId || id === keyboardTextEntryInputModalityId;
+}
 export function appiumCommandForModality(id: string): AppiumInteractionCommand {
   if (id === touchTapInputModalityId) return "tap";
   if (id === keyboardTextEntryInputModalityId) return "type";

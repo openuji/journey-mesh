@@ -5,32 +5,52 @@ import {
   type InputModalityDecision,
   type ResolvedInputModality,
   type ResolvedInputModalityProfile,
+  type ResolvedTransitionMaterialization,
   type TransitionPlanOperation
 } from "@openuji/journey-execution-model";
 import type { JourneyExecutionContext, JourneyProfile } from "@openuji/journey-runner";
 
 export type JourneyProfileScope = Pick<JourneyProfile, "appliesTo">;
 
-export type InputModalityProfileOptions = JourneyProfileScope & {
+/** How a profile chooses among declared TransitionMaterializations. */
+export type MaterializationSelectionOptions = {
+  /**
+   * Materialization IRIs to run when a transition declares several through the selected
+   * modality. The first listed candidate wins; source order never decides.
+   */
+  materializationPreference?: readonly string[];
+  /**
+   * When true (the default), a transition without a materialization through the selected
+   * modality is rejected. Producer text entry is exempt: it types at the current focus, and its
+   * materialization only declares the focus moves that reach the field.
+   */
+  requireMaterialization?: boolean;
+};
+
+export type InputModalityProfileOptions = JourneyProfileScope & MaterializationSelectionOptions & {
   id: string;
   label?: string;
   modalityPreference: readonly string[];
 };
 
-/** Select model-defined modalities without translating them into runtime commands. */
+/** Select model-defined modalities and declared materializations without translating them into runtime commands. */
 export function inputModalityProfile(options: InputModalityProfileOptions): JourneyProfile {
   const preference = Object.freeze([...options.modalityPreference]);
+  const selection = Object.freeze({
+    materializationPreference: Object.freeze([...(options.materializationPreference ?? [])]),
+    requireMaterialization: options.requireMaterialization ?? true
+  });
   return Object.freeze({
     id: options.id,
     ...(options.label ? { label: options.label } : {}),
     ...(options.appliesTo ? { appliesTo: options.appliesTo } : {}),
     selectInputModality(operation) {
-      return selectDecision(options.id, operation, preference);
+      return selectDecision(options.id, operation, preference, selection);
     }
   });
 }
 
-export function defaultProfile(scope: JourneyProfileScope = {}): JourneyProfile {
+export function defaultProfile(scope: JourneyProfileScope & MaterializationSelectionOptions = {}): JourneyProfile {
   return inputModalityProfile({
     ...scope,
     id: "default",
@@ -43,7 +63,7 @@ export function defaultProfile(scope: JourneyProfileScope = {}): JourneyProfile 
   });
 }
 
-export function keyboardOnlyProfile(scope: JourneyProfileScope = {}): JourneyProfile {
+export function keyboardOnlyProfile(scope: JourneyProfileScope & MaterializationSelectionOptions = {}): JourneyProfile {
   return inputModalityProfile({
     ...scope,
     id: "keyboard-only",
@@ -86,13 +106,45 @@ export function touchpointProfile(options: {
 function selectDecision(
   profileId: string,
   operation: TransitionPlanOperation,
-  modalityPreference: readonly string[]
+  modalityPreference: readonly string[],
+  selection: Required<MaterializationSelectionOptions>
 ): InputModalityDecision {
   for (const modalityId of modalityPreference) {
     const match = findProfileWithSingleModality(operation.activation.requiredInputModalityProfiles, modalityId);
-    if (match) return Object.freeze({ profileId, inputModalityProfile: match.profile, modality: match.modality });
+    if (!match) continue;
+    const materialization = selectMaterialization(profileId, operation, match.modality, selection);
+    return Object.freeze({
+      profileId,
+      inputModalityProfile: match.profile,
+      modality: match.modality,
+      ...(materialization ? { materialization } : {})
+    });
   }
   throw new Error(`No supported input modality for ${operation.transition.id} in profile ${profileId}`);
+}
+
+/** Choose the one declared materialization to perform; never guess among alternatives. */
+export function selectMaterialization(
+  profileId: string,
+  operation: TransitionPlanOperation,
+  modality: ResolvedInputModality,
+  selection: Required<MaterializationSelectionOptions>
+): ResolvedTransitionMaterialization | undefined {
+  const candidates = (operation.materializations ?? []).filter((candidate) => candidate.modality.id === modality.id);
+  if (candidates.length === 1) return candidates[0];
+  if (candidates.length > 1) {
+    const preferred = selection.materializationPreference.find((id) => candidates.some((candidate) => candidate.id === id));
+    if (preferred) return candidates.find((candidate) => candidate.id === preferred);
+    throw new Error(
+      `Transition ${operation.transition.id} declares ${candidates.length} TransitionMaterializations through ${modality.id} ` +
+      `(${candidates.map((candidate) => candidate.id).join(", ")}); list the one to run in profile ${profileId} option materializationPreference`
+    );
+  }
+  if (modality.id === keyboardTextEntryInputModalityId || !selection.requireMaterialization) return undefined;
+  throw new Error(
+    `Transition ${operation.transition.id} has no TransitionMaterialization through ${modality.id} (profile ${profileId}); ` +
+    "declare the steps in the UJG document"
+  );
 }
 
 function findProfileWithSingleModality(

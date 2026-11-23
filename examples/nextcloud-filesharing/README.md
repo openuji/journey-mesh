@@ -1,9 +1,28 @@
 [![Nextcloud Filesharing CI](https://github.com/openuji/journey-mesh/actions/workflows/example-ci.yml/badge.svg?event=pull_request)](https://github.com/openuji/journey-mesh/actions/workflows/example-ci.yml)
 
-The bundled models target **UJG 1.0 RC4**. The default and keyboard-only profiles
-support standard keyboard activation and the producer-defined text-entry modality.
-The browser example runs with `pnpm e2e`. Execution and verification of explicit
-Operability materialization step chains remain a separate milestone.
+The bundled models target **UJG 1.0 RC4**. Every browser keyboard and pointer
+transition declares its Operability `TransitionMaterialization`:
+- the Tab and Shift+Tab stops, or the pointer target, leading to the control
+- then the activation
+
+The Playwright adapter performs exactly these steps. Text fields that are not
+autofocused are reached with declared focus moves. The default profile performs
+the pointer materializations, and the keyboard-only profile performs the
+keyboard ones. The browser example runs with `pnpm e2e`.
+
+The keyboard paths were taken from Nextcloud 34.0.2 with the bundled skeleton
+files. A change in a page's tab order fails the step that no longer matches, and
+the error names the object that has focus. Findings from modeling these paths:
+- On the Files page, "Skip to main content" does not move the keyboard start
+  point, so the paths count stops backwards from the top of the page instead.
+- Enter on a file row's "Sharing options" button does not open the sharing
+  panel; Space does. The adapter's default activation for buttons is Space. Set
+  `keyboard.activation.button: Enter` on the adapter to check Enter.
+
+The Android models and `comparison/nc34.ujg.jsonld` declare no
+materializations. Appium taps the bound object, so the `touch` profile sets
+`requireMaterialization: false`. The comparison model is compiled but not
+executed.
 
 # Nextcloud file-sharing tests
 

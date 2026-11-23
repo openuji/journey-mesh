@@ -367,6 +367,8 @@ profiles:
     use: "@openuji/journey-profiles/plugin"
     options:
       id: touch
+      # The Android model declares no TransitionMaterialization; Appium taps the bound object.
+      requireMaterialization: false
       modalityPreference:
         - urn:openuji:input-modality:keyboard-text-entry
         - urn:openuji:input:touch-tap

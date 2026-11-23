@@ -181,3 +181,17 @@ test("registering a second compiler leaves RC4 selection and fixed output unchan
   const expected = JSON.parse(await readFile(new URL("./fixtures/rc4-plan.json", import.meta.url), "utf8"));
   assert.deepEqual(JSON.parse(JSON.stringify(result)), expected);
 });
+
+test("a producer text-entry materialization compiles its focus moves without adding the text step", async () => {
+  const doc = fixture();
+  const textEntry = "urn:openuji:input-modality:keyboard-text-entry";
+  doc.nodes.push({ "@id": textEntry, "@type": "InputModality" });
+  item(doc, "urn:profile").inputModalityRefs = [textEntry];
+  Object.assign(item(doc, "urn:material"), { materializationModalityRef: textEntry, materializationStepRefs: ["urn:move"] });
+  item(doc, "urn:move").stepMoveKindRef = "operability:nextStop";
+  doc.nodes = doc.nodes.filter((node) => node["@id"] !== "urn:activate");
+  const [reach] = (await transition(doc)).materializations!;
+  assert.equal(reach.modality.id, textEntry);
+  assert.deepEqual(reach.steps.map((step) => [step.kind, step.moveKind?.id, step.moveKind?.type]), [["move", "operability:nextStop", "focus"]]);
+  assert.equal(reach.steps[0].locator?.id, "urn:locator");
+});

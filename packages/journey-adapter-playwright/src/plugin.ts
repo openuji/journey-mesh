@@ -3,13 +3,14 @@ import { booleanOption, defineAdapterPlugin, knownOptions, optionsObject, positi
 import { webDriverContract } from "@openuji/journey-driver-web";
 import { playwrightAutomation } from "./automation.js";
 import { playwrightAdapter } from "./index.js";
+import { parsePlaywrightKeyboard } from "./keyboard.js";
 
 const browsers = { chromium, firefox, webkit };
 
 export const journeyMeshPlugin = defineAdapterPlugin({
   kind: "adapter", automation: playwrightAutomation, driverContract: webDriverContract,
   parse(options) {
-    knownOptions(options, ["browser", "headless", "launchOptions", "contextOptions", "assertionTimeoutMs", "actionTimeoutMs", "navigationTimeoutMs"]);
+    knownOptions(options, ["browser", "headless", "launchOptions", "contextOptions", "assertionTimeoutMs", "actionTimeoutMs", "navigationTimeoutMs", "keyboard"]);
     const browser = String(options.browser ?? "chromium");
     if (!Object.hasOwn(browsers, browser)) throw new Error("Unknown browser");
     return {
@@ -19,12 +20,13 @@ export const journeyMeshPlugin = defineAdapterPlugin({
       contextOptions: options.contextOptions === undefined ? undefined : optionsObject(options.contextOptions, "contextOptions") as BrowserContextOptions,
       assertionTimeoutMs: positiveNumber(options.assertionTimeoutMs, 30_000),
       actionTimeoutMs: positiveNumber(options.actionTimeoutMs, 30_000),
-      navigationTimeoutMs: positiveNumber(options.navigationTimeoutMs, 30_000)
+      navigationTimeoutMs: positiveNumber(options.navigationTimeoutMs, 30_000),
+      keyboard: parsePlaywrightKeyboard(options.keyboard)
     };
   },
-  validateOperations(_settings, context, { driver }) {
+  validateOperations(settings, context, { driver }) {
     if (!driver) throw new Error("Playwright requires a driver");
-    const adapter = playwrightAdapter({ driver });
+    const adapter = playwrightAdapter({ driver, keyboard: settings.keyboard });
     for (const operation of context.operations) adapter.describeOperation?.(operation);
   },
   create({ browser, ...settings }, _context, { driver, observers }) {

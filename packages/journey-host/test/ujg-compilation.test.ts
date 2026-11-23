@@ -29,3 +29,26 @@ test("RC4 materializations and imported provenance survive host plan composition
   assert.ok(Object.isFrozen(operation.materializations?.[0].steps));
   assert.equal(compiled.views.get("root.json")?.format, "journey-map");
 });
+
+test("a keyboard transition without declared steps fails profile preflight before any setup", async (t) => {
+  const { stringify } = await import("yaml");
+  const { validateSuite } = await import("../src/index.js");
+  const { access } = await import("node:fs/promises");
+  const directory = await mkdtemp(join(tmpdir(), "ujg-preflight-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const packages = new URL("../../", import.meta.url).pathname;
+  const config = {
+    kind: "suite", outputDir: "reports", model: { use: join(packages, "journey-model-ujg/src/plugin.ts") },
+    profiles: { keyboard: { use: join(packages, "journey-profiles/src/plugin.ts"), options: { preset: "keyboard-only" } } },
+    adapters: { web: { use: new URL("./fixtures/adapter.mjs", import.meta.url).pathname, options: { name: "web", log: "events.jsonl" } } },
+    tests: { pages: { journeys: [{ id: "pages", source: "model.json", select: "urn:journey", adapter: "web" }], profiles: [{ id: "keyboard-only", journeys: { pages: "keyboard" } }] } }
+  };
+  await writeFile(join(directory, "mesh.yaml"), stringify(config));
+  const document = fixture();
+  await writeFile(join(directory, "model.json"), JSON.stringify(document));
+  assert.deepEqual((await validateSuite(join(directory, "mesh.yaml"))).tests, ["pages"]);
+  document.nodes = document.nodes.filter((node) => !["urn:material", "urn:move", "urn:activate"].includes(node["@id"]));
+  await writeFile(join(directory, "model.json"), JSON.stringify(document));
+  await assert.rejects(validateSuite(join(directory, "mesh.yaml")), /Transition urn:transition has no TransitionMaterialization through observability:keyboard \(profile keyboard-only\)/);
+  await assert.rejects(access(join(directory, "events.jsonl")));
+});

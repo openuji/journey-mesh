@@ -279,3 +279,20 @@ test("installation verification precedes modeled interaction and a mismatch clos
   assert.deepEqual(session.calls, ["close"]);
   assert.match(JSON.stringify(result.errors), /installed APK mismatch/);
 });
+
+test("declared materializations are refused, not tapped past", async () => {
+  const touch = { id: "urn:material:touch", transitionId: "username", modality: { id: touchTapInputModalityId }, steps: [{ id: "urn:step:tap", kind: "activation" as const }] };
+  const adapter = appiumAdapter(options(new Session()));
+  assert.throws(() => adapter.describeOperation!({ ...transition, materializations: [touch] }), /Appium does not perform TransitionMaterialization urn:material:touch \(urn:openuji:input:touch-tap\) yet/);
+  assert.doesNotThrow(() => adapter.describeOperation!({ ...transition, materializations: [{ ...touch, modality: { id: "observability:keyboard" } }] }));
+  const session = new Session();
+  const result = await runJourney({
+    plan: { id: "plan", operations: [state, transition] },
+    profiles: [{ id: "selected", selectInputModality: () => ({ profileId: "selected", inputModalityProfile: inputProfile, modality: inputProfile.modalities[0]!, materialization: { ...touch, modality: inputProfile.modalities[0]! } }) }],
+    adapter: appiumAdapter(options(session))
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.errors[0]!.message, /Appium does not perform TransitionMaterialization urn:material:touch yet/);
+  // The fixture's platform-prompt handling may tap during the state check; the transition itself must not type.
+  assert.equal(session.calls.some((call) => call.startsWith("type:")), false, session.calls.join(","));
+});
