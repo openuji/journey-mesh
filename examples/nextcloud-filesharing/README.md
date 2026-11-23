@@ -10,6 +10,9 @@ autofocused are reached with declared focus moves. The default profile performs
 the pointer materializations, and the keyboard-only profile performs the
 keyboard ones. The browser example runs with `pnpm e2e`.
 
+The operability observer records which steps ran with which keys. The report's
+**Open Input steps** link shows them for each profile and transition.
+
 The keyboard paths were taken from Nextcloud 34.0.2 with the bundled skeleton
 files. A change in a page's tab order fails the step that no longer matches, and
 the error names the object that has focus. Findings from modeling these paths:

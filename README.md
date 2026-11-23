@@ -151,7 +151,7 @@ flowchart LR
   result --> record[("Run record<br/>run.json + evidence files")]
   capture -->|journal, measurements, policy errors| record
   subgraph reporting["Reporting (packages)"]
-    interpreters["Interpreters<br/>(journey-report-axe, -android)"] --> model[("Report model<br/>report/*.json, JSON Schema")]
+    interpreters["Interpreters<br/>(journey-report-axe, -android, -operability)"] --> model[("Report model<br/>report/*.json, JSON Schema")]
   end
   record --> interpreters
   model --> viewer["apps/report-renderer<br/>(viewer, static site, Markdown)"]
@@ -193,6 +193,7 @@ report:
   interpreters:
     - use: "@openuji/journey-report-axe"
     - use: "@openuji/journey-report-android"
+    - use: "@openuji/journey-report-operability"
 ```
 
 The host accepts `report` sections but never reads them. Phase exclusions are

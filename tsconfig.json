@@ -68,6 +68,8 @@
     },
     {
       "path": "packages/journey-report-android/tsconfig.json"
-    }
+    },
+    { "path": "packages/journey-observer-operability" },
+    { "path": "packages/journey-report-operability" }
   ]
 }

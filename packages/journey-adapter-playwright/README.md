@@ -117,6 +117,12 @@ Every step records one `JourneyInputAction` with `command` (`move`, `activate`,
 key, `pointer-move`, `pointer-press` or `type`). Each attempt is recorded once
 as attempted and once as completed or failed, under the same `id`.
 
+The adapter passes these actions only to its observers. To get them into the
+run record and the report, add
+[`@openuji/journey-observer-operability`](../journey-observer-operability/README.md)
+to the adapter's observers and `@openuji/journey-report-operability` to the
+report interpreters.
+
 ## Tests
 
 `pnpm test` runs unit tests. `pnpm test:browser` runs the step checks in
