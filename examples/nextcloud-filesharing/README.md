@@ -1,5 +1,10 @@
 [![Nextcloud Filesharing CI](https://github.com/openuji/journey-mesh/actions/workflows/example-ci.yml/badge.svg?event=pull_request)](https://github.com/openuji/journey-mesh/actions/workflows/example-ci.yml)
 
+The bundled models target **UJG 1.0 RC4**. The default and keyboard-only profiles
+support standard keyboard activation and the producer-defined text-entry modality.
+The browser example runs with `pnpm e2e`. Execution and verification of explicit
+Operability materialization step chains remain a separate milestone.
+
 # Nextcloud file-sharing tests
 
 Two compositions of the [Journey Mesh architecture](../../README.md#architecture)

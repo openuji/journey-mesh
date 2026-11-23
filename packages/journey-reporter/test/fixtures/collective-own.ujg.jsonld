@@ -1,13 +1,13 @@
 {
   "@context": [
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/core.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/graph.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/surface.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/phase.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/l10n.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/observability.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/entry-binding.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/effect.context.jsonld"
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/core.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/graph.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/surface.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/phase.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/l10n.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/observability.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/entry-binding.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/effect.context.jsonld"
   ],
   "@type": "UJGDocument",
   "@id": "urn:document:collective-own",
@@ -38,10 +38,6 @@
       "order": 1
     },
     {
-      "@type": "InputModality",
-      "@id": "observability:pointer"
-    },
-    {
       "@type": "InputModalityProfile",
       "@id": "urn:profile:pointer",
       "inputModalityRefs": [
@@ -49,25 +45,21 @@
       ]
     },
     {
-      "@type": "InputModality",
-      "@id": "observability:keyboard-enter"
-    },
-    {
       "@type": "InputModalityProfile",
       "@id": "urn:profile:keyboard-enter",
       "inputModalityRefs": [
-        "observability:keyboard-enter"
+        "observability:keyboard"
       ]
     },
     {
       "@type": "InputModality",
-      "@id": "observability:keyboard-text-entry"
+      "@id": "urn:openuji:input-modality:keyboard-text-entry"
     },
     {
       "@type": "InputModalityProfile",
       "@id": "urn:profile:keyboard-text-entry",
       "inputModalityRefs": [
-        "observability:keyboard-text-entry"
+        "urn:openuji:input-modality:keyboard-text-entry"
       ]
     },
     {
@@ -201,7 +193,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:4",
       "extensions": {
-        "urn:openuji:playwright:css": "input[type=\"password\"]"
+        "urn:openuji:playwright:css": {
+          "selector": "input[type=\"password\"]"
+        }
       }
     },
     {
@@ -335,7 +329,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:10",
       "extensions": {
-        "urn:openuji:playwright:css": "input[type=\"password\"]"
+        "urn:openuji:playwright:css": {
+          "selector": "input[type=\"password\"]"
+        }
       }
     },
     {
@@ -361,7 +357,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:12",
       "extensions": {
-        "urn:openuji:playwright:css": "#content"
+        "urn:openuji:playwright:css": {
+          "selector": "#content"
+        }
       }
     },
     {
@@ -508,7 +506,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:16",
       "extensions": {
-        "urn:openuji:playwright:css": "#app-navigation-vue"
+        "urn:openuji:playwright:css": {
+          "selector": "#app-navigation-vue"
+        }
       }
     },
     {
@@ -535,7 +535,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:18",
       "extensions": {
-        "urn:openuji:playwright:css": ".collective-selector-list"
+        "urn:openuji:playwright:css": {
+          "selector": ".collective-selector-list"
+        }
       }
     },
     {
@@ -569,7 +571,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:20",
       "extensions": {
-        "urn:openuji:playwright:css": ".collective-selector-trigger"
+        "urn:openuji:playwright:css": {
+          "selector": ".collective-selector-trigger"
+        }
       }
     },
     {
@@ -595,7 +599,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:22",
       "extensions": {
-        "urn:openuji:playwright:css": "[data-cy-collectives=\"reader\"] .ProseMirror:visible, [data-cy-collectives=\"editor\"] .ProseMirror:visible"
+        "urn:openuji:playwright:css": {
+          "selector": "[data-cy-collectives=\"reader\"] .ProseMirror:visible, [data-cy-collectives=\"editor\"] .ProseMirror:visible"
+        }
       }
     },
     {
@@ -629,7 +635,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:24",
       "extensions": {
-        "urn:openuji:playwright:css": ".collective-selector-list a:has-text(\"Journey collective-own\")"
+        "urn:openuji:playwright:css": {
+          "selector": ".collective-selector-list a:has-text(\"Journey collective-own\")"
+        }
       }
     },
     {
@@ -655,7 +663,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:26",
       "extensions": {
-        "urn:openuji:playwright:css": ".app-sidebar"
+        "urn:openuji:playwright:css": {
+          "selector": ".app-sidebar"
+        }
       }
     },
     {
@@ -735,7 +745,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:30",
       "extensions": {
-        "urn:openuji:playwright:css": ".external-shares-list"
+        "urn:openuji:playwright:css": {
+          "selector": ".external-shares-list"
+        }
       }
     },
     {
@@ -875,7 +887,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:36",
       "extensions": {
-        "urn:openuji:playwright:css": ".sharing-entry:has(.sharing-entry__title:text-is(\"Share link\")) .sharing-entry__actions button"
+        "urn:openuji:playwright:css": {
+          "selector": ".sharing-entry:has(.sharing-entry__title:text-is(\"Share link\")) .sharing-entry__actions button"
+        }
       }
     },
     {
@@ -1101,7 +1115,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:46",
       "extensions": {
-        "urn:openuji:playwright:css": ".sharing-entry:has(.sharing-entry__title:text-is(\"Newsletter\"))"
+        "urn:openuji:playwright:css": {
+          "selector": ".sharing-entry:has(.sharing-entry__title:text-is(\"Newsletter\"))"
+        }
       }
     },
     {
@@ -1241,7 +1257,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:52",
       "extensions": {
-        "urn:openuji:playwright:css": ".sharing-entry:has(.sharing-entry__title:text-is(\"Newsletter\")) .sharing-entry__actions button"
+        "urn:openuji:playwright:css": {
+          "selector": ".sharing-entry:has(.sharing-entry__title:text-is(\"Newsletter\")) .sharing-entry__actions button"
+        }
       }
     },
     {
@@ -1267,7 +1285,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:54",
       "extensions": {
-        "urn:openuji:playwright:css": ".external-shares-list"
+        "urn:openuji:playwright:css": {
+          "selector": ".external-shares-list"
+        }
       }
     },
     {
@@ -1407,7 +1427,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:60",
       "extensions": {
-        "urn:openuji:playwright:css": ".sharing-entry:has(.sharing-entry__title:text-is(\"Newsletter\")) .sharing-entry__actions button"
+        "urn:openuji:playwright:css": {
+          "selector": ".sharing-entry:has(.sharing-entry__title:text-is(\"Newsletter\")) .sharing-entry__actions button"
+        }
       }
     },
     {
@@ -1539,7 +1561,9 @@
       "@type": "CustomLocator",
       "@id": "urn:locator:collective-own:66",
       "extensions": {
-        "urn:openuji:playwright:css": ".sharing-entry:has(.sharing-entry__title:text-is(\"Newsletter\"))"
+        "urn:openuji:playwright:css": {
+          "selector": ".sharing-entry:has(.sharing-entry__title:text-is(\"Newsletter\"))"
+        }
       }
     },
     {

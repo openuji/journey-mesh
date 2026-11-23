@@ -359,6 +359,6 @@ profiles:
     options:
       id: touch
       modalityPreference:
-        - observability:keyboard-text-entry
+        - urn:openuji:input-modality:keyboard-text-entry
         - urn:openuji:input:touch-tap
 kind: suite

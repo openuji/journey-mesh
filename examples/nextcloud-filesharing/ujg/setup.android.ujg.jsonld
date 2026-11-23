@@ -1,12 +1,12 @@
 {
   "@context": [
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/core.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/graph.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/surface.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/phase.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/l10n.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/observability.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/entry-binding.context.jsonld"
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/core.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/graph.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/surface.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/phase.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/l10n.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/observability.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/entry-binding.context.jsonld"
   ],
   "@id": "urn:ujg:document:nextcloud-android-setup",
   "@type": "UJGDocument",
@@ -64,27 +64,26 @@
     { "@type": "Surface", "@id": "urn:surface:android-account-connected", "graphNodeRef": "urn:state:android-account-connected" },
     { "@type": "State", "@id": "urn:state:android-authenticated", "label": "Native file screen is ready" },
     { "@type": "Surface", "@id": "urn:surface:android-authenticated", "graphNodeRef": "urn:state:android-authenticated" },
-    { "@type": "Transition", "@id": "urn:transition:android-opens-server-form", "from": "urn:state:android-welcome", "to": "urn:state:android-server-form" },
-    { "@type": "Surface", "@id": "urn:surface:android-opens-server-form", "graphNodeRef": "urn:transition:android-opens-server-form" },
-    { "@type": "Transition", "@id": "urn:transition:android-enters-server", "from": "urn:state:android-server-form", "to": "urn:state:android-server-entered" },
-    { "@type": "Surface", "@id": "urn:surface:android-enters-server", "graphNodeRef": "urn:transition:android-enters-server" },
-    { "@type": "Transition", "@id": "urn:transition:android-connects-server", "from": "urn:state:android-server-entered", "to": "urn:state:android-web-login-ready" },
-    { "@type": "Surface", "@id": "urn:surface:android-connects-server", "graphNodeRef": "urn:transition:android-connects-server" },
-    { "@type": "Transition", "@id": "urn:transition:android-opens-login-form", "from": "urn:state:android-web-login-ready", "to": "urn:state:android-credentials-ready" },
-    { "@type": "Surface", "@id": "urn:surface:android-opens-login-form", "graphNodeRef": "urn:transition:android-opens-login-form" },
-    { "@type": "Transition", "@id": "urn:transition:android-enters-username", "from": "urn:state:android-credentials-ready", "to": "urn:state:android-username-entered" },
-    { "@type": "Surface", "@id": "urn:surface:android-enters-username", "graphNodeRef": "urn:transition:android-enters-username" },
-    { "@type": "Transition", "@id": "urn:transition:android-enters-password", "from": "urn:state:android-username-entered", "to": "urn:state:android-password-entered" },
-    { "@type": "Surface", "@id": "urn:surface:android-enters-password", "graphNodeRef": "urn:transition:android-enters-password" },
-    { "@type": "Transition", "@id": "urn:transition:android-submits-login", "from": "urn:state:android-password-entered", "to": "urn:state:android-authorization-ready" },
-    { "@type": "Surface", "@id": "urn:surface:android-submits-login", "graphNodeRef": "urn:transition:android-submits-login" },
-    { "@type": "Transition", "@id": "urn:transition:android-grants-access", "from": "urn:state:android-authorization-ready", "to": "urn:state:android-account-connected" },
-    { "@type": "Surface", "@id": "urn:surface:android-grants-access", "graphNodeRef": "urn:transition:android-grants-access" },
-    { "@type": "Transition", "@id": "urn:transition:android-closes-browser-login", "from": "urn:state:android-account-connected", "to": "urn:state:android-authenticated" },
-    { "@type": "Surface", "@id": "urn:surface:android-closes-browser-login", "graphNodeRef": "urn:transition:android-closes-browser-login" },
+    { "@type": "Transition", "@id": "urn:transition:android-opens-server-form", "from": "urn:state:android-welcome", "to": "urn:state:android-server-form", "commandRef": "urn:transition:android-opens-server-form:command" },
+    { "@type": "Surface", "@id": "urn:surface:android-opens-server-form", "graphNodeRef": "urn:transition:android-opens-server-form:command" },
+    { "@type": "Transition", "@id": "urn:transition:android-enters-server", "from": "urn:state:android-server-form", "to": "urn:state:android-server-entered", "commandRef": "urn:transition:android-enters-server:command" },
+    { "@type": "Surface", "@id": "urn:surface:android-enters-server", "graphNodeRef": "urn:transition:android-enters-server:command" },
+    { "@type": "Transition", "@id": "urn:transition:android-connects-server", "from": "urn:state:android-server-entered", "to": "urn:state:android-web-login-ready", "commandRef": "urn:transition:android-connects-server:command" },
+    { "@type": "Surface", "@id": "urn:surface:android-connects-server", "graphNodeRef": "urn:transition:android-connects-server:command" },
+    { "@type": "Transition", "@id": "urn:transition:android-opens-login-form", "from": "urn:state:android-web-login-ready", "to": "urn:state:android-credentials-ready", "commandRef": "urn:transition:android-opens-login-form:command" },
+    { "@type": "Surface", "@id": "urn:surface:android-opens-login-form", "graphNodeRef": "urn:transition:android-opens-login-form:command" },
+    { "@type": "Transition", "@id": "urn:transition:android-enters-username", "from": "urn:state:android-credentials-ready", "to": "urn:state:android-username-entered", "commandRef": "urn:transition:android-enters-username:command" },
+    { "@type": "Surface", "@id": "urn:surface:android-enters-username", "graphNodeRef": "urn:transition:android-enters-username:command" },
+    { "@type": "Transition", "@id": "urn:transition:android-enters-password", "from": "urn:state:android-username-entered", "to": "urn:state:android-password-entered", "commandRef": "urn:transition:android-enters-password:command" },
+    { "@type": "Surface", "@id": "urn:surface:android-enters-password", "graphNodeRef": "urn:transition:android-enters-password:command" },
+    { "@type": "Transition", "@id": "urn:transition:android-submits-login", "from": "urn:state:android-password-entered", "to": "urn:state:android-authorization-ready", "commandRef": "urn:transition:android-submits-login:command" },
+    { "@type": "Surface", "@id": "urn:surface:android-submits-login", "graphNodeRef": "urn:transition:android-submits-login:command" },
+    { "@type": "Transition", "@id": "urn:transition:android-grants-access", "from": "urn:state:android-authorization-ready", "to": "urn:state:android-account-connected", "commandRef": "urn:transition:android-grants-access:command" },
+    { "@type": "Surface", "@id": "urn:surface:android-grants-access", "graphNodeRef": "urn:transition:android-grants-access:command" },
+    { "@type": "Transition", "@id": "urn:transition:android-closes-browser-login", "from": "urn:state:android-account-connected", "to": "urn:state:android-authenticated", "commandRef": "urn:transition:android-closes-browser-login:command" },
+    { "@type": "Surface", "@id": "urn:surface:android-closes-browser-login", "graphNodeRef": "urn:transition:android-closes-browser-login:command" },
     { "@type": "Touchpoint", "@id": "urn:touchpoint:nextcloud-b", "journeyRefs": ["urn:journey:bob-android-setup"] },
     { "@type": "Persona", "@id": "urn:user:bob", "touchpointRefs": ["urn:touchpoint:nextcloud-b"] },
-
     { "@type": "AccessibleFeature", "@id": "urn:feature:android-login", "accessibleFeatureName": "resource-id", "accessibleFeatureValue": "com.nextcloud.client:id/login" },
     { "@type": "AccessibleFeature", "@id": "urn:feature:android-host", "accessibleFeatureName": "resource-id", "accessibleFeatureValue": "com.nextcloud.client:id/host_url_input" },
     { "@type": "AccessibleFeature", "@id": "urn:feature:android-connect", "accessibleFeatureName": "resource-id", "accessibleFeatureValue": "com.nextcloud.client:id/text_input_end_icon" },
@@ -112,14 +111,13 @@
     { "@type": "AccessibleLocator", "@id": "urn:locator:android-account-connected", "accessibleFeatureRefs": ["urn:feature:android-account-connected"] },
     { "@type": "AccessibleLocator", "@id": "urn:locator:android-chrome-close", "accessibleFeatureRefs": ["urn:feature:android-chrome-close"] },
     { "@type": "AccessibleLocator", "@id": "urn:locator:android-menu", "accessibleFeatureRefs": ["urn:feature:android-menu"] },
-    { "@type": "InputModality", "@id": "observability:keyboard-text-entry" },
+    { "@type": "InputModality", "@id": "urn:openuji:input-modality:keyboard-text-entry" },
     { "@type": "InputModality", "@id": "urn:openuji:input:touch-tap" },
-    { "@type": "InputModalityProfile", "@id": "urn:input-profile:android-text", "inputModalityRefs": ["observability:keyboard-text-entry"] },
+    { "@type": "InputModalityProfile", "@id": "urn:input-profile:android-text", "inputModalityRefs": ["urn:openuji:input-modality:keyboard-text-entry"] },
     { "@type": "InputModalityProfile", "@id": "urn:input-profile:android-touch", "inputModalityRefs": ["urn:openuji:input:touch-tap"] },
     { "@type": "ObservationEvent", "@id": "urn:observation-event:presence" },
     { "@type": "ObservationEvent", "@id": "urn:observation-event:android-text", "requiredInputModalityProfileRefs": ["urn:input-profile:android-text"] },
     { "@type": "ObservationEvent", "@id": "urn:observation-event:android-touch", "requiredInputModalityProfileRefs": ["urn:input-profile:android-touch"] },
-
     { "@type": "ObservationBinding", "@id": "urn:obs:android-welcome", "observeSurfaceRef": "urn:surface:android-welcome", "observationEventRef": "urn:observation-event:presence", "expectedMatchCount": 1, "locatorRefs": ["urn:locator:android-login"] },
     { "@type": "ObservationBinding", "@id": "urn:obs:android-server-form", "observeSurfaceRef": "urn:surface:android-server-form", "observationEventRef": "urn:observation-event:presence", "expectedMatchCount": 1, "locatorRefs": ["urn:locator:android-host"] },
     { "@type": "ObservationBinding", "@id": "urn:obs:android-server-entered", "observeSurfaceRef": "urn:surface:android-server-entered", "observationEventRef": "urn:observation-event:presence", "expectedMatchCount": 1, "locatorRefs": ["urn:locator:android-connect"] },
@@ -140,6 +138,51 @@
     { "@type": "ObservationBinding", "@id": "urn:obs:android-grants-access", "observeSurfaceRef": "urn:surface:android-grants-access", "observationEventRef": "urn:observation-event:android-touch", "locatorRefs": ["urn:locator:android-grant"] },
     { "@type": "ObservationBinding", "@id": "urn:obs:android-closes-browser-login", "observeSurfaceRef": "urn:surface:android-closes-browser-login", "observationEventRef": "urn:observation-event:android-touch", "locatorRefs": ["urn:locator:android-chrome-close"] },
     { "@type": "Phase", "@id": "urn:phase:setup", "label": "Setup", "order": 0 },
-    { "@type": "Step", "@id": "urn:step:bob-android-setup", "order": 0, "compositeStateRef": "urn:composite:bob-android-setup", "phaseRef": "urn:phase:setup" }
+    { "@type": "Step", "@id": "urn:step:bob-android-setup", "order": 0, "compositeStateRef": "urn:composite:bob-android-setup", "phaseRef": "urn:phase:setup" },
+    {
+      "@id": "urn:transition:android-opens-server-form:command",
+      "@type": "Command",
+      "label": "Invoke"
+    },
+    {
+      "@id": "urn:transition:android-enters-server:command",
+      "@type": "Command",
+      "label": "Invoke"
+    },
+    {
+      "@id": "urn:transition:android-connects-server:command",
+      "@type": "Command",
+      "label": "Invoke"
+    },
+    {
+      "@id": "urn:transition:android-opens-login-form:command",
+      "@type": "Command",
+      "label": "Invoke"
+    },
+    {
+      "@id": "urn:transition:android-enters-username:command",
+      "@type": "Command",
+      "label": "Invoke"
+    },
+    {
+      "@id": "urn:transition:android-enters-password:command",
+      "@type": "Command",
+      "label": "Invoke"
+    },
+    {
+      "@id": "urn:transition:android-submits-login:command",
+      "@type": "Command",
+      "label": "Invoke"
+    },
+    {
+      "@id": "urn:transition:android-grants-access:command",
+      "@type": "Command",
+      "label": "Invoke"
+    },
+    {
+      "@id": "urn:transition:android-closes-browser-login:command",
+      "@type": "Command",
+      "label": "Invoke"
+    }
   ]
 }

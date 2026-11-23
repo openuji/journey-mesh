@@ -1,0 +1,281 @@
+{
+  "id": "urn:document:plan:ujg-1.0-rc4:urn:journey",
+  "source": {
+    "model": "ujg",
+    "documentId": "urn:document",
+    "references": {
+      "specVersion": "1.0-rc4",
+      "compilerId": "ujg:1.0-rc4",
+      "journeyId": "urn:journey"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:document:operation:000:start",
+      "sequence": 0,
+      "actorId": "urn:persona",
+      "touchpointId": "urn:touchpoint",
+      "entry": {
+        "id": "urn:entry",
+        "stateId": "urn:start"
+      },
+      "source": {
+        "references": {
+          "phaseId": "urn:phase",
+          "stepId": "urn:step",
+          "graphNodeId": "urn:start",
+          "specVersion": "1.0-rc4",
+          "compilerId": "ujg:1.0-rc4",
+          "sourceDocumentIds": [
+            "urn:document"
+          ]
+        }
+      },
+      "kind": "state",
+      "state": {
+        "id": "urn:start"
+      },
+      "surface": {
+        "id": "urn:surface:start"
+      },
+      "target": {
+        "observation": {
+          "stateId": "urn:start",
+          "surfaceId": "urn:surface:start",
+          "expectedMatchCount": 1,
+          "bindings": [
+            {
+              "id": "urn:binding:start",
+              "surfaceId": "urn:surface:start",
+              "eventId": "urn:observation-event:presence",
+              "expectedMatchCount": 1,
+              "requiredInputModalityProfiles": [],
+              "locators": [
+                {
+                  "id": "urn:locator",
+                  "role": "tab",
+                  "features": [],
+                  "contexts": []
+                }
+              ]
+            }
+          ]
+        },
+        "expectedMatchCount": 1,
+        "bindings": [
+          {
+            "id": "urn:binding:start",
+            "surfaceId": "urn:surface:start",
+            "eventId": "urn:observation-event:presence",
+            "expectedMatchCount": 1,
+            "requiredInputModalityProfiles": [],
+            "locators": [
+              {
+                "id": "urn:locator",
+                "role": "tab",
+                "features": [],
+                "contexts": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "urn:document:operation:001:transition",
+      "sequence": 1,
+      "actorId": "urn:persona",
+      "touchpointId": "urn:touchpoint",
+      "entry": {
+        "id": "urn:entry",
+        "stateId": "urn:start"
+      },
+      "source": {
+        "references": {
+          "phaseId": "urn:phase",
+          "stepId": "urn:step",
+          "graphNodeId": "urn:transition",
+          "specVersion": "1.0-rc4",
+          "compilerId": "ujg:1.0-rc4",
+          "sourceDocumentIds": [
+            "urn:document"
+          ]
+        }
+      },
+      "kind": "transition",
+      "transition": {
+        "id": "urn:transition",
+        "from": "urn:start",
+        "to": "urn:done"
+      },
+      "from": {
+        "id": "urn:start",
+        "type": "State"
+      },
+      "to": {
+        "id": "urn:done",
+        "type": "State"
+      },
+      "surface": {
+        "id": "urn:surface:command"
+      },
+      "activation": {
+        "transitionId": "urn:transition",
+        "eventId": "urn:invoke",
+        "from": {
+          "id": "urn:start",
+          "type": "State"
+        },
+        "to": {
+          "id": "urn:done",
+          "type": "State"
+        },
+        "surfaceId": "urn:surface:command",
+        "requiredInputModalityProfiles": [
+          {
+            "id": "urn:profile",
+            "modalities": [
+              {
+                "id": "observability:keyboard"
+              }
+            ]
+          }
+        ],
+        "bindings": [
+          {
+            "id": "urn:binding:command",
+            "surfaceId": "urn:surface:command",
+            "eventId": "urn:invoke",
+            "expectedMatchCount": 1,
+            "requiredInputModalityProfiles": [
+              {
+                "id": "urn:profile",
+                "modalities": [
+                  {
+                    "id": "observability:keyboard"
+                  }
+                ]
+              }
+            ],
+            "locators": [
+              {
+                "id": "urn:locator",
+                "role": "tab",
+                "features": [],
+                "contexts": []
+              }
+            ]
+          }
+        ]
+      },
+      "materializations": [
+        {
+          "id": "urn:material",
+          "transitionId": "urn:transition",
+          "modality": {
+            "id": "observability:keyboard"
+          },
+          "steps": [
+            {
+              "id": "urn:move",
+              "kind": "move",
+              "locator": {
+                "id": "urn:locator",
+                "role": "tab",
+                "features": [],
+                "contexts": []
+              },
+              "moveKind": {
+                "id": "operability:nextItem",
+                "type": "focus"
+              }
+            },
+            {
+              "id": "urn:activate",
+              "kind": "activation",
+              "previousStepId": "urn:move",
+              "locator": {
+                "id": "urn:locator",
+                "role": "tab",
+                "features": [],
+                "contexts": []
+              }
+            }
+          ]
+        }
+      ],
+      "effects": []
+    },
+    {
+      "id": "urn:document:operation:002:done",
+      "sequence": 2,
+      "actorId": "urn:persona",
+      "touchpointId": "urn:touchpoint",
+      "entry": {
+        "id": "urn:entry",
+        "stateId": "urn:start"
+      },
+      "source": {
+        "references": {
+          "phaseId": "urn:phase",
+          "stepId": "urn:step",
+          "graphNodeId": "urn:done",
+          "specVersion": "1.0-rc4",
+          "compilerId": "ujg:1.0-rc4",
+          "sourceDocumentIds": [
+            "urn:document"
+          ]
+        }
+      },
+      "kind": "state",
+      "state": {
+        "id": "urn:done"
+      },
+      "surface": {
+        "id": "urn:surface:done"
+      },
+      "target": {
+        "observation": {
+          "stateId": "urn:done",
+          "surfaceId": "urn:surface:done",
+          "expectedMatchCount": 1,
+          "bindings": [
+            {
+              "id": "urn:binding:done",
+              "surfaceId": "urn:surface:done",
+              "eventId": "urn:observation-event:presence",
+              "expectedMatchCount": 1,
+              "requiredInputModalityProfiles": [],
+              "locators": [
+                {
+                  "id": "urn:locator",
+                  "role": "tab",
+                  "features": [],
+                  "contexts": []
+                }
+              ]
+            }
+          ]
+        },
+        "expectedMatchCount": 1,
+        "bindings": [
+          {
+            "id": "urn:binding:done",
+            "surfaceId": "urn:surface:done",
+            "eventId": "urn:observation-event:presence",
+            "expectedMatchCount": 1,
+            "requiredInputModalityProfiles": [],
+            "locators": [
+              {
+                "id": "urn:locator",
+                "role": "tab",
+                "features": [],
+                "contexts": []
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

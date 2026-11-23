@@ -35,16 +35,15 @@ export type ResolvedAccessibleLocator = LabeledRef & {
 
 export type ResolvedInputModality = LabeledRef;
 
-export const keyboardTextEntryInputModalityId = "observability:keyboard-text-entry" as const;
-export const keyboardSpaceInputModalityId = "observability:keyboard-space" as const;
-export const keyboardEnterInputModalityId = "observability:keyboard-enter" as const;
+export const keyboardInputModalityId = "observability:keyboard" as const;
+/** Producer-defined text entry; RC4 Operability does not model value entry. */
+export const keyboardTextEntryInputModalityId = "urn:openuji:input-modality:keyboard-text-entry" as const;
 export const pointerInputModalityId = "observability:pointer" as const;
 
 /** Built-in conveniences, not an exhaustive list of executable modalities. */
 export const journeyInputModalityIds = [
   keyboardTextEntryInputModalityId,
-  keyboardSpaceInputModalityId,
-  keyboardEnterInputModalityId,
+  keyboardInputModalityId,
   pointerInputModalityId
 ] as const;
 
@@ -154,6 +153,25 @@ export type StatePlanOperation = JourneyPlanOperationBase<"state"> & {
   target: ResolvedStateObservationTarget;
 };
 
+/** One declared alternative, independent of runtime performability or platform gestures. */
+export type ResolvedTransitionMaterialization = LabeledRef & {
+  transitionId: string;
+  modality: ResolvedInputModality;
+  startLocator?: ResolvedAccessibleLocator;
+  sourceStateId?: string;
+  direction?: "operability:forward" | "operability:backward";
+  steps: readonly ResolvedMaterializationStep[];
+  extensions?: Readonly<Record<string, unknown>>;
+};
+
+export type ResolvedMaterializationStep = LabeledRef & {
+  kind: "move" | "activation" | "shortcut";
+  previousStepId?: string;
+  locator?: ResolvedAccessibleLocator;
+  moveKind?: LabeledRef & { type: "focus" | "move" };
+  extensions?: Readonly<Record<string, unknown>>;
+};
+
 export type TransitionPlanOperation = JourneyPlanOperationBase<"transition"> & {
   transition: LabeledRef & {
     from: string;
@@ -164,6 +182,8 @@ export type TransitionPlanOperation = JourneyPlanOperationBase<"transition"> & {
   to: GraphVertexRef;
   surface: LabeledRef;
   activation: ResolvedTransitionActivation;
+  /** Declared alternatives; existing adapters do not execute these steps. */
+  materializations?: readonly ResolvedTransitionMaterialization[];
   effects: readonly ResolvedEffect[];
 };
 

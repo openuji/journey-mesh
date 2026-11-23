@@ -1,20 +1,17 @@
 import {
-  keyboardEnterInputModalityId,
-  keyboardSpaceInputModalityId,
+  keyboardInputModalityId,
   keyboardTextEntryInputModalityId,
   pointerInputModalityId
 } from "@openuji/journey-execution-model";
 
 export type PlaywrightInteractionCommand =
   | "pointer-click"
-  | "keyboard-enter"
-  | "keyboard-space"
+  | "keyboard-activate"
   | "keyboard-text-entry";
 
 const commands: Readonly<Record<string, PlaywrightInteractionCommand>> = Object.freeze({
   [pointerInputModalityId]: "pointer-click",
-  [keyboardEnterInputModalityId]: "keyboard-enter",
-  [keyboardSpaceInputModalityId]: "keyboard-space",
+  [keyboardInputModalityId]: "keyboard-activate",
   [keyboardTextEntryInputModalityId]: "keyboard-text-entry"
 });
 

@@ -1,6 +1,5 @@
 import {
-  keyboardEnterInputModalityId,
-  keyboardSpaceInputModalityId,
+  keyboardInputModalityId,
   keyboardTextEntryInputModalityId,
   pointerInputModalityId,
   type InputModalityDecision,
@@ -38,8 +37,7 @@ export function defaultProfile(scope: JourneyProfileScope = {}): JourneyProfile 
     label: "Default",
     modalityPreference: [
       pointerInputModalityId,
-      keyboardEnterInputModalityId,
-      keyboardSpaceInputModalityId,
+      keyboardInputModalityId,
       keyboardTextEntryInputModalityId
     ]
   });
@@ -52,8 +50,7 @@ export function keyboardOnlyProfile(scope: JourneyProfileScope = {}): JourneyPro
     label: "Keyboard only",
     modalityPreference: [
       keyboardTextEntryInputModalityId,
-      keyboardEnterInputModalityId,
-      keyboardSpaceInputModalityId
+      keyboardInputModalityId
     ]
   });
 }

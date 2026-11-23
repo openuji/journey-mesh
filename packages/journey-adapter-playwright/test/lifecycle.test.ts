@@ -22,7 +22,7 @@ const driver = Object.freeze({
 });
 
 test("Playwright interprets only its explicit CustomLocator namespace and rejects others in preflight", async () => {
-  const { extensions, ...custom } = { id: "custom", extensions: { "urn:openuji:playwright:css": "[data-example]" }, features: [], contexts: [] };
+  const { extensions, ...custom } = { id: "custom", extensions: { "urn:openuji:playwright:css": { selector: "[data-example]" } }, features: [], contexts: [] };
   const calls: string[] = [];
   const root = { locator(selector: string) { calls.push(selector); return "resolved"; } };
   assert.equal(await toPlaywrightLocator(root as never, { ...custom, extensions }), "resolved");
