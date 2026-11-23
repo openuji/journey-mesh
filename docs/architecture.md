@@ -17,7 +17,7 @@ flowchart LR
   subgraph reporting["Reporting — packages"]
     direction TB
     reporter["journey-reporter<br/>config, report model, compare, export"]
-    interpreters["journey-report-axe<br/>journey-report-android"]
+    interpreters["journey-report-axe<br/>journey-report-android<br/>journey-report-operability"]
   end
   subgraph rendering["Rendering — apps"]
     renderer["apps/report-renderer<br/>viewer, static site, Markdown"]

@@ -182,7 +182,10 @@ export type TransitionPlanOperation = JourneyPlanOperationBase<"transition"> & {
   to: GraphVertexRef;
   surface: LabeledRef;
   activation: ResolvedTransitionActivation;
-  /** Declared alternatives; existing adapters do not execute these steps. */
+  /**
+   * Declared alternatives. A profile chooses at most one for its selected modality and passes it
+   * in the InputModalityDecision; adapters perform only that chain and never derive missing steps.
+   */
   materializations?: readonly ResolvedTransitionMaterialization[];
   effects: readonly ResolvedEffect[];
 };
@@ -224,4 +227,9 @@ export type InputModalityDecision = {
   profileId: string;
   inputModalityProfile: ResolvedInputModalityProfile;
   modality: ResolvedInputModality;
+  /**
+   * The declared TransitionMaterialization to perform through `modality`. Absent only when the
+   * profile allows unmaterialized transitions, or for producer text entry, which types at the current focus.
+   */
+  materialization?: ResolvedTransitionMaterialization;
 };

@@ -1,0 +1,29 @@
+{
+  "name": "@openuji/journey-observer-operability",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./plugin": "./src/plugin.ts",
+    "./evidence": "./src/evidence.ts"
+  },
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@openuji/journey-adapter-playwright": "workspace:*",
+    "@openuji/journey-core": "workspace:*",
+    "@openuji/journey-execution-model": "workspace:*",
+    "@openuji/journey-plugin": "workspace:*",
+    "@openuji/journey-runner": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3"
+  }
+}

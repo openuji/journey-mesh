@@ -8,13 +8,12 @@ import {
   type BrowserContextOptions,
   type BrowserType,
   type LaunchOptions,
-  type Locator,
   type Page
 } from "playwright";
 import { type WebJourneyDriver } from "@openuji/journey-driver-web";
+import { keyboardTextEntryInputModalityId } from "@openuji/journey-execution-model";
 import {
   executionDescriptor,
-  type AccessibleFeature,
   type InputModalityDecision,
   type JourneyAdapter,
   type JourneyAdapterCloseInput,
@@ -23,15 +22,21 @@ import {
   type JourneyExecutionContext,
   type JourneyExecutionDescriptor,
   type JourneyPlanOperation,
-  type ResolvedAccessibleLocator,
-  type ResolvedObservationBinding,
   type StatePlanOperation,
   type TransitionPlanOperation
 } from "@openuji/journey-runner";
 import { ensureChromiumInstalled } from "./browser-binary.js";
 import type { PlaywrightExecutionObserver } from "./observers/contracts.js";
 import { PlaywrightObserverDispatcher } from "./observers/playwright-observer-dispatcher.js";
-import { playwrightCommandForModality, type PlaywrightInteractionCommand } from "./input-modalities.js";
+import { defaultPlaywrightKeyboard, type PlaywrightKeyboard } from "./keyboard.js";
+import { assertPlaywrightLocator, toPlaywrightObservationLocator, validatePlaywrightBindings } from "./locators.js";
+import {
+  PlaywrightStepPerformer,
+  playwrightPerformsModality,
+  validatePlaywrightMaterializations,
+  type PlaywrightCommandRecorder,
+  type PlaywrightPointerState
+} from "./materialization.js";
 import {
   initialPlaywrightLifecycleState,
   reducePlaywrightLifecycle,
@@ -40,8 +45,29 @@ import {
 } from "./lifecycle.js";
 
 export { playwrightAutomation } from "./automation.js";
-export { playwrightCommandForModality } from "./input-modalities.js";
-export type { PlaywrightInteractionCommand } from "./input-modalities.js";
+export { defaultPlaywrightKeyboard, parsePlaywrightKeyboard, resolveKey } from "./keyboard.js";
+export type { PlaywrightKeyBinding, PlaywrightKeyboard } from "./keyboard.js";
+export {
+  assertPlaywrightLocator,
+  toPlaywrightLocator,
+  toPlaywrightObservationLocator,
+  validatePlaywrightBindings,
+  validatePlaywrightLocator
+} from "./locators.js";
+export type { LocatorRoot } from "./locators.js";
+export {
+  PlaywrightStepPerformer,
+  playwrightPerformsModality,
+  playwrightShortcutExtension,
+  validatePlaywrightMaterializations
+} from "./materialization.js";
+export type {
+  PlaywrightCommandRecorder,
+  PlaywrightPointerState,
+  PlaywrightRecordedCommand,
+  PlaywrightStepCommand,
+  PlaywrightStepPerformerOptions
+} from "./materialization.js";
 export {
   initialPlaywrightLifecycleState,
   reducePlaywrightLifecycle
@@ -69,9 +95,9 @@ export type PlaywrightAdapterOptions = Readonly<{
   assertionTimeoutMs?: number;
   actionTimeoutMs?: number;
   navigationTimeoutMs?: number;
+  /** Keys for Operability move kinds and activation; defaults to defaultPlaywrightKeyboard. */
+  keyboard?: PlaywrightKeyboard;
 }>;
-
-export type LocatorRoot = Page | Locator;
 
 type PlaywrightSession = Readonly<{
   key: string;
@@ -79,7 +105,6 @@ type PlaywrightSession = Readonly<{
   page: Page;
 }>;
 
-const roleOptionFeatureNames = Object.freeze(["expanded", "accessible-name-exact"] as const);
 const defaultAssertionTimeoutMs = 30_000;
 
 export const playwrightAdapterName = "@openuji/journey-adapter-playwright";
@@ -98,6 +123,7 @@ export function playwrightAdapter(options: PlaywrightAdapterOptions): JourneyAda
       if (operation.kind === "transition" && operation.activation.requiredInputModalityProfiles.length) {
         validatePlaywrightBindings(operation.activation.bindings);
       }
+      if (operation.kind === "transition") validatePlaywrightMaterializations(operation, configured.keyboard ?? defaultPlaywrightKeyboard);
       return Object.freeze({ name: playwrightAdapterName, version: "0.1.0" });
     },
     createExecution(input) {
@@ -127,6 +153,7 @@ function freezeConfigValue<T>(value: T): T {
 
 class PlaywrightAdapterExecution implements JourneyAdapterExecution {
   private actionSequence = 0;
+  private readonly pointers = new WeakMap<Page, PlaywrightPointerState>();
   private state: PlaywrightLifecycleState = initialPlaywrightLifecycleState();
   private readonly context: JourneyExecutionContext;
   private readonly execution: JourneyExecutionDescriptor;
@@ -188,6 +215,11 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     });
   }
 
+  /**
+   * Performs the declared materialization the profile selected, step by step. Keyboard and pointer
+   * transitions have no other path. Producer text entry types at the current focus after its
+   * optional focus moves. Whether the transition was taken is checked by the next State operation.
+   */
   async performTransition(
     operation: TransitionPlanOperation,
     decision?: InputModalityDecision
@@ -200,7 +232,16 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
       await this.observers.observe({ execution: this.execution, operation, stage: "transition-completed" });
       return;
     }
-    const command = playwrightCommandForModality(decision.modality.id);
+    const modalityId = decision.modality.id;
+    if (!playwrightPerformsModality(modalityId)) throw new Error(`Playwright adapter does not support input modality ${modalityId}`);
+    const textEntry = modalityId === keyboardTextEntryInputModalityId;
+    const materialization = decision.materialization;
+    if (materialization && materialization.modality.id !== modalityId) {
+      throw new Error(`Transition ${operation.transition.id}: materialization ${materialization.id} is through ${materialization.modality.id}, not the selected ${modalityId}`);
+    }
+    if (!materialization && !textEntry) {
+      throw new Error(`Transition ${operation.transition.id}: Playwright performs ${modalityId} only through a declared TransitionMaterialization, and the profile selected none`);
+    }
     const page = (await this.sessionForOperation(operation)).page;
     const locator = await toPlaywrightObservationLocator(page, operation.activation.bindings);
     await assertPlaywrightLocator(locator, 1, {
@@ -217,26 +258,58 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
       page,
       stage: "transition-ready"
     });
-    const text = command === "keyboard-text-entry"
-      ? this.options.driver.resolveTransitionValue(operation)
-      : undefined;
+    const text = textEntry ? this.options.driver.resolveTransitionValue(operation) : undefined;
+    if (textEntry && !text) throw new Error(`Transition ${operation.transition.id}: text entry requires a transition text value`);
     this.context.signal?.throwIfAborted();
-    if (command === "keyboard-text-entry" && !text) throw new Error("keyboard-text-entry requires a transition text value");
+    const performer = new PlaywrightStepPerformer({
+      page,
+      keyboard: this.options.keyboard ?? defaultPlaywrightKeyboard,
+      pointer: this.pointerState(page),
+      record: (command, work) => this.recordCommand(operation, decision, command, work),
+      timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs,
+      signal: this.context.signal
+    });
+    if (materialization) await performer.perform(materialization);
+    if (textEntry) await performer.typeAtFocus(locator, text!, `Transition ${operation.transition.id}`, materialization?.id);
+    this.context.signal?.throwIfAborted();
+  }
+
+  private async recordCommand(
+    operation: TransitionPlanOperation,
+    decision: InputModalityDecision,
+    command: Parameters<PlaywrightCommandRecorder>[0],
+    work: Parameters<PlaywrightCommandRecorder>[1]
+  ): Promise<void> {
+    let gesture: string | undefined;
     const action: JourneyInputAction = Object.freeze({
       id: `${this.execution.executionId}/action/${this.actionSequence++}`,
       runId: this.execution.runId, executionId: this.execution.executionId,
       profileId: this.execution.profile.id, operationId: operation.id,
-      modalityId: decision.modality.id, command, unit: "adapter-command", status: "attempted"
+      modalityId: decision.modality.id, command: command.command,
+      ...(command.materializationId ? { materializationId: command.materializationId } : {}),
+      ...(command.stepId ? { stepId: command.stepId } : {}),
+      unit: "adapter-command", status: "attempted"
     });
     await this.observers.action(action);
     try {
-      await activatePlaywrightLocator(locator, command, text);
+      await work((value) => { gesture = value; });
     } catch (error) {
-      await this.observers.action({ ...action, status: "failed", error: { name: error instanceof Error ? error.name : "Error", message: String(error) } });
+      await this.observers.action({
+        ...action, ...(gesture ? { gesture } : {}), status: "failed",
+        error: { name: error instanceof Error ? error.name : "Error", message: error instanceof Error ? error.message : String(error) }
+      });
       throw error;
     }
-    await this.observers.action({ ...action, status: "completed" });
+    await this.observers.action({ ...action, ...(gesture ? { gesture } : {}), status: "completed" });
     this.context.signal?.throwIfAborted();
+  }
+
+  private pointerState(page: Page): PlaywrightPointerState {
+    const existing = this.pointers.get(page);
+    if (existing) return existing;
+    const created: PlaywrightPointerState = {};
+    this.pointers.set(page, created);
+    return created;
   }
 
   async recordControlFlow(operation: Parameters<JourneyAdapterExecution["recordControlFlow"]>[0]): Promise<void> {
@@ -340,178 +413,4 @@ function cleanupError(runtime: string, failures: readonly unknown[]): AggregateE
     failures,
     `${runtime} cleanup failed: ${failures.map((error) => error instanceof Error ? error.message : String(error)).join("; ")}`
   );
-}
-
-export async function toPlaywrightObservationLocator(
-  root: LocatorRoot,
-  bindings: readonly ResolvedObservationBinding[]
-): Promise<Locator> {
-  if (bindings.length === 0) throw new Error("Expected at least one ObservationBinding");
-  const locators = await Promise.all(bindings.map((binding) => toPlaywrightBindingLocator(root, binding)));
-  return locators.reduce((left, right) => left.or(right));
-}
-
-export async function toPlaywrightLocator(
-  root: LocatorRoot,
-  locator: ResolvedAccessibleLocator
-): Promise<Locator> {
-  if (locator.extensions) return root.locator(customCssSelector(locator));
-  const scopedRoot = await locator.contexts.reduce(
-    async (currentRoot, contextLocator) => toPlaywrightLocator(await currentRoot, contextLocator),
-    Promise.resolve(root)
-  );
-  const roleLocator = getRoleLocator(scopedRoot, locator);
-  return locator.features
-    .filter((feature) => !roleOptionFeatureNames.includes(feature.name as "expanded"))
-    .reduce((currentLocator, feature) => applyFeature(currentLocator, feature), roleLocator);
-}
-
-function customCssSelector(locator: ResolvedAccessibleLocator): string {
-  const extension = locator.extensions;
-  const payload = extension?.["urn:openuji:playwright:css"];
-  const selector = payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as Record<string, unknown>).selector : undefined;
-  if (!extension || Object.keys(extension).length !== 1 || typeof selector !== "string" || !selector.trim()) {
-    throw new Error(`Unsupported CustomLocator ${locator.id}; expected urn:openuji:playwright:css with a selector object`);
-  }
-  return selector;
-}
-
-export async function activatePlaywrightLocator(
-  locator: Locator,
-  command: PlaywrightInteractionCommand,
-  text?: string
-): Promise<void> {
-  switch (command) {
-    case "pointer-click": await locator.click(); return;
-    case "keyboard-activate": {
-      // Select a platform default activation gesture, independently of model modality IDs.
-      const key = await locator.evaluate((element) => {
-        const role = element.getAttribute("role")?.split(/\s+/)[0];
-        const spaceRoles = ["button", "checkbox", "radio", "switch", "menuitemcheckbox", "menuitemradio"];
-        return spaceRoles.includes(role ?? "") || element.matches('button, input[type="button"], input[type="submit"], input[type="reset"], input[type="checkbox"], input[type="radio"]') ? "Space" : "Enter";
-      });
-      await locator.press(key);
-      return;
-    }
-    case "keyboard-text-entry":
-      if (!text) throw new Error("keyboard-text-entry requires a transition text value");
-      await locator.pressSequentially(text);
-      return;
-  }
-}
-
-async function toPlaywrightBindingLocator(
-  root: LocatorRoot,
-  binding: ResolvedObservationBinding
-): Promise<Locator> {
-  if (binding.surfaceInstanceResolver && binding.surfaceInstanceResolver.instanceKeyFeature.value !== "*") {
-    throw new Error(`Playwright does not support SurfaceInstanceResolver ${binding.surfaceInstanceResolver.id}`);
-  }
-  if (binding.locators.length === 0) throw new Error(`ObservationBinding ${binding.id} must define at least one locator`);
-  const locators = await Promise.all(binding.locators.map((locator) => toPlaywrightLocator(root, locator)));
-  return locators.reduce((left, right) => left.and(right));
-}
-
-function getRoleLocator(root: LocatorRoot, locator: ResolvedAccessibleLocator): Locator {
-  if (!locator.role) throw new Error(`AccessibleLocator ${locator.id} does not declare a role`);
-  if (locator.accessibleDescription) {
-    throw new Error(`AccessibleLocator ${locator.id} uses accessibleDescriptionRef, which this adapter does not yet support`);
-  }
-  const exact = exactNameOption(locator);
-  return root.getByRole(locator.role as never, {
-    name: locator.accessibleName ? (exact ? locator.accessibleName : accessibleNamePattern(locator.accessibleName)) : undefined,
-    exact,
-    expanded: expandedOption(locator)
-  });
-}
-
-function applyFeature(locator: Locator, feature: AccessibleFeature): Locator {
-  if (feature.value === "*") return locator;
-  throw new Error(`No Playwright adapter for AccessibleFeature ${feature.name}`);
-}
-
-async function assertPlaywrightLocator(
-  locator: Locator,
-  expectedCount: number,
-  options: { timeoutMs: number; signal?: AbortSignal }
-): Promise<void> {
-  await pollUntil(async () => {
-    const count = await locator.count();
-    return count === expectedCount ? "ok" : `count:${count}`;
-  }, { message: `Expected locator count ${expectedCount}`, ...options });
-  options.signal?.throwIfAborted();
-  if (expectedCount > 0) await locator.first().waitFor({ state: "visible", timeout: options.timeoutMs });
-}
-
-async function pollUntil(
-  check: () => Promise<string>,
-  options: { message: string; timeoutMs: number; signal?: AbortSignal }
-): Promise<void> {
-  const startedAt = Date.now();
-  let lastValue = "not-run";
-  while (Date.now() - startedAt <= options.timeoutMs) {
-    options.signal?.throwIfAborted();
-    lastValue = await check();
-    options.signal?.throwIfAborted();
-    if (lastValue === "ok") return;
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error(`${options.message}; last value: ${lastValue}`);
-}
-
-function expandedOption(locator: ResolvedAccessibleLocator): boolean | undefined {
-  const expanded = locator.features.filter((feature) => feature.name === "expanded" && feature.value !== "*");
-  if (expanded.length === 0) return undefined;
-  if (expanded.length > 1) throw new Error(`AccessibleLocator ${locator.id} repeats expanded`);
-  if (expanded[0]!.value === "true") return true;
-  if (expanded[0]!.value === "false") return false;
-  throw new Error(`AccessibleLocator ${locator.id} has invalid expanded value ${expanded[0]!.value}`);
-}
-
-function exactNameOption(locator: ResolvedAccessibleLocator): boolean | undefined {
-  const exact = locator.features.filter((feature) => feature.name === "accessible-name-exact" && feature.value !== "*");
-  if (exact.length === 0) return undefined;
-  if (exact.length > 1) throw new Error(`AccessibleLocator ${locator.id} repeats accessible-name-exact`);
-  if (exact[0]!.value === "true") return true;
-  if (exact[0]!.value === "false") return false;
-  throw new Error(`AccessibleLocator ${locator.id} has invalid accessible-name-exact value ${exact[0]!.value}`);
-}
-
-function accessibleNamePattern(value: string): RegExp {
-  return new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-}
-
-const supportedRoles: readonly Parameters<Page["getByRole"]>[0][] = Object.freeze([
-  "alert", "alertdialog", "application", "article", "banner", "blockquote", "button", "caption",
-  "cell", "checkbox", "code", "columnheader", "combobox", "complementary", "contentinfo", "definition",
-  "deletion", "dialog", "directory", "document", "emphasis", "feed", "figure", "form", "generic", "grid",
-  "gridcell", "group", "heading", "img", "insertion", "link", "list", "listbox", "listitem", "log", "main",
-  "marquee", "math", "meter", "menu", "menubar", "menuitem", "menuitemcheckbox", "menuitemradio", "navigation",
-  "none", "note", "option", "paragraph", "presentation", "progressbar", "radio", "radiogroup", "region", "row",
-  "rowgroup", "rowheader", "scrollbar", "search", "searchbox", "separator", "slider", "spinbutton", "status",
-  "strong", "subscript", "superscript", "switch", "tab", "table", "tablist", "tabpanel", "term", "textbox",
-  "time", "timer", "toolbar", "tooltip", "tree", "treegrid", "treeitem"
-]);
-
-function validatePlaywrightBindings(bindings: readonly ResolvedObservationBinding[]): void {
-  if (!bindings.length) throw new Error("Expected at least one ObservationBinding");
-  const validate = (locator: ResolvedAccessibleLocator): void => {
-    if (locator.extensions) { customCssSelector(locator); return; }
-    if (!locator.role) throw new Error(`AccessibleLocator ${locator.id} does not declare a role`);
-    if (!supportedRoles.includes(locator.role as Parameters<Page["getByRole"]>[0])) throw new Error(`Unsupported Playwright role for AccessibleLocator ${locator.id}`);
-    if (locator.accessibleDescription) throw new Error(`AccessibleLocator ${locator.id} uses accessibleDescriptionRef, which this adapter does not yet support`);
-    expandedOption(locator);
-    exactNameOption(locator);
-    for (const feature of locator.features) {
-      if (!roleOptionFeatureNames.includes(feature.name as (typeof roleOptionFeatureNames)[number]) && feature.value !== "*") throw new Error(`No Playwright adapter for AccessibleFeature ${feature.name}`);
-    }
-    locator.contexts.forEach(validate);
-  };
-  for (const binding of bindings) {
-    if (binding.surfaceInstanceResolver && binding.surfaceInstanceResolver.instanceKeyFeature.value !== "*") {
-      throw new Error(`Playwright does not support SurfaceInstanceResolver ${binding.surfaceInstanceResolver.id}`);
-    }
-    if (!binding.locators.length) throw new Error(`ObservationBinding ${binding.id} must define at least one locator`);
-    binding.locators.forEach(validate);
-  }
 }

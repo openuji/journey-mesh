@@ -21,7 +21,9 @@
     "@openuji/journey-host": "workspace:*",
     "@openuji/journey-observer-ux": "workspace:*",
     "@openuji/journey-report-axe": "workspace:*",
-    "@openuji/journey-report-android": "workspace:*"
+    "@openuji/journey-report-android": "workspace:*",
+    "@openuji/journey-observer-operability": "workspace:*",
+    "@openuji/journey-report-operability": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.20.3"

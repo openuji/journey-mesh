@@ -151,7 +151,7 @@ flowchart LR
   result --> record[("Run record<br/>run.json + evidence files")]
   capture -->|journal, measurements, policy errors| record
   subgraph reporting["Reporting (packages)"]
-    interpreters["Interpreters<br/>(journey-report-axe, -android)"] --> model[("Report model<br/>report/*.json, JSON Schema")]
+    interpreters["Interpreters<br/>(journey-report-axe, -android, -operability)"] --> model[("Report model<br/>report/*.json, JSON Schema")]
   end
   record --> interpreters
   model --> viewer["apps/report-renderer<br/>(viewer, static site, Markdown)"]
@@ -193,6 +193,7 @@ report:
   interpreters:
     - use: "@openuji/journey-report-axe"
     - use: "@openuji/journey-report-android"
+    - use: "@openuji/journey-report-operability"
 ```
 
 The host accepts `report` sections but never reads them. Phase exclusions are
@@ -416,7 +417,7 @@ The roadmap is proposed and is not a delivery commitment.
 
 ## UJG Citation
 
-The compiler and bundled JSON-LD models target [UJG 1.0 Release Candidate 4](https://ujg.specs.openuji.org/tr/1.0-rc4), published 2026-11-21 by the [W3C User Journey Graph Community Group](https://www.w3.org/groups/cg/ujg/). The document contexts select an isolated compiler implementation. See the [UJG compiler contract](packages/journey-model-ujg/README.md) for imports, supported lowering, RC4 Operability output, and the separate runtime-execution milestone. RC3 documents require an earlier mesh release until migrated.
+The compiler and bundled JSON-LD models target [UJG 1.0 Release Candidate 4](https://ujg.specs.openuji.org/tr/1.0-rc4), published 2026-11-21 by the [W3C User Journey Graph Community Group](https://www.w3.org/groups/cg/ujg/). The document contexts select an isolated compiler implementation. See the [UJG compiler contract](packages/journey-model-ujg/README.md) for imports, supported lowering, and RC4 Operability output. The [Playwright adapter](packages/journey-adapter-playwright/README.md) performs keyboard and pointer transitions only through the declared `TransitionMaterialization` steps, with keys from `mesh.yaml`. RC3 documents require an earlier mesh release until migrated.
 
 ## Maintainers / Contact
 

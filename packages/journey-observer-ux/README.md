@@ -7,7 +7,9 @@ probes. It does not navigate, activate controls, create fixtures, or render repo
 functional outcomes, recorded actions, and probe facts. Counters declare `from`
 and `until` references, optionally restrict `operations`, and select attempted,
 completed, or failed commands. Each adapter command counts once, including a
-text-entry command; these values are not physical keystrokes.
+text-entry command. The Playwright adapter records one command for each declared
+materialization step, so a keyboard path of six focus moves and one activation
+counts seven. Typing a value is still one command, not one per character.
 
 The YAML plugin accepts `id`, `counters`, `checkpoints`, and `probes`. References
 use scoped operation aliases resolved by the model plugin during preparation.

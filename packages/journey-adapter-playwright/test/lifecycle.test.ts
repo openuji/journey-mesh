@@ -170,21 +170,25 @@ test("Playwright exact-name features disambiguate partial accessible names", asy
   assert.equal(options?.exact, true);
 });
 
-test("browser action observations record command failure without including locator handles", async () => {
-  const modality = { id: "observability:pointer" };
-  const input = { id: "pointer", modalities: [modality] };
+test("keyboard and pointer transitions without a selected materialization are rejected before any input", async () => {
   const transition: import("@openuji/journey-runner").TransitionPlanOperation = {
     ...operation, id: "activate", kind: "transition", transition: { id: "source-action", from: "state", to: "state" },
     from: { id: "state", type: "State" }, to: { id: "state", type: "State" }, effects: [],
-    activation: { transitionId: "source-action", eventId: "activate", from: { id: "state", type: "State" }, to: { id: "state", type: "State" }, surfaceId: "surface", requiredInputModalityProfiles: [input], bindings: [...operation.target.bindings] }
+    activation: { transitionId: "source-action", eventId: "activate", from: { id: "state", type: "State" }, to: { id: "state", type: "State" }, surfaceId: "surface", requiredInputModalityProfiles: [], bindings: [...operation.target.bindings] }
   };
-  const locator = { async count() { return 1; }, first() { return this; }, async waitFor() {}, async click() { throw new Error("command failed"); } };
-  const page = { getByRole() { return locator; }, async goto() {} };
+  const page = { getByRole() { throw new Error("must not resolve a target"); }, async goto() {} };
   const browser = { async newContext() { return { async newPage() { return page; }, async close() {} }; } };
-  const actions: import("@openuji/journey-core").JourneyInputAction[] = [];
-  const result = await runJourney({ plan: { id: "commands", operations: [transition] }, profiles: [{ id: "pointer", selectInputModality() { return { profileId: "pointer", inputModalityProfile: input, modality }; } }], adapter: playwrightAdapter({ driver, browser: browser as never, executionObservers: [{ name: "commands", onAction(action) { actions.push(action); } }] }) });
-  assert.equal(result.ok, false);
-  assert.deepEqual(actions.map((action) => action.status), ["attempted", "failed"]);
-  assert.equal(actions[0].id, actions[1].id);
-  assert.doesNotThrow(() => structuredClone(actions));
+  for (const id of ["observability:pointer", "observability:keyboard"]) {
+    const modality = { id };
+    const input = { id: "input", modalities: [modality] };
+    const actions: import("@openuji/journey-core").JourneyInputAction[] = [];
+    const result = await runJourney({
+      plan: { id: "commands", operations: [{ ...transition, activation: { ...transition.activation, requiredInputModalityProfiles: [input] } }] },
+      profiles: [{ id: "unmaterialized", selectInputModality() { return { profileId: "unmaterialized", inputModalityProfile: input, modality }; } }],
+      adapter: playwrightAdapter({ driver, browser: browser as never, executionObservers: [{ name: "commands", onAction(action) { actions.push(action); } }] })
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.errors[0]!.message, new RegExp(`performs ${id} only through a declared TransitionMaterialization`));
+    assert.deepEqual(actions, []);
+  }
 });

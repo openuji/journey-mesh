@@ -58,6 +58,14 @@ thead th { background: #eeefe9; font-size: .8125rem; }
 .comparison-table abbr { text-decoration-style: dotted; text-underline-offset: 3px; }
 .operation-table th:first-child { width: 75%; }
 .operation-table th small { margin-bottom: 3px; }
+.input-transition { margin-block: 16px 24px; }
+.input-transition h3 small { margin-left: 8px; font-size: .75rem; font-weight: 600; color: #59645e; }
+.input-transition[data-outcome="failed"] h3 small, .input-steps tr[data-status="failed"] td:last-child { color: #922536; }
+.input-steps th:first-child { width: 3rem; }
+.input-steps td small { display: block; margin-top: 3px; color: #59645e; }
+.input-steps tr[data-status="failed"] { background: #f8e9eb; }
+.input-steps tr[data-status="not-performed"] { color: #59645e; }
+kbd { padding: 1px 5px; border: 1px solid #c8cdc6; border-radius: 4px; background: #f8f7f3; font-size: .8125rem; }
 .measurement-table th:first-child { width: 55%; }
 .evidence-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px; }
 figure { min-width: 0; margin: 0; }

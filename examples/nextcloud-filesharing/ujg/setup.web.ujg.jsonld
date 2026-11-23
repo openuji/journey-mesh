@@ -6,7 +6,8 @@
     "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/phase.context.jsonld",
     "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/l10n.context.jsonld",
     "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/observability.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/entry-binding.context.jsonld"
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/entry-binding.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/operability.context.jsonld"
   ],
   "@id": "urn:ujg:document:nextcloud-web-setup",
   "@type": "UJGDocument",
@@ -163,6 +164,26 @@
       "@id": "urn:transition:bob-submits-login:command",
       "@type": "Command",
       "label": "Invoke"
-    }
+    },
+    {"@type": "TransitionMaterialization", "@id": "urn:materialization:alice-enters-password:text-entry", "label": "Focus moves from the account field to the password field", "materializationTransitionRef": "urn:transition:alice-enters-password", "materializationModalityRef": "urn:openuji:input-modality:keyboard-text-entry", "materializationStepRefs": ["urn:step:alice-enters-password:text-entry:1"]},
+    {"@type": "MoveStep", "@id": "urn:step:alice-enters-password:text-entry:1", "stepMoveKindRef": "operability:nextStop", "stepLocatorRef": "urn:locator:login-password"},
+    {"@type": "TransitionMaterialization", "@id": "urn:materialization:alice-submits-login:keyboard", "label": "Past the password reveal and remember-me controls to Log in", "materializationTransitionRef": "urn:transition:alice-submits-login", "materializationModalityRef": "observability:keyboard", "materializationStepRefs": ["urn:step:alice-submits-login:keyboard:1", "urn:step:alice-submits-login:keyboard:2", "urn:step:alice-submits-login:keyboard:3", "urn:step:alice-submits-login:keyboard:4"]},
+    {"@type": "MoveStep", "@id": "urn:step:alice-submits-login:keyboard:1", "stepMoveKindRef": "operability:nextStop"},
+    {"@type": "MoveStep", "@id": "urn:step:alice-submits-login:keyboard:2", "stepPreviousRef": "urn:step:alice-submits-login:keyboard:1", "stepMoveKindRef": "operability:nextStop"},
+    {"@type": "MoveStep", "@id": "urn:step:alice-submits-login:keyboard:3", "stepPreviousRef": "urn:step:alice-submits-login:keyboard:2", "stepMoveKindRef": "operability:nextStop", "stepLocatorRef": "urn:locator:login-submit"},
+    {"@type": "ActivationStep", "@id": "urn:step:alice-submits-login:keyboard:4", "stepPreviousRef": "urn:step:alice-submits-login:keyboard:3"},
+    {"@type": "TransitionMaterialization", "@id": "urn:materialization:alice-submits-login:pointer", "label": "Point at Log in and press", "materializationTransitionRef": "urn:transition:alice-submits-login", "materializationModalityRef": "observability:pointer", "materializationStepRefs": ["urn:step:alice-submits-login:pointer:1", "urn:step:alice-submits-login:pointer:2"]},
+    {"@type": "MoveStep", "@id": "urn:step:alice-submits-login:pointer:1", "stepMoveKindRef": "operability:pointAt", "stepLocatorRef": "urn:locator:login-submit"},
+    {"@type": "ActivationStep", "@id": "urn:step:alice-submits-login:pointer:2", "stepPreviousRef": "urn:step:alice-submits-login:pointer:1"},
+    {"@type": "TransitionMaterialization", "@id": "urn:materialization:bob-enters-password:text-entry", "label": "Focus moves from the account field to the password field", "materializationTransitionRef": "urn:transition:bob-enters-password", "materializationModalityRef": "urn:openuji:input-modality:keyboard-text-entry", "materializationStepRefs": ["urn:step:bob-enters-password:text-entry:1"]},
+    {"@type": "MoveStep", "@id": "urn:step:bob-enters-password:text-entry:1", "stepMoveKindRef": "operability:nextStop", "stepLocatorRef": "urn:locator:login-password"},
+    {"@type": "TransitionMaterialization", "@id": "urn:materialization:bob-submits-login:keyboard", "label": "Past the password reveal and remember-me controls to Log in", "materializationTransitionRef": "urn:transition:bob-submits-login", "materializationModalityRef": "observability:keyboard", "materializationStepRefs": ["urn:step:bob-submits-login:keyboard:1", "urn:step:bob-submits-login:keyboard:2", "urn:step:bob-submits-login:keyboard:3", "urn:step:bob-submits-login:keyboard:4"]},
+    {"@type": "MoveStep", "@id": "urn:step:bob-submits-login:keyboard:1", "stepMoveKindRef": "operability:nextStop"},
+    {"@type": "MoveStep", "@id": "urn:step:bob-submits-login:keyboard:2", "stepPreviousRef": "urn:step:bob-submits-login:keyboard:1", "stepMoveKindRef": "operability:nextStop"},
+    {"@type": "MoveStep", "@id": "urn:step:bob-submits-login:keyboard:3", "stepPreviousRef": "urn:step:bob-submits-login:keyboard:2", "stepMoveKindRef": "operability:nextStop", "stepLocatorRef": "urn:locator:login-submit"},
+    {"@type": "ActivationStep", "@id": "urn:step:bob-submits-login:keyboard:4", "stepPreviousRef": "urn:step:bob-submits-login:keyboard:3"},
+    {"@type": "TransitionMaterialization", "@id": "urn:materialization:bob-submits-login:pointer", "label": "Point at Log in and press", "materializationTransitionRef": "urn:transition:bob-submits-login", "materializationModalityRef": "observability:pointer", "materializationStepRefs": ["urn:step:bob-submits-login:pointer:1", "urn:step:bob-submits-login:pointer:2"]},
+    {"@type": "MoveStep", "@id": "urn:step:bob-submits-login:pointer:1", "stepMoveKindRef": "operability:pointAt", "stepLocatorRef": "urn:locator:login-submit"},
+    {"@type": "ActivationStep", "@id": "urn:step:bob-submits-login:pointer:2", "stepPreviousRef": "urn:step:bob-submits-login:pointer:1"}
   ]
 }

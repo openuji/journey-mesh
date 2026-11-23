@@ -16,7 +16,7 @@ import type {
   AppiumSession,
   AppiumSessionFactory
 } from "./contracts.js";
-import { appiumCommandForModality, appiumObservationQuery } from "./queries.js";
+import { appiumCommandForModality, appiumObservationQuery, appiumSupportsModality } from "./queries.js";
 import { createWebdriverIoSession } from "./session.js";
 import {
   initialAppiumLifecycleState,
@@ -54,7 +54,15 @@ export function validateAppiumOperation(operation: JourneyPlanOperation): void {
   if (operation.kind === "state") {
     if (!Number.isInteger(operation.target.expectedMatchCount) || operation.target.expectedMatchCount < 0) throw new Error(`Invalid native match count ${operation.target.expectedMatchCount}`);
     appiumObservationQuery(operation.target.bindings);
-  } else if (operation.kind === "transition" && operation.activation.requiredInputModalityProfiles.length > 0) appiumObservationQuery(operation.activation.bindings);
+  } else if (operation.kind === "transition") {
+    if (operation.activation.requiredInputModalityProfiles.length > 0) appiumObservationQuery(operation.activation.bindings);
+    // Declared step chains are not performed natively yet; refuse them rather than tap past them.
+    for (const materialization of operation.materializations ?? []) {
+      if (appiumSupportsModality(materialization.modality.id)) {
+        throw new Error(`Transition ${operation.transition.id}: Appium does not perform TransitionMaterialization ${materialization.id} (${materialization.modality.id}) yet`);
+      }
+    }
+  }
 }
 
 export function appiumSessionKey(operation: JourneyPlanOperation): string {
@@ -126,6 +134,9 @@ class AppiumExecution implements JourneyAdapterExecution {
       if (operation.activation.requiredInputModalityProfiles.length > 0) throw new Error(`Transition ${operation.transition.id} requires an input modality decision`);
       await this.observe({ execution: this.execution, stage: "transition-completed", operation });
       return;
+    }
+    if (decision.materialization) {
+      throw new Error(`Transition ${operation.transition.id}: Appium does not perform TransitionMaterialization ${decision.materialization.id} yet`);
     }
     const command = appiumCommandForModality(decision.modality.id);
     const query = appiumObservationQuery(operation.activation.bindings);

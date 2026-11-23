@@ -4,6 +4,7 @@ import { fileUrl, subjectOf } from "../ui.js";
 import { AndroidReport } from "./AndroidReport.js";
 import { AxeAuditReport } from "./AxeAuditReport.js";
 import { AxePathReport } from "./AxePathReport.js";
+import { OperabilityReport } from "./OperabilityReport.js";
 
 export type DataView = ComponentType<{ value: unknown; report: LoadedReport }>;
 
@@ -11,7 +12,8 @@ export type DataView = ComponentType<{ value: unknown; report: LoadedReport }>;
 export const dataViews: Readonly<Record<string, DataView>> = {
   "journey-mesh/axe-path": AxePathReport,
   "journey-mesh/axe-audit": AxeAuditReport,
-  "journey-mesh/android-accessibility": AndroidReport
+  "journey-mesh/android-accessibility": AndroidReport,
+  "journey-mesh/operability": OperabilityReport
 };
 
 /** One data document of the report or of the run's evidence, rendered by its format. */

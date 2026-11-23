@@ -4,9 +4,23 @@ import { createHash } from "node:crypto";
 import { execute, type Command } from "@openuji/journey-service-git";
 import { startedService, sourceIdentity, type JourneyService, type SourceCheckout, type SourceIdentity } from "@openuji/journey-plugin";
 
-export type BuildOptions = Readonly<{ directory: string; image: string; nodeImage: string; composerImage: string; runtimeImage?: string }>;
+export type BuildOptions = Readonly<{
+  directory: string; image: string; nodeImage: string; composerImage: string; runtimeImage?: string;
+  /** App builds only: run the app's composer scripts (for example php-scoper writing lib/Vendor). Off by default. */
+  composerScripts?: boolean;
+  /**
+   * App builds only: platform requirements the build image may lack but the Nextcloud runtime provides,
+   * such as `ext-gd`. Each becomes `--ignore-platform-req=<requirement>`.
+   */
+  composerIgnorePlatformReqs?: readonly string[];
+}>;
 export function validateBuild(options: BuildOptions, server: boolean): void {
   if (!/^[a-z0-9][a-z0-9._/-]*$/.test(options.image)) throw new Error("image must be an untagged image repository");
+  if (server && options.composerScripts !== undefined) throw new Error("composerScripts applies to app builds only");
+  if (server && options.composerIgnorePlatformReqs !== undefined) throw new Error("composerIgnorePlatformReqs applies to app builds only");
+  for (const requirement of options.composerIgnorePlatformReqs ?? []) {
+    if (!/^(php(-64bit)?|ext-[a-z0-9_]+|lib-[a-z0-9_-]+)$/.test(requirement)) throw new Error(`Invalid composer platform requirement ${requirement}`);
+  }
   for (const value of [options.nodeImage, options.composerImage, ...(server ? [options.runtimeImage] : [])]) {
     if (typeof value !== "string" || !/^[a-z0-9][a-z0-9._/:-]*@sha256:[a-f0-9]{64}$/.test(value)) throw new Error("Build tool and runtime images must be pinned by digest");
   }
@@ -50,7 +64,7 @@ RUN npm ci && npm run build && rm -rf node_modules
 FROM ${options.composerImage} AS dependencies
 WORKDIR /source
 COPY --from=frontend /source /source
-RUN composer install --no-dev --no-interaction --prefer-dist --no-scripts
+RUN composer install --no-dev --no-interaction --prefer-dist${options.composerScripts ? "" : " --no-scripts"}${(options.composerIgnorePlatformReqs ?? []).map((requirement) => ` --ignore-platform-req=${requirement}`).join("")}
 FROM scratch
 COPY --from=dependencies /source /opt/journey-app
 `;

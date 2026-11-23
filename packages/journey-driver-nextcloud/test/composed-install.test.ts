@@ -122,3 +122,40 @@ test("installation refuses an invalid resolved path before removing any app file
   await assert.rejects(installer.start({}), /Invalid installed app path/);
   assert.equal(removed, false);
 });
+
+test("composerScripts runs the app's composer scripts only when asked, and only for app builds", async () => {
+  const recipeFor = async (composerScripts?: boolean, composerIgnorePlatformReqs?: string[]) => {
+    const directory = await mkdtemp(join(tmpdir(), "composer-scripts-"));
+    const source = join(directory, "source"); await mkdir(join(source, "appinfo"), { recursive: true });
+    await writeFile(join(source, "appinfo/info.xml"), "<info><id>example</id><version>1.0.0</version></info>");
+    const image = `example@sha256:${"a".repeat(64)}`;
+    let recipe = "";
+    const build = buildService({ directory: join(directory, "build"), image: "journey/app", nodeImage: image, composerImage: image,
+      ...(composerScripts === undefined ? {} : { composerScripts }), ...(composerIgnorePlatformReqs ? { composerIgnorePlatformReqs } : {}) }, false,
+      async (_command, args) => { recipe = await readFile(args[2], "utf8"); return ""; },
+      { source: { directory: source, identity: { repository: "https://example.test/example.git", sourceSha: "c".repeat(40) } } });
+    await build.start({});
+    return recipe;
+  };
+  assert.match(await recipeFor(), /composer install --no-dev --no-interaction --prefer-dist --no-scripts\n/);
+  assert.match(await recipeFor(false), /--no-scripts\n/);
+  assert.match(await recipeFor(true), /composer install --no-dev --no-interaction --prefer-dist\n/);
+  assert.match(await recipeFor(true, ["ext-gd", "php"]), /--prefer-dist --ignore-platform-req=ext-gd --ignore-platform-req=php\n/);
+  await assert.rejects(recipeFor(true, ["ext-gd; rm -rf /"]), /Invalid composer platform requirement/);
+  const image = `example@sha256:${"a".repeat(64)}`;
+  assert.throws(() => buildService({ directory: "/tmp/x", image: "journey/server", nodeImage: image, composerImage: image, runtimeImage: image, composerScripts: true }, true),
+    /composerScripts applies to app builds only/);
+});
+
+test("the app-build plugin parses composerScripts and the server-build plugin rejects it", async () => {
+  const { journeyMeshPlugin: app } = await import("../src/runtime/app-build-plugin.js");
+  const { journeyMeshPlugin: server } = await import("../src/runtime/server-build-plugin.js");
+  const image = `example@sha256:${"a".repeat(64)}`;
+  const context = { resolvePath: (path: string) => `/job/${path}` } as never;
+  const base = { directory: "builds", image: "journey/app", nodeImage: image, composerImage: image };
+  assert.equal((await app.parse({ ...base, composerScripts: true }, context) as { composerScripts?: boolean }).composerScripts, true);
+  assert.equal("composerScripts" in (await app.parse(base, context) as object), false);
+  assert.deepEqual((await app.parse({ ...base, composerIgnorePlatformReqs: ["ext-gd"] }, context) as { composerIgnorePlatformReqs?: string[] }).composerIgnorePlatformReqs, ["ext-gd"]);
+  await assert.rejects(async () => server.parse({ ...base, runtimeImage: image, composerIgnorePlatformReqs: ["ext-gd"] }, context), /Unknown option composerIgnorePlatformReqs/);
+  await assert.rejects(async () => server.parse({ ...base, runtimeImage: image, composerScripts: true }, context), /Unknown option composerScripts/);
+});

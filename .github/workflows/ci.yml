@@ -47,3 +47,9 @@ jobs:
 
       - name: Test report renderer in browser
         run: pnpm --filter @openuji/report-renderer test:browser
+
+      - name: Install adapter browser
+        run: pnpm --filter @openuji/journey-adapter-playwright exec playwright install --with-deps chromium
+
+      - name: Test Operability step execution in browser
+        run: pnpm --filter @openuji/journey-adapter-playwright test:browser

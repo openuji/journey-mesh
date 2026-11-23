@@ -5,6 +5,7 @@ report:
   interpreters:
     - use: "@openuji/journey-report-axe"
     - use: "@openuji/journey-report-android"
+    - use: "@openuji/journey-report-operability"
 outputDir: ./test-results
 runtimeObservers:
   - use: "@openuji/journey-observer-docker/plugin"
@@ -263,6 +264,9 @@ adapters:
             source: user.password
           urn:transition:alice-enters-remote-bob: ${NEXTCLOUD_BOB_USER}@http://${NEXTCLOUD_WEB_STACK_HOST:-host.docker.internal}:${NEXTCLOUD_WEB_BOB_PORT:-18082}
     observers:
+      - use: "@openuji/journey-observer-operability/plugin"
+        options:
+          id: input-steps
       - use: "@openuji/journey-observer-axe/plugin"
         options:
           reportId: nextcloud-filesharing.axe-path
@@ -302,6 +306,9 @@ adapters:
             source: user.password
           urn:transition:alice-enters-remote-bob: ${NEXTCLOUD_BOB_USER}@http://${NEXTCLOUD_ANDROID_STACK_HOST}:${NEXTCLOUD_ANDROID_BOB_PORT:-18084}
     observers:
+      - use: "@openuji/journey-observer-operability/plugin"
+        options:
+          id: input-steps
       - use: "@openuji/journey-observer-axe/plugin"
         options:
           reportId: nextcloud-filesharing.axe-path
@@ -367,6 +374,8 @@ profiles:
     use: "@openuji/journey-profiles/plugin"
     options:
       id: touch
+      # The Android model declares no TransitionMaterialization; Appium taps the bound object.
+      requireMaterialization: false
       modalityPreference:
         - urn:openuji:input-modality:keyboard-text-entry
         - urn:openuji:input:touch-tap
