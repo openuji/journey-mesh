@@ -47,7 +47,7 @@ function settings(options: Record<string, unknown>, resolvePath: (path: string) 
 export const journeyMeshPlugin = defineServicePlugin({
   kind: "service", outputs: { stack: managedStackContract },
   parse(options, context) { return settings(options, context.resolvePath); },
-  create(settings, context) { return nextcloudStackRuntime(settings as StackOptions, context.artifacts, undefined, ownershipPath(context.configPath, context.componentId)); },
+  create(settings, context) { return nextcloudStackRuntime(settings as StackOptions, context, undefined, ownershipPath(context.configPath, context.componentId)); },
   stopConfigured: stopNextcloudStack
 });
 
@@ -61,7 +61,7 @@ export const builtStackPlugin = defineServicePlugin({
   create(config, context, { inputs }) {
     const image = inputs.image as ServerBuild;
     if (!image?.identity.version) throw new Error("Missing built server image or version");
-    return nextcloudStackRuntime({ ...config, image: image.image, expectedVersion: image.identity.version, sourceIdentity: image.identity }, context.artifacts, undefined, ownershipPath(context.configPath, context.componentId));
+    return nextcloudStackRuntime({ ...config, image: image.image, expectedVersion: image.identity.version, sourceIdentity: image.identity }, context, undefined, ownershipPath(context.configPath, context.componentId));
   },
   stopConfigured: stopNextcloudStack
 });

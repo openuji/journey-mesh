@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { ObservationPublisher } from "@openuji/journey-plugin";
+import { composeLifecycle, type ComposeLifecycleObservation } from "@openuji/journey-service-docker/observations";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,17 +24,19 @@ async function fixture() {
     if (args.includes("status")) return JSON.stringify({ installed: true, versionstring: "34.0.2" });
     if (args.includes("app:list")) return JSON.stringify({ enabled: { notifications: "1.0" } });
     if (args.includes("inspect")) return "sha256:actual-image";
-    if (args.includes("config:system:get")) return args.at(-1) === "logfile" ? "" : "/var/www/html/data";
-    if (args.includes("tail")) return '{"message":"Nextcloud application diagnostic"}';
-    if (args.includes("logs")) return "Apache diagnostic";
     return "";
   };
-  return { options, artifacts, calls, execute };
+  return { options, artifacts, calls, execute, ports: { artifacts, observations: recordingPublisher(() => {}) } };
+}
+
+/** Awaits each delivery like the host's publisher; source stamping and deadlines are tested in journey-host. */
+function recordingPublisher(observe: (value: ComposeLifecycleObservation) => Promise<void> | void): ObservationPublisher {
+  return { async publish(topic, value) { assert.equal(topic.id, composeLifecycle.id); await observe(value as ComposeLifecycleObservation); } };
 }
 
 test("Nextcloud lifecycle owns provisioning, verifies image identity, and publishes credential-free provenance", async () => {
-  const { options, artifacts, calls, execute } = await fixture();
-  const runtime = nextcloudStackRuntime(options, artifacts, execute);
+  const { options, artifacts, calls, execute, ports } = await fixture();
+  const runtime = nextcloudStackRuntime(options, ports, execute);
   assert.equal(calls.length, 0);
   const lease = await runtime.start({}); await lease.release();
   assert.ok(calls.every((call) => call[0] !== "docker" || call[1] === "image" || call[1] === "inspect" || call.includes(options.project) || call.includes(`label=com.docker.compose.project=${options.project}`)));
@@ -41,53 +45,58 @@ test("Nextcloud lifecycle owns provisioning, verifies image identity, and publis
   const identity = JSON.stringify(lease.provenance);
   assert.match(identity, /sha256:actual-image/);
   assert.doesNotMatch(identity, /private-password|literal\$/);
-  assert.equal(artifacts.files.length, 3);
+  assert.equal(artifacts.files.length, 1);
   assert.match(await readFile(join(options.directory, "stack.env"), "utf8"), /PASSWORD='literal\$# value'/);
 });
 
 test("identity mismatch fails verification rather than publishing a successful deployment", async () => {
-  const { options, artifacts, execute } = await fixture();
-  const runtime = nextcloudStackRuntime(options, artifacts, async (command, args, context) => args[0] === "image" ? "sha256:unexpected" : execute(command, args, context));
+  const { options, artifacts, execute, ports } = await fixture();
+  const runtime = nextcloudStackRuntime(options, ports, async (command, args, context) => args[0] === "image" ? "sha256:unexpected" : execute(command, args, context));
   await assert.rejects(runtime.start({}), /image mismatch/);
-  assert.ok(!artifacts.files.some((file) => file.name.endsWith(".identity.json")));
-  assert.equal(artifacts.files.length, 2, "startup failure retains logs before cleanup");
+  assert.equal(artifacts.files.length, 0);
 });
 
-test("stack release captures application and container logs before deleting volumes, even after cancellation", async () => {
+test("the stack exposes its owned Compose lifecycle and awaits observers before disposal, including cancellation", async () => {
   const { options, artifacts, calls, execute } = await fixture();
-  const controller = new AbortController();
-  const runtime = nextcloudStackRuntime(options, artifacts, async (command, args, context) => {
-    context.signal?.throwIfAborted();
-    return execute(command, args, context);
+  const phases: string[] = [];
+  const observations = recordingPublisher(async (value) => {
+    assert.equal(value.resource.project, options.project);
+    assert.deepEqual(value.resource.services, ["first"]);
+    assert.doesNotMatch(JSON.stringify(value), /private-password|literal\$/);
+    if (value.phase === "before-release") {
+      assert.ok(!calls.some((call) => call.includes("down")));
+      await Promise.resolve();
+    }
+    phases.push(value.phase);
   });
+  const controller = new AbortController();
+  const runtime = nextcloudStackRuntime(options, { artifacts, observations }, execute);
   const lease = await runtime.start({ signal: controller.signal });
   controller.abort();
-  await lease.release();
-  const logs = calls.findIndex((call) => call.includes("logs"));
-  const application = calls.findIndex((call) => call.includes("tail"));
-  const down = calls.findIndex((call) => call.includes("down"));
-  assert.ok(logs > 0 && application > logs && down > application);
-  assert.equal(await readFile(join(options.directory, "evidence", `${options.project}.compose.log`), "utf8"), "Apache diagnostic");
-  assert.match(await readFile(join(options.directory, "evidence", `${options.project}.first.nextcloud.log`), "utf8"), /Nextcloud application diagnostic/);
-  const before = calls.length;
-  await lease.release();
-  assert.equal(calls.length, before, "a second release cannot capture another acquisition's logs");
+  await lease.release(); await lease.release();
+  assert.deepEqual(phases, ["allocated", "before-release"]);
+  assert.ok(calls.some((call) => call.includes("down") && call.includes("--volumes")));
+  assert.ok(!calls.some((call) => call.includes("logs") || call.includes("tail")), "the resource owner performs no diagnostic capture");
+  assert.equal(artifacts.files.length, 1, "only provisioning identity is produced by the stack");
 });
 
-test("failed diagnostic commands remain visible without preventing stack cleanup", async () => {
+test("partial startup failure publishes before-release before compensating its acquisition", async () => {
   const { options, artifacts, calls, execute } = await fixture();
-  const lease = await nextcloudStackRuntime(options, artifacts, async (command, args, context) => {
-    if (args.includes("logs") || args.includes("tail")) throw new Error("log unavailable");
-    return execute(command, args, context);
-  }).start({});
-  await lease.release();
-  assert.ok(calls.some((call) => call.includes("down") && call.includes("--volumes")));
-  assert.match(await readFile(join(options.directory, "evidence", `${options.project}.first.nextcloud.log`), "utf8"), /Diagnostic capture failed: log unavailable/);
+  const phases: string[] = [];
+  const observations = recordingPublisher(({ phase }) => {
+    assert.ok(!calls.some((call) => call.includes("down")));
+    phases.push(phase);
+  });
+  const runtime = nextcloudStackRuntime(options, { artifacts, observations }, (command, args, context) =>
+    args[0] === "image" ? Promise.resolve("sha256:unexpected") : execute(command, args, context));
+  await assert.rejects(runtime.start({}), /image mismatch/);
+  assert.deepEqual(phases, ["allocated", "before-release"]);
+  assert.ok(calls.some((call) => call.includes("down")));
 });
 
 test("declared system settings preserve boolean and integer types", async () => {
-  const { options, artifacts, calls, execute } = await fixture();
-  const runtime = nextcloudStackRuntime({ ...options, systemConfig: { "fixture.enabled": false, "fixture.limit": 3 } }, artifacts, execute);
+  const { options, ports, calls, execute } = await fixture();
+  const runtime = nextcloudStackRuntime({ ...options, systemConfig: { "fixture.enabled": false, "fixture.limit": 3 } }, ports, execute);
   const lease = await runtime.start({}); await lease.release();
   assert.ok(calls.some((args) => args.includes("fixture.enabled") && args.includes("--type=boolean") && args.includes("--value=false")));
   assert.ok(calls.some((args) => args.includes("fixture.limit") && args.includes("--type=integer") && args.includes("--value=3")));
@@ -101,8 +110,8 @@ test("untrusted source pins and shared service origins are rejected before alloc
 });
 
 test("rejecting an existing project does not delete its containers or volumes during cleanup", async () => {
-  const { options, artifacts, calls, execute } = await fixture();
-  const runtime = nextcloudStackRuntime(options, artifacts, async (command, args, context) => args.includes("ps") ? "existing-container" : execute(command, args, context));
+  const { options, ports, calls, execute } = await fixture();
+  const runtime = nextcloudStackRuntime(options, ports, async (command, args, context) => args.includes("ps") ? "existing-container" : execute(command, args, context));
   await assert.rejects(runtime.start({}), /already has containers/);
   assert.ok(!calls.some((call) => call.includes("down") || call.includes("up")));
 });
@@ -129,8 +138,8 @@ async function pullRequestFixture(version = "36.0.0 dev", sha = head) {
 }
 
 test("a pull request is resolved to its head commit, which names the image and sets the expected version", async () => {
-  const { options, artifacts, calls, execute } = await pullRequestFixture();
-  const runtime = nextcloudStackRuntime(options, artifacts, async (command, args, context) => args.includes("status") && command === "docker" ? JSON.stringify({ installed: true, versionstring: "36.0.0 dev" }) : execute(command, args, context));
+  const { options, ports, calls, execute } = await pullRequestFixture();
+  const runtime = nextcloudStackRuntime(options, ports, async (command, args, context) => args.includes("status") && command === "docker" ? JSON.stringify({ installed: true, versionstring: "36.0.0 dev" }) : execute(command, args, context));
   const lease = await runtime.start({});
   const image = `journey/nextcloud:pr66147-${head.slice(0, 12)}`;
   assert.ok(calls.some((call) => call.join(" ") === "git fetch origin refs/pull/66147/head"), "fetches the pull request ref, not a commit");
@@ -142,15 +151,15 @@ test("a pull request is resolved to its head commit, which names the image and s
 });
 
 test("a pull request built on another Nextcloud is checked against that version, not a pinned one", async () => {
-  const { options, artifacts, execute } = await pullRequestFixture("36.0.0 dev");
+  const { options, ports, execute } = await pullRequestFixture("36.0.0 dev");
   // The installed server reports a different version than the source says it is.
-  const runtime = nextcloudStackRuntime(options, artifacts, async (command, args, context) => args.includes("status") && command === "docker" ? JSON.stringify({ installed: true, versionstring: "34.0.2" }) : execute(command, args, context));
+  const runtime = nextcloudStackRuntime(options, ports, async (command, args, context) => args.includes("status") && command === "docker" ? JSON.stringify({ installed: true, versionstring: "34.0.2" }) : execute(command, args, context));
   await assert.rejects(runtime.start({}), /installed version does not match 36\.0\.0 dev/);
 });
 
 test("a pull request that does not exist fails naming the ref, before any container is created", async () => {
-  const { options, artifacts, calls, execute } = await pullRequestFixture();
-  const runtime = nextcloudStackRuntime({ ...options, build: { ...options.build!, pullRequest: 404 } as StackOptions["build"] }, artifacts, async (command, args, context) => {
+  const { options, ports, calls, execute } = await pullRequestFixture();
+  const runtime = nextcloudStackRuntime({ ...options, build: { ...options.build!, pullRequest: 404 } as StackOptions["build"] }, ports, async (command, args, context) => {
     if (command === "git" && args[0] === "fetch") throw new Error("git fetch failed (128): fatal: couldn't find remote ref refs/pull/404/head");
     return execute(command, args, context);
   });
@@ -170,7 +179,7 @@ test("a build takes either a pull request or an exact commit, and a pull request
 });
 
 test("a fresh clone is built even though git reports an empty checkout as modified, but a modified existing checkout is refused", async () => {
-  const { options, artifacts, execute } = await pullRequestFixture();
+  const { options, ports, execute } = await pullRequestFixture();
   const git = (toplevel: string): StackExecutor => async (command, args, context) => {
     if (command === "git" && args[0] === "rev-parse" && args[1] === "--show-toplevel") return toplevel;
     // After `git clone --no-checkout` every tracked file shows as a staged deletion.
@@ -178,7 +187,7 @@ test("a fresh clone is built even though git reports an empty checkout as modifi
     return execute(command, args, context);
   };
   const installed = (inner: StackExecutor): StackExecutor => (command, args, context) => command === "docker" && args.includes("status") ? Promise.resolve(JSON.stringify({ installed: true, versionstring: "36.0.0 dev" })) : inner(command, args, context);
-  await nextcloudStackRuntime(options, artifacts, installed(git(""))).start({});
+  await nextcloudStackRuntime(options, ports, installed(git(""))).start({});
   const reused = await pullRequestFixture();
-  await assert.rejects(nextcloudStackRuntime(reused.options, reused.artifacts, installed(git((reused.options.build as { directory: string }).directory))).start({}), /Refusing to build modified source/);
+  await assert.rejects(nextcloudStackRuntime(reused.options, reused.ports, installed(git((reused.options.build as { directory: string }).directory))).start({}), /Refusing to build modified source/);
 });

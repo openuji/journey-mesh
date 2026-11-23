@@ -2,7 +2,7 @@ import { immutableSnapshot } from "@openuji/journey-core";
 import { dirname, resolve } from "node:path";
 import { serviceFilesPrefix } from "@openuji/journey-run-record";
 import { fileEvidenceStore } from "@openuji/journey-run-record/node";
-import { sourceIdentityContract, type JourneyArtifactStore, type StartedService } from "@openuji/journey-plugin";
+import { sourceIdentityContract, type JourneyArtifactStore, type StartedService, type ObservationPublisher } from "@openuji/journey-plugin";
 import { loadSuiteConfig, JourneyConfigError, type LoadedSuiteConfig } from "./config/load.js";
 import type { ServiceConfig } from "./config/schema.js";
 import { resolveInputs, validateInputs, type ServiceValues } from "./inputs.js";
@@ -12,13 +12,13 @@ import { pluginLoader, type LoadedPlugin, type PluginLoader } from "./plugins/lo
 export type LoadedService = Readonly<{ key: string; definition: ServiceConfig; component: LoadedPlugin<"service"> }>;
 export type ActiveService = Readonly<{ key: string; lease: StartedService; artifacts: JourneyArtifactStore }>;
 
-export function serviceContext(loaded: LoadedSuiteConfig, key: string, artifacts: JourneyArtifactStore) {
-  return pluginContext({ configPath: loaded.path, env: loaded.env, testId: "service", componentId: `services.${key}`, artifacts });
+export function serviceContext(loaded: LoadedSuiteConfig, key: string, artifacts: JourneyArtifactStore, observations?: ObservationPublisher) {
+  return pluginContext({ configPath: loaded.path, env: loaded.env, testId: "service", componentId: `services.${key}`, artifacts, observations });
 }
 
 /** Acquires a handle; the caller registers it before inspecting outputs. */
-export async function startService(entry: LoadedService, loaded: LoadedSuiteConfig, values: ServiceValues, outputDir: string, signal?: AbortSignal, artifacts = fileEvidenceStore(outputDir, serviceFilesPrefix(entry.key))): Promise<ActiveService> {
-  const service = await entry.component.create({ inputs: resolveInputs(entry.definition.inputs, values) }, serviceContext(loaded, entry.key, artifacts));
+export async function startService(entry: LoadedService, loaded: LoadedSuiteConfig, values: ServiceValues, outputDir: string, signal?: AbortSignal, artifacts = fileEvidenceStore(outputDir, serviceFilesPrefix(entry.key)), observations?: ObservationPublisher): Promise<ActiveService> {
+  const service = await entry.component.create({ inputs: resolveInputs(entry.definition.inputs, values) }, serviceContext(loaded, entry.key, artifacts, observations));
   let lease: StartedService;
   try { lease = await service.start({ signal }); } catch (error) { throw new Error(`services.${entry.key}: ${error instanceof Error ? error.message : String(error)}`, { cause: error }); }
   return Object.freeze({ key: entry.key, lease, artifacts });

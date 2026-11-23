@@ -6,6 +6,15 @@ report:
     - use: "@openuji/journey-report-axe"
     - use: "@openuji/journey-report-android"
 outputDir: ./test-results
+runtimeObservers:
+  - use: "@openuji/journey-observer-docker/plugin"
+    options:
+      containerLogs: true
+      tail: 2000
+      timeoutMs: 10000
+      files:
+        - name: nextcloud
+          path: /var/www/html/data/nextcloud.log
 services:
   web-stack:
     use: "@openuji/journey-driver-nextcloud/stack/service"

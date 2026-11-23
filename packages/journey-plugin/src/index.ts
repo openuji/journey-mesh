@@ -7,11 +7,11 @@ export type * from "./artifacts.js";
 export type {
   AdapterDependencies, AdapterPlugin, Contract, DriverPlugin, EnvironmentPlugin, InputDeclarations, InputMetadata, ResolvedInputs, ServiceDependencies, StartedService, JourneyConfigContext, JourneyMeshPlugin, JourneyModelCompiler, JourneyModelView,
   JourneyObserverComponent, JourneyPluginContext, JourneyPluginKind, JourneyService, ModelPlugin, ObserverPlugin,
-  PluginOfKind, ProfilePlugin, ServicePlugin
+  PluginOfKind, ProfilePlugin, ServicePlugin, RuntimeObserverPlugin
 } from "./plugins.js";
 export {
   contract, defineAdapterPlugin, defineDriverPlugin, defineEnvironmentPlugin, defineModelPlugin, defineObserverPlugin,
-  defineProfilePlugin, defineServicePlugin
+  defineProfilePlugin, defineServicePlugin, defineRuntimeObserverPlugin
 } from "./plugins.js";
 export { startedService } from "./started-service.js";
 export { observedOperations, routedElsewhere } from "./observations.js";
@@ -20,3 +20,4 @@ export { booleanOption, knownOptions, noOptions, optionalString, optionsObject, 
 
 export { sourceCheckoutContract, sourceIdentityContract, sourceIdentity } from "./services.js";
 export type { SourceIdentity, SourceCheckout } from "./services.js";
+export type { ObservationPublisher, RuntimeObservation, RuntimeObservationSource, RuntimeObserver } from "./runtime-observations.js";

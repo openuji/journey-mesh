@@ -22,6 +22,7 @@
   },
   "types": "./src/index.ts",
   "dependencies": {
+    "@openuji/journey-service-docker": "workspace:*",
     "@openuji/journey-driver-web": "workspace:*",
     "@openuji/journey-driver-android": "workspace:*",
     "@openuji/journey-execution-model": "workspace:*",

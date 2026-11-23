@@ -2,6 +2,7 @@ import type { JourneyObserverOutput } from "@openuji/journey-core";
 import type { JourneyPlan, JourneyPlanOperation } from "@openuji/journey-execution-model";
 import type { JourneyAdapter, JourneyEnvironment, JourneyProfile, RunResult } from "@openuji/journey-runner";
 import type { JourneyArtifactStore } from "./artifacts.js";
+import type { ObservationPublisher, RuntimeObserver } from "./runtime-observations.js";
 
 /**
  * A named compatibility contract between plugins. The host only compares `id`s;
@@ -25,6 +26,8 @@ export type JourneyConfigContext = {
 /** Runtime ports belong to the component being constructed, never to input lookup. */
 export type JourneyPluginContext = JourneyConfigContext & {
   readonly artifacts: JourneyArtifactStore;
+  /** The single publishing channel for runtime observations, under this component's host-assigned source. */
+  readonly observations: ObservationPublisher;
   /** Stable within a configuration; separates persistent ownership of different services. */
   readonly componentId: string;
 };
@@ -85,6 +88,7 @@ export type AdapterPlugin<S = unknown, D = unknown, O = unknown, I = ResolvedInp
 };
 export type DriverPlugin<S = unknown, D = unknown> = Plugin<"driver", S, D> & { readonly driverContract: Contract<D> };
 export type ObserverPlugin<S = unknown, O = unknown> = Plugin<"observer", S, JourneyObserverComponent<O>> & { readonly automation: Contract<O> };
+export type RuntimeObserverPlugin<S = unknown> = Plugin<"runtime-observer", S, RuntimeObserver>;
 export type ModelPlugin<S = unknown> = Plugin<"model", S, JourneyModelCompiler>;
 export type ProfilePlugin<S = unknown> = Plugin<"profile", S, JourneyProfile>;
 export type EnvironmentPlugin<S = unknown> = Plugin<"environment", S, JourneyEnvironment>;
@@ -95,7 +99,7 @@ export type ServicePlugin<S = unknown, I = ResolvedInputs> = Plugin<"service", S
 };
 
 /** What a module exports as `journeyMeshPlugin`. */
-export type JourneyMeshPlugin = AdapterPlugin | DriverPlugin | ObserverPlugin | ModelPlugin | ProfilePlugin | EnvironmentPlugin | ServicePlugin;
+export type JourneyMeshPlugin = AdapterPlugin | DriverPlugin | ObserverPlugin | RuntimeObserverPlugin | ModelPlugin | ProfilePlugin | EnvironmentPlugin | ServicePlugin;
 export type JourneyPluginKind = JourneyMeshPlugin["kind"];
 export type PluginOfKind<K extends JourneyPluginKind> = Extract<JourneyMeshPlugin, { kind: K }>;
 
@@ -106,6 +110,7 @@ export const defineAdapterPlugin = <S, D = unknown, Observer = unknown, R extend
 ) => plugin;
 export const defineDriverPlugin = <S, D>(plugin: DriverPlugin<S, D>) => plugin;
 export const defineObserverPlugin = <S, O>(plugin: ObserverPlugin<S, O>) => plugin;
+export const defineRuntimeObserverPlugin = <S>(plugin: RuntimeObserverPlugin<S>) => plugin;
 export const defineModelPlugin = <S>(plugin: ModelPlugin<S>) => plugin;
 export const defineProfilePlugin = <S>(plugin: ProfilePlugin<S>) => plugin;
 export const defineEnvironmentPlugin = <S>(plugin: EnvironmentPlugin<S>) => plugin;

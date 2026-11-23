@@ -4,7 +4,8 @@ import { startedService, type JourneyPluginContext } from "@openuji/journey-plug
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import type { SourceIdentity } from "@openuji/journey-plugin";
 import { dirname, resolve } from "node:path";
-import type { JourneyArtifactStore, JourneyService } from "@openuji/journey-plugin";
+import type { JourneyService } from "@openuji/journey-plugin";
+import { composeLifecycle, type ComposeResource } from "@openuji/journey-service-docker/observations";
 
 export type PinnedSource = Readonly<{ repository: string; sha: string }>;
 /** A pull request is resolved to its current head commit every time the stack starts; nothing about it is pinned. */
@@ -82,7 +83,10 @@ async function sourceVersion(directory: string): Promise<string> {
   return match[1];
 }
 
-export function nextcloudStackRuntime(options: StackOptions, artifacts: JourneyArtifactStore, execute: StackExecutor = executeStackCommand, ownershipFile = resolve(options.directory, "ownership.json")): JourneyService {
+/** The component's runtime ports, exactly as the host scopes them in its plugin context. */
+export type StackPorts = Pick<JourneyPluginContext, "artifacts" | "observations">;
+
+export function nextcloudStackRuntime(options: StackOptions, { artifacts, observations }: StackPorts, execute: StackExecutor = executeStackCommand, ownershipFile = resolve(options.directory, "ownership.json")): JourneyService {
   options = structuredClone(options);
   validateStackOptions(options);
   return {
@@ -147,29 +151,15 @@ export function nextcloudStackRuntime(options: StackOptions, artifacts: JourneyA
       const token = randomUUID();
       const owned: StackOwnership = { token, project: options.project, composeFiles: options.composeFiles, envFile, directory: options.directory };
       await writeJsonRecord(ownershipFile, owned);
-      const captureDiagnostics = async () => {
-        // The journey may already be cancelled. Capture before volumes disappear,
-        // with independent deadlines, without preventing fixture cleanup.
-        const capture = async (name: string, read: (command: (...args: string[]) => Promise<string>) => Promise<string>) => {
-          const signal = AbortSignal.timeout(10_000);
-          const command = (...args: string[]) => execute("docker", [...compose, ...args], { cwd: options.directory, env, signal });
-          const data = await read(command).catch((error) => `Diagnostic capture failed: ${error instanceof Error ? error.message : String(error)}`);
-          await artifacts.write({ name: `${options.project}.${name}`, data, contentType: "text/plain" }).catch(() => {});
-        };
-        await capture("compose.log", (command) => command("logs", "--no-color", "--timestamps", "--tail", "2000"));
-        for (const service of Object.keys(options.services)) {
-          await capture(`${service}.nextcloud.log`, async (command) => {
-            const config = (...args: string[]) => command("exec", "-T", "-u", "www-data", service, "php", "occ", "config:system:get", ...args);
-            const logfile = await config("logfile").catch(() => "") || `${await config("datadirectory")}/nextcloud.log`;
-            return command("exec", "-T", service, "tail", "-n", "2000", "--", logfile);
-          });
-        }
-      };
-      const release = () => releaseStack(ownershipFile, token, execute, captureDiagnostics);
+      const resource: ComposeResource = { id: token, project: options.project, composeFiles: options.composeFiles,
+        envFile, directory: options.directory, environment: { NEXTCLOUD_STACK_ENV_FILE: envFile }, services: Object.keys(options.services) };
+      const release = () => releaseStack(ownershipFile, token, execute,
+        () => observations.publish(composeLifecycle, { phase: "before-release", resource }));
       try {
         await docker("up", "-d");
         const containers = (await docker("ps", "--all", "--quiet")).split(/\s+/).filter(Boolean);
         await writeJsonRecord(ownershipFile, { ...owned, containers });
+        await observations.publish(composeLifecycle, { phase: "allocated", resource });
         const services: unknown[] = [];
         for (const [service, account] of Object.entries(options.services)) {
           let status: { installed?: boolean; versionstring?: string } | undefined;

@@ -21,7 +21,7 @@ async function serveApk(data: Buffer): Promise<{ url: string; sha256: string; cl
 
 async function context(directory: string): Promise<JourneyPluginContext> {
   return {
-    artifacts: fileEvidenceStore(directory), configPath: join(directory, "mesh.yaml"), testId: "test", componentId: "adapter",
+    artifacts: fileEvidenceStore(directory), observations: { async publish() {} }, configPath: join(directory, "mesh.yaml"), testId: "test", componentId: "adapter",
     operations: [], env: {}, resolveOperation() { throw new Error("No operations"); }, resolvePath: (value) => join(directory, value)
   };
 }
