@@ -1,4 +1,4 @@
-import { knownOptions, optionalString, optionsObject, requiredString, stringArray } from "@openuji/journey-plugin";
+import { knownOptions, optionalString, optionsObject, positiveNumber, requiredString, stringArray } from "@openuji/journey-plugin";
 import { JourneyConfigError } from "./errors.js";
 
 /** A plugin reference. `use` and `options` may contain `${VAR}` and are interpolated only when selected. */
@@ -42,6 +42,9 @@ export type SuiteConfig = Readonly<{
   adapters: Readonly<Record<string, AdapterConfig>>;
   profiles: Readonly<Record<string, ComponentConfig>>;
   services: Readonly<Record<string, ServiceConfig>>;
+  runtimeObservers: readonly ComponentConfig[];
+  /** The longest a resource owner waits for any runtime observer per event; observers may only ask for less. */
+  runtimeObserverTimeoutMs: number;
   /** In YAML declaration order. */
   tests: readonly TestConfig[];
 }>;
@@ -51,6 +54,7 @@ export type SuiteConfig = Readonly<{
  * The host accepts the key so one file can configure both, but never reads it.
  */
 const reportingSection = "report";
+export const defaultRuntimeObserverTimeoutMs = 30_000;
 
 const known = (value: Record<string, unknown>, keys: readonly string[], label: string) => {
   for (const key of Object.keys(value)) if (!keys.includes(key)) throw new Error(`Unknown setting ${label}.${key}`);
@@ -122,7 +126,7 @@ function test(id: string, value: unknown, suite: Pick<SuiteConfig, "adapters" | 
 
 /** The only place raw YAML becomes typed configuration; every unknown key is rejected. */
 export function parseSuiteConfig(raw: Record<string, unknown>, testOrder: readonly string[]): SuiteConfig {
-  known(raw, ["kind", "label", "outputDir", "envFiles", "model", "adapters", "profiles", "services", "tests", "target", reportingSection], "configuration");
+  known(raw, ["kind", "label", "outputDir", "envFiles", "model", "adapters", "profiles", "services", "runtimeObservers", "runtimeObserverTimeoutMs", "tests", "target", reportingSection], "configuration");
   if (raw.kind !== "suite") throw new Error("Configuration kind must be suite");
   const adapters = record(raw.adapters, "adapters", (value, name): AdapterConfig => {
     const adapter = component(value, `adapters.${name}`, ["driver", "observers", "inputs"]);
@@ -159,6 +163,10 @@ export function parseSuiteConfig(raw: Record<string, unknown>, testOrder: readon
     if (item.path === undefined && item.env === undefined) throw new Error(`envFiles[${index}] needs path or env`);
     return { ...(item.path !== undefined ? { path: requiredString(item.path, "envFiles.path") } : {}), ...(item.env !== undefined ? { env: requiredString(item.env, "envFiles.env") } : {}), ...(item.optional === true ? { optional: true } : {}) };
   });
+  let runtimeObserverTimeoutMs: number;
+  try { runtimeObserverTimeoutMs = positiveNumber(raw.runtimeObserverTimeoutMs, defaultRuntimeObserverTimeoutMs); }
+  catch { throw new Error("runtimeObserverTimeoutMs must be a positive integer"); }
+  if (!Number.isSafeInteger(runtimeObserverTimeoutMs)) throw new Error("runtimeObserverTimeoutMs must be a positive integer");
   const suite = { adapters, profiles, services };
   const tests = testOrder.map((id) => {
     try { return test(id, (raw.tests as Record<string, unknown>)[id], suite); }
@@ -167,6 +175,8 @@ export function parseSuiteConfig(raw: Record<string, unknown>, testOrder: readon
   });
   return Object.freeze({
     kind: "suite", ...(target ? { target } : {}), envFiles, model: component(raw.model, "model"), adapters, profiles, services, tests,
+    runtimeObservers: list(raw.runtimeObservers, "runtimeObservers").map((entry, index) => component(entry, `runtimeObservers[${index}]`)),
+    runtimeObserverTimeoutMs,
     ...(raw.label !== undefined ? { label: requiredString(raw.label, "label") } : {}),
     ...(raw.outputDir !== undefined ? { outputDir: optionalString(raw.outputDir, "outputDir") } : {})
   });

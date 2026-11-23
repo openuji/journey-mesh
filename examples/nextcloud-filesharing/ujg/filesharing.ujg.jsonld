@@ -1,14 +1,14 @@
 {
   "@context": [
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/core.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/graph.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/surface.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/phase.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/l10n.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/observability.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/entry-binding.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/effect.context.jsonld",
-    "https://ujg.specs.openuji.org/tr/1.0-rc3/ns/artifact.context.jsonld"
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/core.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/graph.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/surface.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/phase.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/l10n.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/observability.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/entry-binding.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/effect.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/artifact.context.jsonld"
   ],
   "@id": "urn:ujg:document:nextcloud-federated-sharing",
   "@type": "UJGDocument",
@@ -47,7 +47,9 @@
       "@type": "CompositeState",
       "@id": "urn:composite:alice-federated-sharing",
       "label": "Alice federated sharing entry",
-      "subjourneyRefs": ["urn:journey:alice-federated-sharing"]
+      "subjourneyRefs": [
+        "urn:journey:alice-federated-sharing"
+      ]
     },
     {
       "@type": "Journey",
@@ -137,39 +139,42 @@
       "@id": "urn:transition:alice-opens-file-menu",
       "label": "Alice opens the sharing panel",
       "from": "urn:state:alice-files-ready",
-      "to": "urn:state:alice-share-panel-open"
+      "to": "urn:state:alice-share-panel-open",
+      "commandRef": "urn:transition:alice-opens-file-menu:command"
     },
     {
       "@type": "Surface",
       "@id": "urn:surface:alice-opens-file-menu",
       "label": "Alice file share action",
-      "graphNodeRef": "urn:transition:alice-opens-file-menu"
+      "graphNodeRef": "urn:transition:alice-opens-file-menu:command"
     },
     {
       "@type": "Transition",
       "@id": "urn:transition:alice-enters-remote-bob",
       "label": "Alice enters Bob's federated address",
       "from": "urn:state:alice-share-panel-open",
-      "to": "urn:state:alice-remote-recipient-entered"
+      "to": "urn:state:alice-remote-recipient-entered",
+      "commandRef": "urn:transition:alice-enters-remote-bob:command"
     },
     {
       "@type": "Surface",
       "@id": "urn:surface:alice-enters-remote-bob",
       "label": "Alice remote recipient input",
-      "graphNodeRef": "urn:transition:alice-enters-remote-bob"
+      "graphNodeRef": "urn:transition:alice-enters-remote-bob:command"
     },
     {
       "@type": "Transition",
       "@id": "urn:transition:alice-selects-remote-recipient",
       "label": "Alice selects Bob as the remote recipient",
       "from": "urn:state:alice-remote-recipient-entered",
-      "to": "urn:state:alice-share-permissions-open"
+      "to": "urn:state:alice-share-permissions-open",
+      "commandRef": "urn:transition:alice-selects-remote-recipient:command"
     },
     {
       "@type": "Surface",
       "@id": "urn:surface:alice-selects-remote-recipient",
       "label": "Alice remote recipient option",
-      "graphNodeRef": "urn:transition:alice-selects-remote-recipient"
+      "graphNodeRef": "urn:transition:alice-selects-remote-recipient:command"
     },
     {
       "@type": "Transition",
@@ -177,19 +182,22 @@
       "label": "Alice confirms the share",
       "from": "urn:state:alice-share-permissions-open",
       "to": "urn:state:alice-share-confirmed",
-      "effectRef": "urn:effect:alice-confirm-share"
+      "effectRef": "urn:effect:alice-confirm-share",
+      "commandRef": "urn:transition:alice-confirms-share:command"
     },
     {
       "@type": "Surface",
       "@id": "urn:surface:alice-confirms-share",
       "label": "Alice confirm-share action",
-      "graphNodeRef": "urn:transition:alice-confirms-share"
+      "graphNodeRef": "urn:transition:alice-confirms-share:command"
     },
     {
       "@type": "CompositeState",
       "@id": "urn:composite:bob-remote-share",
       "label": "Bob remote-share entry",
-      "subjourneyRefs": ["urn:journey:bob-remote-share"]
+      "subjourneyRefs": [
+        "urn:journey:bob-remote-share"
+      ]
     },
     {
       "@type": "Journey",
@@ -217,7 +225,9 @@
       "@type": "CompositeState",
       "@id": "urn:composite:bob-remote-share-offer",
       "label": "Bob remote-share offer",
-      "subjourneyRefs": ["urn:journey:bob-remote-share-offer"]
+      "subjourneyRefs": [
+        "urn:journey:bob-remote-share-offer"
+      ]
     },
     {
       "@type": "Journey",
@@ -265,19 +275,22 @@
       "label": "Bob accepts the remote share",
       "from": "urn:state:bob-incoming-share-visible",
       "to": "urn:exit:bob-share-offer-accepted",
-      "effectRef": "urn:effect:bob-accept-share"
+      "effectRef": "urn:effect:bob-accept-share",
+      "commandRef": "urn:transition:bob-accepts-share:command"
     },
     {
       "@type": "Surface",
       "@id": "urn:surface:bob-accepts-share",
       "label": "Bob accept-share action",
-      "graphNodeRef": "urn:transition:bob-accepts-share"
+      "graphNodeRef": "urn:transition:bob-accepts-share:command"
     },
     {
       "@type": "CompositeState",
       "@id": "urn:composite:bob-pending-share-offer-cleared",
       "label": "Bob pending share offer cleared",
-      "subjourneyRefs": ["urn:journey:bob-pending-share-offer-cleared"]
+      "subjourneyRefs": [
+        "urn:journey:bob-pending-share-offer-cleared"
+      ]
     },
     {
       "@type": "Journey",
@@ -328,13 +341,14 @@
       "@id": "urn:transition:bob-opens-shares-overview",
       "label": "Bob opens Shares overview",
       "from": "urn:state:bob-pending-share-offer-cleared",
-      "to": "urn:state:bob-shared-report-visible"
+      "to": "urn:state:bob-shared-report-visible",
+      "commandRef": "urn:transition:bob-opens-shares-overview:command"
     },
     {
       "@type": "Surface",
       "@id": "urn:surface:bob-opens-shares-overview",
       "label": "Bob Shares overview link",
-      "graphNodeRef": "urn:transition:bob-opens-shares-overview"
+      "graphNodeRef": "urn:transition:bob-opens-shares-overview:command"
     },
     {
       "@type": "Transition",
@@ -645,46 +659,23 @@
     },
     {
       "@type": "InputModality",
-      "@id": "observability:keyboard-text-entry",
+      "@id": "urn:openuji:input-modality:keyboard-text-entry",
       "label": "Keyboard text entry"
-    },
-    {
-      "@type": "InputModality",
-      "@id": "observability:keyboard-space",
-      "label": "Keyboard Space activation"
-    },
-    {
-      "@type": "InputModality",
-      "@id": "observability:keyboard-enter",
-      "label": "Keyboard Enter activation"
-    },
-    {
-      "@type": "InputModality",
-      "@id": "observability:pointer",
-      "label": "Pointer"
     },
     {
       "@type": "InputModalityProfile",
       "@id": "urn:input-modality-profile:keyboard-text-entry",
       "label": "Keyboard text entry",
       "inputModalityRefs": [
-        "observability:keyboard-text-entry"
+        "urn:openuji:input-modality:keyboard-text-entry"
       ]
     },
     {
       "@type": "InputModalityProfile",
-      "@id": "urn:input-modality-profile:keyboard-space",
-      "label": "Keyboard Space activation",
+      "@id": "urn:input-modality-profile:keyboard",
+      "label": "Keyboard interaction",
       "inputModalityRefs": [
-        "observability:keyboard-space"
-      ]
-    },
-    {
-      "@type": "InputModalityProfile",
-      "@id": "urn:input-modality-profile:keyboard-enter",
-      "label": "Keyboard Enter activation",
-      "inputModalityRefs": [
-        "observability:keyboard-enter"
+        "observability:keyboard"
       ]
     },
     {
@@ -700,7 +691,7 @@
       "@id": "urn:observation-event:button-activation",
       "label": "Button activation",
       "requiredInputModalityProfileRefs": [
-        "urn:input-modality-profile:keyboard-space",
+        "urn:input-modality-profile:keyboard",
         "urn:input-modality-profile:pointer"
       ]
     },
@@ -709,7 +700,7 @@
       "@id": "urn:observation-event:option-activation",
       "label": "Option activation",
       "requiredInputModalityProfileRefs": [
-        "urn:input-modality-profile:keyboard-enter",
+        "urn:input-modality-profile:keyboard",
         "urn:input-modality-profile:pointer"
       ]
     },
@@ -718,7 +709,7 @@
       "@id": "urn:observation-event:link-activation",
       "label": "Link activation",
       "requiredInputModalityProfileRefs": [
-        "urn:input-modality-profile:keyboard-enter",
+        "urn:input-modality-profile:keyboard",
         "urn:input-modality-profile:pointer"
       ]
     },
@@ -926,6 +917,36 @@
       "label": "Bob verifies accepted remote-share access",
       "compositeStateRef": "urn:composite:bob-pending-share-offer-cleared",
       "phaseRef": "urn:phase:pending-share-offer-cleared"
+    },
+    {
+      "@id": "urn:transition:alice-opens-file-menu:command",
+      "@type": "Command",
+      "label": "Alice opens the sharing panel"
+    },
+    {
+      "@id": "urn:transition:alice-enters-remote-bob:command",
+      "@type": "Command",
+      "label": "Alice enters Bob's federated address"
+    },
+    {
+      "@id": "urn:transition:alice-selects-remote-recipient:command",
+      "@type": "Command",
+      "label": "Alice selects Bob as the remote recipient"
+    },
+    {
+      "@id": "urn:transition:alice-confirms-share:command",
+      "@type": "Command",
+      "label": "Alice confirms the share"
+    },
+    {
+      "@id": "urn:transition:bob-accepts-share:command",
+      "@type": "Command",
+      "label": "Bob accepts the remote share"
+    },
+    {
+      "@id": "urn:transition:bob-opens-shares-overview:command",
+      "@type": "Command",
+      "label": "Bob opens Shares overview"
     }
   ]
 }

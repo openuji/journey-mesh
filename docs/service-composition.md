@@ -181,6 +181,50 @@ the dependency closure. This replaces the former single-service selection rule.
 SIGINT/SIGTERM abort startup; owned subprocess groups receive TERM, then KILL after
 five seconds, with another bounded wait. Cleanup failures remain visible.
 
+## Observe a test run's infrastructure
+
+Runtime observers subscribe before service allocation and remain active through
+cleanup, including compensation after partial startup failure. Resource owners
+publish lifecycle events and await subscribers before deleting owned resources;
+they do not contain log selection, diagnostic commands, or capture policy.
+
+For example, configure the independent Docker observer at suite level:
+
+```yaml
+runtimeObserverTimeoutMs: 30000
+runtimeObservers:
+  - use: "@openuji/journey-observer-docker/plugin"
+    options:
+      containerLogs: true
+      tail: 2000
+      timeoutMs: 10000
+      files:
+        - name: application
+          path: /var/log/example/application.log
+```
+
+File paths are explicit container paths. The observer captures each file on the
+application services exposed by a Compose resource, as well as optional Compose
+container output, before release. It requires no Nextcloud driver or stack.
+Its artifacts live under `diagnostics/observer-<index>/` in the run directory.
+An unavailable file produces a capture-error artifact without hiding other
+sources. Subscriber failures and deadlines are recorded separately in
+`diagnostics/errors.json`; diagnostics do not decide the journey verdict.
+`runtimeObserverTimeoutMs` (default 30 seconds) is the longest a resource owner
+waits for any observer per event. An observer's own `timeoutMs` can shorten that
+wait but never extend it.
+
+Custom runtime observers export `defineRuntimeObserverPlugin({ kind:
+"runtime-observer", parse, create })`. Their runtime instance implements
+`start(source)` and `close()`. `source` is a frozen, subscribe-only port.
+`source.subscribe(topic, callback, { name, timeoutMs })` returns an unsubscribe
+function. The callback receives an immutable `{ topic, source, timestamp, value }`
+observation and an independent abort signal for its deadline. Producers publish a
+shared typed contract with `context.observations.publish(topic, value)`, the only
+publishing channel; `JourneyService.start` receives just the abort signal. Outside
+a suite run, such as `services up`, nothing subscribes and publishing does nothing.
+Observers own their subscriptions and capture resources and release them in `close()`.
+
 `target` references a source-identity output of a selected service. The host stores
 only repository, head, optional PR and version there; runtime working paths and
 private stack configuration stay out of the run record. Producers must keep secrets

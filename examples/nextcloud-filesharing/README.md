@@ -1,5 +1,10 @@
 [![Nextcloud Filesharing CI](https://github.com/openuji/journey-mesh/actions/workflows/example-ci.yml/badge.svg?event=pull_request)](https://github.com/openuji/journey-mesh/actions/workflows/example-ci.yml)
 
+The bundled models target **UJG 1.0 RC4**. The default and keyboard-only profiles
+support standard keyboard activation and the producer-defined text-entry modality.
+The browser example runs with `pnpm e2e`. Execution and verification of explicit
+Operability materialization step chains remain a separate milestone.
+
 # Nextcloud file-sharing tests
 
 Two compositions of the [Journey Mesh architecture](../../README.md#architecture)
@@ -159,8 +164,15 @@ relative to the working directory, with sharing API requests and responses.
 Each run, profile execution, and actor/touchpoint session gets its own scope so
 later contexts retain earlier failure evidence. Appium keeps debug logs in its
 log file while printing only warnings to the console. CI includes these files
-alongside five-second CPU/memory samples and kernel warnings. These diagnostics stay
-outside the managed run output, which only publishes registered evidence files.
+alongside five-second CPU/memory samples and kernel warnings. The independent
+Docker runtime observer configured in `mesh.yaml` registers
+`<project>.compose.log` and `<project>.<service>.nextcloud.log` under
+`test-results/diagnostics/observer-01/` before containers and volumes disappear,
+including after partial startup failure or cancellation. The Nextcloud stack
+only publishes Compose lifecycle events; the observer owns capture, and YAML
+chooses the log path. These server logs retain the exception behind a sharing
+API rejection; the HAR records its browser response.
+HAR, Appium, and resource diagnostics stay outside the managed run output.
 
 The native infrastructure is prepared separately from per-profile execution:
 

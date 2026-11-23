@@ -5,6 +5,7 @@
   "license": "MIT",
   "type": "module",
   "dependencies": {
+    "@openuji/journey-observer-docker": "workspace:*",
     "@openuji/journey-adapter-playwright": "workspace:*",
     "@openuji/journey-driver-nextcloud": "workspace:*",
     "@openuji/journey-execution-model": "workspace:*",

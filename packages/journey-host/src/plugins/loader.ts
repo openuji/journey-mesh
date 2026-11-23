@@ -23,7 +23,7 @@ export type PluginLoader = <K extends JourneyPluginKind>(
   compatible?: (plugin: PluginOfKind<K>) => void, inputNames?: readonly string[], management?: boolean
 ) => Promise<LoadedPlugin<K>>;
 
-const kinds: readonly JourneyPluginKind[] = ["model", "adapter", "driver", "observer", "profile", "environment", "service"];
+const kinds: readonly JourneyPluginKind[] = ["model", "adapter", "driver", "observer", "runtime-observer", "profile", "environment", "service"];
 const fn = (value: unknown, key: string) => typeof (value as Record<string, unknown> | null)?.[key] === "function";
 
 /** Runtime shape checks at the dynamic-import boundary, so the rest of the host can rely on the types. */
@@ -32,6 +32,7 @@ const shapes: Record<JourneyPluginKind, (value: unknown) => boolean> = {
   adapter: (value) => fn(value, "createExecution"),
   driver: (value) => value !== null && typeof value === "object",
   observer: (value) => (value as { observer?: unknown } | null)?.observer !== undefined && fn(value, "output"),
+  "runtime-observer": (value) => fn(value, "start") && fn(value, "close"),
   profile: (value) => typeof (value as { id?: unknown } | null)?.id === "string" && !!(value as { id: string }).id,
   environment: (value) => value !== null && typeof value === "object",
   service: (value) => fn(value, "start")

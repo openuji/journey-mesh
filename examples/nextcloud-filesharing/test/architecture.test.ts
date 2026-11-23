@@ -154,3 +154,15 @@ test("every journey a mesh runs is drawn on the report's journey map from its JS
     }
   }
 });
+
+
+test("all bundled RC4 documents compile their phased journeys without requiring execution support", async () => {
+  const { loadUjgDocumentGraph } = await import("@openuji/journey-model-ujg");
+  for (const file of ["filesharing.ujg.jsonld", "filesharing.android.ujg.jsonld", "setup.web.ujg.jsonld", "setup.android.ujg.jsonld", "comparison/nc34.ujg.jsonld"]) {
+    const source = new URL(`ujg/${file}`, example);
+    const graph = await loadUjgDocumentGraph(source);
+    const plan = await compileUjgJourneyPlan(graph);
+    assert.ok(plan.operations.length, file);
+    assert.equal(plan.source?.references?.specVersion, "1.0-rc4");
+  }
+});

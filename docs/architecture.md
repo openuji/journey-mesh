@@ -56,7 +56,7 @@ flowchart LR
 ## What each side owns
 
 **Execution** decides the verdict. A test passes when its execution passed,
-every observer output was valid, and no observer reported a policy error (for
+every journey observer output was valid, and no journey observer reported a policy error (for
 example axe strict mode). The host writes the run record atomically; it has no
 file-size policy, no reporters, and no journey-map validation. Observers return
 only `{ id, kind, measurements, evidence, errors }`; the host keeps nothing else.
@@ -77,6 +77,7 @@ stack can read the same JSON (see [report model](report-model.md)).
 | You want to | Write | Where |
 | --- | --- | --- |
 | Capture new evidence | an observer plugin (`defineObserverPlugin`) with a types-only `./evidence` entry | execution |
+| Capture infrastructure diagnostics | a runtime observer plugin (`defineRuntimeObserverPlugin`) subscribing to typed lifecycle topics | execution |
 | Turn that evidence into report data | an interpreter module exporting `journeyMeshInterpreter` (`defineInterpreter`) | reporting |
 | Show it | a view keyed by the data's `format` in `apps/report-renderer/src/providers`, or your own template | rendering |
 
@@ -95,3 +96,35 @@ owners distinguish acquisitions from borrowed resources. Explicit CLI shutdown
 uses persisted ownership separately from automatic release. Android build and
 installation evidence stay in the Android packages; the host and reporting layers
 contain no Android-specific branches. See [service composition](service-composition.md).
+
+## Runtime observation
+
+Infrastructure diagnostics use a run-scoped observable, separate from journey
+assessment observers. Producers publish typed topic values with a component
+source and timestamp. Subscribers receive detached, immutable snapshots. Delivery
+is awaited and bounded so a resource owner can publish `before-release` before
+its data disappears. The bound belongs to the owner: a subscriber's `timeoutMs`
+is capped by the suite's `runtimeObserverTimeoutMs` (default 30 seconds), so no
+observer can hold back disposal longer than the suite allows. Subscriber errors
+and timeouts cannot prevent disposal or change a journey verdict; the host
+records them in `diagnostics/errors.json`.
+
+Suite `runtimeObservers` select `defineRuntimeObserverPlugin` implementations.
+Preflight parses their settings without constructing them. The host constructs
+fresh subscribers and evidence stores before services start, closes them after
+service cleanup, and includes their registered artifacts in the run record. No
+observable, subscription, or runtime publisher is shared across runs or passed
+to configuration parsers. The observable is a host implementation, not part of
+the plugin SDK. Every runtime plugin context carries one publisher port,
+`context.observations`; it publishes to no one outside a suite run, such as
+`services up`. Runtime observers receive a frozen, subscribe-only source; no
+plugin receives the subscriber registry, the publisher factory, or `close`.
+
+Provider contracts belong to the relevant infrastructure boundary:
+`journey-service-docker/observations` defines Compose lifecycle data without
+collectors or application knowledge. The Nextcloud stack publishes that data
+at its ownership boundaries; it does not choose or read diagnostic logs.
+`journey-observer-docker` consumes the same events from any Compose producer and
+captures configured container output and files. The example's `mesh.yaml`
+chooses the Nextcloud log path. The host knows neither Docker nor Nextcloud,
+and runtime connection metadata is never copied into provenance or the run record.

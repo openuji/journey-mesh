@@ -10,6 +10,7 @@
     "src/**/*.ts"
   ],
   "references": [
+    { "path": "../journey-service-docker" },
     {
       "path": "../journey-runner/tsconfig.json"
     },

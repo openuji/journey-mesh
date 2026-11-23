@@ -368,9 +368,10 @@ export async function toPlaywrightLocator(
 
 function customCssSelector(locator: ResolvedAccessibleLocator): string {
   const extension = locator.extensions;
-  const selector = extension?.["urn:openuji:playwright:css"];
+  const payload = extension?.["urn:openuji:playwright:css"];
+  const selector = payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as Record<string, unknown>).selector : undefined;
   if (!extension || Object.keys(extension).length !== 1 || typeof selector !== "string" || !selector.trim()) {
-    throw new Error(`Unsupported CustomLocator ${locator.id}; expected urn:openuji:playwright:css`);
+    throw new Error(`Unsupported CustomLocator ${locator.id}; expected urn:openuji:playwright:css with a selector object`);
   }
   return selector;
 }
@@ -382,8 +383,16 @@ export async function activatePlaywrightLocator(
 ): Promise<void> {
   switch (command) {
     case "pointer-click": await locator.click(); return;
-    case "keyboard-space": await locator.press("Space"); return;
-    case "keyboard-enter": await locator.press("Enter"); return;
+    case "keyboard-activate": {
+      // Select a platform default activation gesture, independently of model modality IDs.
+      const key = await locator.evaluate((element) => {
+        const role = element.getAttribute("role")?.split(/\s+/)[0];
+        const spaceRoles = ["button", "checkbox", "radio", "switch", "menuitemcheckbox", "menuitemradio"];
+        return spaceRoles.includes(role ?? "") || element.matches('button, input[type="button"], input[type="submit"], input[type="reset"], input[type="checkbox"], input[type="radio"]') ? "Space" : "Enter";
+      });
+      await locator.press(key);
+      return;
+    }
     case "keyboard-text-entry":
       if (!text) throw new Error("keyboard-text-entry requires a transition text value");
       await locator.pressSequentially(text);

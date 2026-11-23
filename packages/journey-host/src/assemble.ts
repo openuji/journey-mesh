@@ -1,6 +1,7 @@
 import { positiveNumber, type AdapterPlugin, type DriverPlugin, type JourneyArtifactStore, type JourneyObserverComponent, type ObserverPlugin } from "@openuji/journey-plugin";
 import { routedAdapter, type JourneyAdapter, type JourneyEnvironment, type JourneyPlan, type JourneyPlanOperation, type JourneyProfile } from "@openuji/journey-runner";
 import { interpolate, type LoadedSuiteConfig } from "./config/load.js";
+import type { RuntimeObservable } from "./runtime-observable.js";
 import type { TestConfig } from "./config/schema.js";
 import { segmentOf, type CompiledTest } from "./compile.js";
 import { resolveInputs, type ServiceValues } from "./inputs.js";
@@ -22,7 +23,7 @@ export type AssembledTest = Readonly<{
   timeoutMs: number;
 }>;
 
-type AssemblyInput = Readonly<{ loaded: LoadedSuiteConfig; load: PluginLoader; artifacts: JourneyArtifactStore; values: ServiceValues }>;
+type AssemblyInput = Readonly<{ loaded: LoadedSuiteConfig; load: PluginLoader; artifacts: JourneyArtifactStore; values: ServiceValues; observations?: RuntimeObservable }>;
 
 function compatible(adapter: AdapterPlugin, child: DriverPlugin | ObserverPlugin, label: string): void {
   if (child.kind === "driver") {
@@ -38,14 +39,15 @@ function compatible(adapter: AdapterPlugin, child: DriverPlugin | ObserverPlugin
 }
 
 /** One adapter instance per adapter name and test, with its driver and observers, scoped to its own segments. */
-async function assembleAdapters(compiled: CompiledTest, test: TestConfig, { loaded, load, artifacts, values }: AssemblyInput) {
+async function assembleAdapters(compiled: CompiledTest, test: TestConfig, { loaded, load, artifacts, values, observations }: AssemblyInput) {
   const adapters = new Map<string, JourneyAdapter>();
   const observers: JourneyObserverComponent[] = [];
 
   for (const name of new Set(test.journeys.map((item) => item.adapter))) {
     const operations = compiled.plan.operations.filter((operation) => segmentOf(compiled, operation).adapter === name);
     const definition = loaded.config.adapters[name];
-    const context = pluginContext({ configPath: loaded.path, env: loaded.env, testId: test.id, artifacts, operations, aliases: compiled.aliases });
+    const context = pluginContext({ configPath: loaded.path, env: loaded.env, testId: test.id, artifacts, operations, aliases: compiled.aliases,
+      observations: observations?.publisher(`tests.${test.id}.adapters.${name}`) });
     const adapter = await load("adapter", definition, `adapters.${name}`, context, undefined, Object.keys(definition.inputs));
     const driverLabel = `adapters.${name}.driver`;
     const driver = definition.driver
@@ -63,8 +65,9 @@ async function assembleAdapters(compiled: CompiledTest, test: TestConfig, { load
 }
 
 /** Each profile combination becomes one profile that delegates to the profile assigned to an operation's segment. */
-async function assembleProfiles(compiled: CompiledTest, test: TestConfig, { loaded, load, artifacts }: AssemblyInput): Promise<JourneyProfile[]> {
-  const context = pluginContext({ configPath: loaded.path, env: loaded.env, testId: test.id, artifacts, operations: compiled.plan.operations, aliases: compiled.aliases });
+async function assembleProfiles(compiled: CompiledTest, test: TestConfig, { loaded, load, artifacts, observations }: AssemblyInput): Promise<JourneyProfile[]> {
+  const context = pluginContext({ configPath: loaded.path, env: loaded.env, testId: test.id, artifacts, operations: compiled.plan.operations, aliases: compiled.aliases,
+    observations: observations?.publisher(`tests.${test.id}.profiles`) });
   const instances = new Map<string, JourneyProfile>();
   const profiles: JourneyProfile[] = [];
   for (const combination of test.profiles) {
@@ -105,7 +108,8 @@ export async function assembleTest(test: TestConfig, compiled: CompiledTest, inp
   // Unsupported operations fail here, before any fixture or automation is started.
   for (const operation of compiled.plan.operations) adapter.describeOperation?.(operation);
   const profiles = await assembleProfiles(compiled, test, input);
-  const context = pluginContext({ configPath: loaded.path, env: loaded.env, testId: test.id, artifacts, operations: compiled.plan.operations, aliases: compiled.aliases });
+  const context = pluginContext({ configPath: loaded.path, env: loaded.env, testId: test.id, artifacts, operations: compiled.plan.operations, aliases: compiled.aliases,
+    observations: input.observations?.publisher(`tests.${test.id}.environment`) });
   const environment = test.environment ? await (await load("environment", test.environment, `tests.${test.id}.environment`, context)).create() : undefined;
   return Object.freeze({
     id: test.id, plan: compiled.plan, compiled, adapter, profiles, observers, artifacts,

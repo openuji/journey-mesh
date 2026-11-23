@@ -4,7 +4,8 @@ import { startedService, type JourneyPluginContext } from "@openuji/journey-plug
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import type { SourceIdentity } from "@openuji/journey-plugin";
 import { dirname, resolve } from "node:path";
-import type { JourneyArtifactStore, JourneyService } from "@openuji/journey-plugin";
+import type { JourneyService } from "@openuji/journey-plugin";
+import { composeLifecycle, type ComposeResource } from "@openuji/journey-service-docker/observations";
 
 export type PinnedSource = Readonly<{ repository: string; sha: string }>;
 /** A pull request is resolved to its current head commit every time the stack starts; nothing about it is pinned. */
@@ -28,7 +29,7 @@ export type StackExecutor = (command: string, args: readonly string[], options: 
 export const executeStackCommand: StackExecutor = (command, args, options) => runOwnedProcess(command, args, { ...options, stdoutOnly: true });
 
 type StackOwnership = Readonly<{ token: string; project: string; composeFiles: readonly string[]; envFile: string; directory: string; containers?: readonly string[] }>;
-async function releaseStack(path: string, expectedToken?: string, execute: StackExecutor = executeStackCommand): Promise<void> {
+async function releaseStack(path: string, expectedToken?: string, execute: StackExecutor = executeStackCommand, beforeRelease?: () => Promise<void>): Promise<void> {
   const owned = await readJsonRecord<StackOwnership>(path);
   if (!owned || expectedToken && owned.token !== expectedToken) return;
   const env = { ...process.env, NEXTCLOUD_STACK_ENV_FILE: owned.envFile };
@@ -37,6 +38,7 @@ async function releaseStack(path: string, expectedToken?: string, execute: Stack
     const current = await execute("docker", [...args, "ps", "--all", "--quiet"], { cwd: owned.directory, env, signal: AbortSignal.timeout(30000) });
     if (current.split(/\s+/).filter(Boolean).some((id) => !owned.containers!.includes(id))) throw new Error(`Compose project ${owned.project} no longer belongs to this acquisition`);
   }
+  await beforeRelease?.();
   await execute("docker", [...args, "down", "--volumes"], { cwd: owned.directory, env, signal: AbortSignal.timeout(60000) });
   await removeOwnership(path);
 }
@@ -81,7 +83,10 @@ async function sourceVersion(directory: string): Promise<string> {
   return match[1];
 }
 
-export function nextcloudStackRuntime(options: StackOptions, artifacts: JourneyArtifactStore, execute: StackExecutor = executeStackCommand, ownershipFile = resolve(options.directory, "ownership.json")): JourneyService {
+/** The component's runtime ports, exactly as the host scopes them in its plugin context. */
+export type StackPorts = Pick<JourneyPluginContext, "artifacts" | "observations">;
+
+export function nextcloudStackRuntime(options: StackOptions, { artifacts, observations }: StackPorts, execute: StackExecutor = executeStackCommand, ownershipFile = resolve(options.directory, "ownership.json")): JourneyService {
   options = structuredClone(options);
   validateStackOptions(options);
   return {
@@ -146,10 +151,15 @@ export function nextcloudStackRuntime(options: StackOptions, artifacts: JourneyA
       const token = randomUUID();
       const owned: StackOwnership = { token, project: options.project, composeFiles: options.composeFiles, envFile, directory: options.directory };
       await writeJsonRecord(ownershipFile, owned);
+      const resource: ComposeResource = { id: token, project: options.project, composeFiles: options.composeFiles,
+        envFile, directory: options.directory, environment: { NEXTCLOUD_STACK_ENV_FILE: envFile }, services: Object.keys(options.services) };
+      const release = () => releaseStack(ownershipFile, token, execute,
+        () => observations.publish(composeLifecycle, { phase: "before-release", resource }));
       try {
         await docker("up", "-d");
         const containers = (await docker("ps", "--all", "--quiet")).split(/\s+/).filter(Boolean);
         await writeJsonRecord(ownershipFile, { ...owned, containers });
+        await observations.publish(composeLifecycle, { phase: "allocated", resource });
         const services: unknown[] = [];
         for (const [service, account] of Object.entries(options.services)) {
           let status: { installed?: boolean; versionstring?: string } | undefined;
@@ -192,9 +202,9 @@ export function nextcloudStackRuntime(options: StackOptions, artifacts: JourneyA
         const identity = { project: options.project, image, ...(pullRequest === null ? {} : { pullRequest }), verifiedAt: new Date().toISOString(), services };
         await artifacts.write({ name: `${options.project}.identity.json`, data: JSON.stringify(identity, null, 2), contentType: "application/json" });
         return startedService({ stack: { project: options.project, composeFiles: options.composeFiles, envFile, services: Object.keys(options.services) },
-          ...(options.sourceIdentity ? { identity: options.sourceIdentity } : {}) }, identity, () => releaseStack(ownershipFile, token, execute));
+          ...(options.sourceIdentity ? { identity: options.sourceIdentity } : {}) }, identity, release);
       } catch (error) {
-        try { await releaseStack(ownershipFile, token, execute); } catch (cleanup) { throw new AggregateError([error, cleanup], "Nextcloud startup and cleanup failed"); }
+        try { await release(); } catch (cleanup) { throw new AggregateError([error, cleanup], "Nextcloud startup and cleanup failed"); }
         throw error;
       }
     }

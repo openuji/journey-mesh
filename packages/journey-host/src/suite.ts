@@ -44,13 +44,15 @@ export async function prepareSuite(path: string, options: RunSuiteOptions = {}):
     current = undefined;
     const keys = [...new Set(tests.flatMap((test) => test.services))];
     const services = await loadServices(loaded, load, orderServices(config.services, keys), true);
+    const runtimeObservers = await Promise.all(config.runtimeObservers.map((observer, index) =>
+      load("runtime-observer", observer, `runtimeObservers[${index}]`, suiteContext("suite"))));
     const contracts = Object.fromEntries(services.map((entry) => [entry.key, entry.component.plugin.outputs ?? {}]));
     for (const test of tests) for (const name of new Set(test.config.journeys.map((item) => item.adapter))) {
       const definition = config.adapters[name];
       const component = await load("adapter", definition, `adapters.${name}`, suiteContext(test.id), undefined, Object.keys(definition.inputs));
       validateInputs(component.plugin, definition.inputs, contracts, `adapters.${name}`);
     }
-    return Object.freeze({ ...(config.target ? { target: config.target } : {}), ...(config.label ? { label: config.label } : {}), outputDir, tests: Object.freeze(tests), services: Object.freeze(services), loaded });
+    return Object.freeze({ ...(config.target ? { target: config.target } : {}), ...(config.label ? { label: config.label } : {}), outputDir, tests: Object.freeze(tests), services: Object.freeze(services), runtimeObservers: Object.freeze(runtimeObservers), loaded });
   } catch (error) {
     if (error instanceof JourneyConfigError && error.testIds.length) throw error;
     throw new JourneyConfigError(error instanceof Error ? error.message : "Invalid journey test configuration", { testId: current, testIds });

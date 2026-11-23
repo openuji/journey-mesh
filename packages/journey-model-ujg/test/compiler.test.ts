@@ -4,7 +4,8 @@ import test from "node:test";
 import { compileUjgJourneyPlan, toJourneyMapDocument, type UjgDocument } from "../src/index.js";
 import { Registry } from "../../../vendor/journey-path/src/data/parser.js";
 
-const document: UjgDocument = {
+const document: UjgDocument & { nodes: NonNullable<UjgDocument["nodes"]> } = {
+  "@context": ["core", "graph", "surface", "phase", "entry-binding", "observability", "l10n"].map((module) => `https://ujg.specs.openuji.org/tr/1.0-rc4/ns/${module}.context.jsonld`),
   "@id": "urn:test:document",
   "@type": "UJGDocument",
   nodes: [
@@ -60,6 +61,7 @@ test("command surfaces supply activation without changing the UJG transition or 
   const input = structuredClone(document);
   const journey = input.nodes.find((node) => node["@id"] === "urn:journey")!;
   journey.stateRefs = ["urn:state", "urn:done"]; journey.transitionRefs = ["urn:transition"];
+  input["@context"] = [...input["@context"] as string[], "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/effect.context.jsonld"];
   input.nodes.push(
     { "@id": "urn:done", "@type": "State" },
     { "@id": "urn:done-surface", "@type": "Surface", graphNodeRef: "urn:done" },
@@ -104,5 +106,5 @@ test("the journey map is projected from the executed JSON-LD: nested journeys, s
   const registry = new Registry(structuredClone(map) as never);
   assert.equal(registry.getRootStartOptions()[0].stateRef, "urn:composite");
   assert.deepEqual(registry.getJourneyProperties("urn:composite").users, [{ id: "urn:persona", label: undefined }]);
-  assert.throws(() => toJourneyMapDocument({ ...document, nodes: document.nodes.filter((node) => node["@id"] !== "urn:journey") }), /missing node urn:journey/);
+  assert.throws(() => toJourneyMapDocument({ ...document, nodes: document.nodes.filter((node) => node["@id"] !== "urn:journey") }), /Missing UJG node urn:journey/);
 });

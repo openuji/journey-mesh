@@ -192,6 +192,9 @@ importers:
       '@openuji/journey-observer-axe':
         specifier: workspace:*
         version: link:../../packages/journey-observer-axe
+      '@openuji/journey-observer-docker':
+        specifier: workspace:*
+        version: link:../../packages/journey-observer-docker
       '@openuji/journey-observer-ux':
         specifier: workspace:*
         version: link:../../packages/journey-observer-ux
@@ -339,6 +342,9 @@ importers:
       '@openuji/journey-runner':
         specifier: workspace:*
         version: link:../journey-runner
+      '@openuji/journey-service-docker':
+        specifier: workspace:*
+        version: link:../journey-service-docker
       '@openuji/journey-service-git':
         specifier: workspace:*
         version: link:../journey-service-git
@@ -471,6 +477,22 @@ importers:
       playwright:
         specifier: ^1.61.1
         version: 1.62.0
+    devDependencies:
+      '@openuji/journey-run-record':
+        specifier: workspace:*
+        version: link:../journey-run-record
+      tsx:
+        specifier: ^4.20.3
+        version: 4.23.1
+
+  packages/journey-observer-docker:
+    dependencies:
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
+      '@openuji/journey-service-docker':
+        specifier: workspace:*
+        version: link:../journey-service-docker
     devDependencies:
       '@openuji/journey-run-record':
         specifier: workspace:*
@@ -654,6 +676,12 @@ importers:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
+
+  packages/journey-service-docker:
+    dependencies:
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
 
   packages/journey-service-git:
     dependencies:

@@ -416,7 +416,7 @@ The roadmap is proposed and is not a delivery commitment.
 
 ## UJG Citation
 
-The checked-in authoring model declares `ujgTarget: "1.0-rc3"` and the compiled JSON-LD model uses the UJG `1.0-rc3` context set. For the public community snapshot, cite the [UJG 1.0 Release Candidate 3](https://ujg.specs.openuji.org/tr/1.0-rc3), published 2026-11-09 by the [W3C User Journey Graph Community Group](https://www.w3.org/groups/cg/ujg/).
+The compiler and bundled JSON-LD models target [UJG 1.0 Release Candidate 4](https://ujg.specs.openuji.org/tr/1.0-rc4), published 2026-11-21 by the [W3C User Journey Graph Community Group](https://www.w3.org/groups/cg/ujg/). The document contexts select an isolated compiler implementation. See the [UJG compiler contract](packages/journey-model-ujg/README.md) for imports, supported lowering, RC4 Operability output, and the separate runtime-execution milestone. RC3 documents require an earlier mesh release until migrated.
 
 ## Maintainers / Contact
 
