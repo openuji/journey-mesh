@@ -22,6 +22,9 @@ async function fixture() {
     if (args.includes("status")) return JSON.stringify({ installed: true, versionstring: "34.0.2" });
     if (args.includes("app:list")) return JSON.stringify({ enabled: { notifications: "1.0" } });
     if (args.includes("inspect")) return "sha256:actual-image";
+    if (args.includes("config:system:get")) return args.at(-1) === "logfile" ? "" : "/var/www/html/data";
+    if (args.includes("tail")) return '{"message":"Nextcloud application diagnostic"}';
+    if (args.includes("logs")) return "Apache diagnostic";
     return "";
   };
   return { options, artifacts, calls, execute };
@@ -38,7 +41,7 @@ test("Nextcloud lifecycle owns provisioning, verifies image identity, and publis
   const identity = JSON.stringify(lease.provenance);
   assert.match(identity, /sha256:actual-image/);
   assert.doesNotMatch(identity, /private-password|literal\$/);
-  assert.equal(artifacts.files.length, 1);
+  assert.equal(artifacts.files.length, 3);
   assert.match(await readFile(join(options.directory, "stack.env"), "utf8"), /PASSWORD='literal\$# value'/);
 });
 
@@ -46,7 +49,40 @@ test("identity mismatch fails verification rather than publishing a successful d
   const { options, artifacts, execute } = await fixture();
   const runtime = nextcloudStackRuntime(options, artifacts, async (command, args, context) => args[0] === "image" ? "sha256:unexpected" : execute(command, args, context));
   await assert.rejects(runtime.start({}), /image mismatch/);
-  assert.equal(artifacts.files.length, 0);
+  assert.ok(!artifacts.files.some((file) => file.name.endsWith(".identity.json")));
+  assert.equal(artifacts.files.length, 2, "startup failure retains logs before cleanup");
+});
+
+test("stack release captures application and container logs before deleting volumes, even after cancellation", async () => {
+  const { options, artifacts, calls, execute } = await fixture();
+  const controller = new AbortController();
+  const runtime = nextcloudStackRuntime(options, artifacts, async (command, args, context) => {
+    context.signal?.throwIfAborted();
+    return execute(command, args, context);
+  });
+  const lease = await runtime.start({ signal: controller.signal });
+  controller.abort();
+  await lease.release();
+  const logs = calls.findIndex((call) => call.includes("logs"));
+  const application = calls.findIndex((call) => call.includes("tail"));
+  const down = calls.findIndex((call) => call.includes("down"));
+  assert.ok(logs > 0 && application > logs && down > application);
+  assert.equal(await readFile(join(options.directory, "evidence", `${options.project}.compose.log`), "utf8"), "Apache diagnostic");
+  assert.match(await readFile(join(options.directory, "evidence", `${options.project}.first.nextcloud.log`), "utf8"), /Nextcloud application diagnostic/);
+  const before = calls.length;
+  await lease.release();
+  assert.equal(calls.length, before, "a second release cannot capture another acquisition's logs");
+});
+
+test("failed diagnostic commands remain visible without preventing stack cleanup", async () => {
+  const { options, artifacts, calls, execute } = await fixture();
+  const lease = await nextcloudStackRuntime(options, artifacts, async (command, args, context) => {
+    if (args.includes("logs") || args.includes("tail")) throw new Error("log unavailable");
+    return execute(command, args, context);
+  }).start({});
+  await lease.release();
+  assert.ok(calls.some((call) => call.includes("down") && call.includes("--volumes")));
+  assert.match(await readFile(join(options.directory, "evidence", `${options.project}.first.nextcloud.log`), "utf8"), /Diagnostic capture failed: log unavailable/);
 });
 
 test("declared system settings preserve boolean and integer types", async () => {

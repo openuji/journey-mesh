@@ -164,8 +164,12 @@ relative to the working directory, with sharing API requests and responses.
 Each run, profile execution, and actor/touchpoint session gets its own scope so
 later contexts retain earlier failure evidence. Appium keeps debug logs in its
 log file while printing only warnings to the console. CI includes these files
-alongside five-second CPU/memory samples and kernel warnings. These diagnostics stay
-outside the managed run output, which only publishes registered evidence files.
+alongside five-second CPU/memory samples and kernel warnings. The stack also
+registers `<project>.compose.log` and `<project>.<service>.nextcloud.log` under
+`test-results/services/<stack>/` before deleting its containers and volumes,
+including after startup failure or cancellation. These server logs retain the
+exception behind a sharing API rejection; the HAR records its browser response.
+HAR, Appium, and resource diagnostics stay outside the managed run output.
 
 The native infrastructure is prepared separately from per-profile execution:
 

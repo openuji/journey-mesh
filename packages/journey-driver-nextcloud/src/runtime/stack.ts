@@ -28,7 +28,7 @@ export type StackExecutor = (command: string, args: readonly string[], options: 
 export const executeStackCommand: StackExecutor = (command, args, options) => runOwnedProcess(command, args, { ...options, stdoutOnly: true });
 
 type StackOwnership = Readonly<{ token: string; project: string; composeFiles: readonly string[]; envFile: string; directory: string; containers?: readonly string[] }>;
-async function releaseStack(path: string, expectedToken?: string, execute: StackExecutor = executeStackCommand): Promise<void> {
+async function releaseStack(path: string, expectedToken?: string, execute: StackExecutor = executeStackCommand, beforeRelease?: () => Promise<void>): Promise<void> {
   const owned = await readJsonRecord<StackOwnership>(path);
   if (!owned || expectedToken && owned.token !== expectedToken) return;
   const env = { ...process.env, NEXTCLOUD_STACK_ENV_FILE: owned.envFile };
@@ -37,6 +37,7 @@ async function releaseStack(path: string, expectedToken?: string, execute: Stack
     const current = await execute("docker", [...args, "ps", "--all", "--quiet"], { cwd: owned.directory, env, signal: AbortSignal.timeout(30000) });
     if (current.split(/\s+/).filter(Boolean).some((id) => !owned.containers!.includes(id))) throw new Error(`Compose project ${owned.project} no longer belongs to this acquisition`);
   }
+  await beforeRelease?.();
   await execute("docker", [...args, "down", "--volumes"], { cwd: owned.directory, env, signal: AbortSignal.timeout(60000) });
   await removeOwnership(path);
 }
@@ -146,6 +147,25 @@ export function nextcloudStackRuntime(options: StackOptions, artifacts: JourneyA
       const token = randomUUID();
       const owned: StackOwnership = { token, project: options.project, composeFiles: options.composeFiles, envFile, directory: options.directory };
       await writeJsonRecord(ownershipFile, owned);
+      const captureDiagnostics = async () => {
+        // The journey may already be cancelled. Capture before volumes disappear,
+        // with independent deadlines, without preventing fixture cleanup.
+        const capture = async (name: string, read: (command: (...args: string[]) => Promise<string>) => Promise<string>) => {
+          const signal = AbortSignal.timeout(10_000);
+          const command = (...args: string[]) => execute("docker", [...compose, ...args], { cwd: options.directory, env, signal });
+          const data = await read(command).catch((error) => `Diagnostic capture failed: ${error instanceof Error ? error.message : String(error)}`);
+          await artifacts.write({ name: `${options.project}.${name}`, data, contentType: "text/plain" }).catch(() => {});
+        };
+        await capture("compose.log", (command) => command("logs", "--no-color", "--timestamps", "--tail", "2000"));
+        for (const service of Object.keys(options.services)) {
+          await capture(`${service}.nextcloud.log`, async (command) => {
+            const config = (...args: string[]) => command("exec", "-T", "-u", "www-data", service, "php", "occ", "config:system:get", ...args);
+            const logfile = await config("logfile").catch(() => "") || `${await config("datadirectory")}/nextcloud.log`;
+            return command("exec", "-T", service, "tail", "-n", "2000", "--", logfile);
+          });
+        }
+      };
+      const release = () => releaseStack(ownershipFile, token, execute, captureDiagnostics);
       try {
         await docker("up", "-d");
         const containers = (await docker("ps", "--all", "--quiet")).split(/\s+/).filter(Boolean);
@@ -192,9 +212,9 @@ export function nextcloudStackRuntime(options: StackOptions, artifacts: JourneyA
         const identity = { project: options.project, image, ...(pullRequest === null ? {} : { pullRequest }), verifiedAt: new Date().toISOString(), services };
         await artifacts.write({ name: `${options.project}.identity.json`, data: JSON.stringify(identity, null, 2), contentType: "application/json" });
         return startedService({ stack: { project: options.project, composeFiles: options.composeFiles, envFile, services: Object.keys(options.services) },
-          ...(options.sourceIdentity ? { identity: options.sourceIdentity } : {}) }, identity, () => releaseStack(ownershipFile, token, execute));
+          ...(options.sourceIdentity ? { identity: options.sourceIdentity } : {}) }, identity, release);
       } catch (error) {
-        try { await releaseStack(ownershipFile, token, execute); } catch (cleanup) { throw new AggregateError([error, cleanup], "Nextcloud startup and cleanup failed"); }
+        try { await release(); } catch (cleanup) { throw new AggregateError([error, cleanup], "Nextcloud startup and cleanup failed"); }
         throw error;
       }
     }
