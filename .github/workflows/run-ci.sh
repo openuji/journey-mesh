@@ -7,7 +7,7 @@ export APPIUM_URL="http://127.0.0.1:$appium_port/"
 mkdir -p "$log_dir"
 vmstat -w 5 > "$log_dir/resources.log" &
 resource_pid=$!
-node_modules/.bin/journey-adapter-appium appium serve \
+node_modules/.bin/journey-executor-appium appium serve \
   --address 127.0.0.1 --port "$appium_port" --log "$log_dir/appium.log" &
 appium_pid=$!
 adb -s "$ANDROID_UDID" logcat > "$log_dir/logcat.log" 2>&1 &

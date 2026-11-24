@@ -41,9 +41,9 @@ test("service provenance and evidence reach the run record with relative hrefs",
   await writeFile(join(directory, "mesh.yaml"), stringify({
     kind: "suite", label: "Fixture system", outputDir: "results", model: { use: fixture("model") },
     services: { stack: { use: fixture("service"), options: { name: "stack", log: "events.jsonl", identity: { version: "1.2.3" } } } },
-    adapters: { adapter: { use: fixture("adapter"), options: { name: "adapter", log: "events.jsonl" } } },
+    executors: { executor: { use: fixture("executor"), options: { name: "executor", log: "events.jsonl" } } },
     profiles: { default: { use: fixture("profile") } },
-    tests: { task: { services: ["stack"], journeys: [{ id: "task", source: "model.json", select: "task", adapter: "adapter" }], profiles: [{ id: "default", journeys: { task: "default" } }] } }
+    tests: { task: { services: ["stack"], journeys: [{ id: "task", source: "model.json", select: "task", executor: "executor" }], profiles: [{ id: "default", journeys: { task: "default" } }] } }
   }));
   const run = await runSuite(join(directory, "mesh.yaml"));
   assert.equal(run.ok, true);
@@ -51,7 +51,7 @@ test("service provenance and evidence reach the run record with relative hrefs",
   assert.deepEqual(run.provenance, { stack: { version: "1.2.3" } });
   assert.deepEqual(run.files.map((file) => file.href), ["services/stack/stack.identity.json"]);
   // The model document snapshot is recorded with the run and referenced by each journey segment.
-  assert.deepEqual(run.tests[0].segments, [{ id: "task", journeyId: "task", adapter: "adapter", view: "model.json" }]);
+  assert.deepEqual(run.tests[0].segments, [{ id: "task", journeyId: "task", executor: "executor", view: "model.json" }]);
   assert.deepEqual(run.tests[0].views, { "model.json": { format: "fixture", document: { journeys: ["task"] } } });
   const saved = await readRunRecord(join(directory, "results"));
   assert.deepEqual(saved.provenance, run.provenance);
@@ -78,9 +78,9 @@ test("evidence written by a service before failed startup remains in the failed 
   await writeFile(path, stringify({
     kind: "suite", model: { use: fixture("model") },
     services: { stack: { use: fixture("service"), options: { name: "stack", log: "events.jsonl", failUp: true, identity: { version: "failed-start" } } } },
-    adapters: { adapter: { use: fixture("adapter"), options: { name: "adapter", log: "events.jsonl" } } },
+    executors: { executor: { use: fixture("executor"), options: { name: "executor", log: "events.jsonl" } } },
     profiles: { default: { use: fixture("profile") } },
-    tests: { task: { services: ["stack"], journeys: [{ id: "task", source: "model.json", select: "task", adapter: "adapter" }], profiles: [{ id: "default", journeys: { task: "default" } }] } }
+    tests: { task: { services: ["stack"], journeys: [{ id: "task", source: "model.json", select: "task", executor: "executor" }], profiles: [{ id: "default", journeys: { task: "default" } }] } }
   }));
   const run = await runSuite(path);
   assert.equal(run.ok, false); assert.equal(run.tests.length, 0);

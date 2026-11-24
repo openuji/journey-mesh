@@ -1,8 +1,8 @@
 /**
- * Records how each transition was performed: the input decision a profile made and every adapter
+ * Records how each transition was performed: the input decision a profile made and every executor
  * command, one per declared materialization step. It observes only; it never acts on the page.
  */
-import type { PlaywrightExecutionObserver } from "@openuji/journey-adapter-playwright";
+import type { PlaywrightExecutionObserver } from "@openuji/journey-executor-playwright";
 import { immutableSnapshot, type JourneyInputAction } from "@openuji/journey-core";
 import type { RunResult } from "@openuji/journey-runner";
 import {
@@ -59,7 +59,7 @@ export function operabilityObserver(options: OperabilityObserverOptions): Playwr
   });
 }
 
-/** An adapter reports each command as attempted, then completed or failed, under one ID; keep its final report. */
+/** An executor reports each command as attempted, then completed or failed, under one ID; keep its final report. */
 function latestActions(actions: readonly JourneyInputAction[]): readonly JourneyInputAction[] {
   const latest = new Map<string, JourneyInputAction>();
   for (const action of actions) latest.set(action.id, action);

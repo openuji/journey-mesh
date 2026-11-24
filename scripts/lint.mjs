@@ -5,7 +5,7 @@
  *   execution  ──writes──▶  run record  ◀──reads──  reporting  ◀──renders──  apps
  *
  * 1. Execution packages never depend on, or import, a reporting package (dev dependencies and tests included).
- * 2. Reporting packages never depend on the host, the CLI, adapters, drivers, environments, services, or
+ * 2. Reporting packages never depend on the host, the CLI, platforms, toolkits, vendors, executors, environments, services, or
  *    observer capture code; from observers they import only the `./evidence` entry.
  * 3. Only composition roots (journey-cli, apps/*, examples/*) depend on both sides.
  * 4. Nothing under packages/ renders: no .tsx, no React, no HTML.
@@ -21,12 +21,12 @@ const layerOf = (name) => {
   if (name === "journey-cli") return "composition";
   if (name === "journey-reporter" || name.startsWith("journey-report-")) return "reporting";
   if (["journey-core", "journey-execution-model", "journey-runner", "journey-plugin", "journey-run-record", "journey-profiles", "journey-model-ujg", "journey-host"].includes(name)
-    || /^journey-(adapter|driver|observer|environment|service)-/.test(name)) return "execution";
+    || /^journey-(platform|toolkit|vendor|executor|observer|environment|service)-/.test(name)) return "execution";
   return undefined;
 };
 /** Execution packages reporting must not use at runtime or in tests. */
-const forbiddenForReporting = (name) => name === "journey-host" || name === "journey-cli" || /^journey-(adapter|driver|environment|service)-/.test(name);
-const runtimeOfDevices = /^(playwright|playwright-core|@axe-core\/|appium|webdriverio|@openuji\/journey-(adapter|driver)-)/;
+const forbiddenForReporting = (name) => name === "journey-host" || name === "journey-cli" || /^journey-(platform|toolkit|vendor|executor|environment|service)-/.test(name);
+const runtimeOfDevices = /^(playwright|playwright-core|@axe-core\/|appium|webdriverio|@openuji\/journey-(executor|platform|toolkit|vendor)-)/;
 const sourceExtensions = /\.(ts|mts|mjs|js|tsx)$/;
 const errors = [];
 const fail = (file, message) => errors.push(`${relative(root, file)}: ${message}`);

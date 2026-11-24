@@ -9,6 +9,6 @@
   "include": ["src/**/*.ts"],
   "references": [
     { "path": "../journey-core" }, { "path": "../journey-execution-model" }, { "path": "../journey-runner" },
-    { "path": "../journey-plugin" }, { "path": "../journey-adapter-playwright" }
+    { "path": "../journey-plugin" }, { "path": "../journey-executor-playwright" }
   ]
 }

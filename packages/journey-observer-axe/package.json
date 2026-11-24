@@ -12,7 +12,7 @@
   "types": "./src/index.ts",
   "dependencies": {
     "@axe-core/playwright": "^4.10.2",
-    "@openuji/journey-adapter-playwright": "workspace:*",
+    "@openuji/journey-executor-playwright": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
     "playwright": "^1.61.1",
     "@openuji/journey-core": "workspace:*",

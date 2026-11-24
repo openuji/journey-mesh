@@ -20,16 +20,16 @@ export async function suiteFixture(options: { label?: string; output?: string; j
   const config = {
     kind: "suite", outputDir: options.output ?? "reports", ...(options.label ? { label: options.label } : {}), model: { use: hostFixture("model") },
     profiles: { basic: { use: hostFixture("profile") } },
-    adapters: {
-      first: { use: hostFixture("adapter"), options: { name: "first-provider", log: "events.jsonl" } as Record<string, unknown>, observers: [{ use: hostFixture("observer"), options: {} }] },
-      second: { use: hostFixture("adapter"), options: { name: "second-provider", log: "events.jsonl" } as Record<string, unknown>, observers: [] }
+    executors: {
+      first: { use: hostFixture("executor"), options: { name: "first-provider", log: "events.jsonl" } as Record<string, unknown>, observers: [{ use: hostFixture("executor-observer"), options: {} }] },
+      second: { use: hostFixture("executor"), options: { name: "second-provider", log: "events.jsonl" } as Record<string, unknown>, observers: [] }
     },
     report: { interpreters: [{ use: interpreter, options: {} as Record<string, unknown> }] } as Record<string, unknown>,
     tests: {
       sharing: {
         journeys: [
-          { id: "alice", source: "model.json", select: "alice", adapter: "first" },
-          { id: "bob", source: "model.json", select: "bob", adapter: "second" }
+          { id: "alice", source: "model.json", select: "alice", executor: "first" },
+          { id: "bob", source: "model.json", select: "bob", executor: "second" }
         ],
         profiles: [{ id: "default", journeys: { alice: "basic", bob: "basic" } }],
         environment: { use: hostFixture("environment"), options: { log: "events.jsonl" } },
@@ -84,7 +84,7 @@ test("exit codes: invalid configuration 2, failed tests 1, report failure with p
     return failure.code === 3 && /PASS sharing/.test(failure.stdout) && /Report could not be built/.test(failure.stderr);
   });
   await access(join(suite.output, "run.json"));
-  (suite.config.adapters.first.options as Record<string, unknown>).fail = "alice";
+  (suite.config.executors.first.options as Record<string, unknown>).fail = "alice";
   suite.config.report = { interpreters: [{ use: interpreter }] }; await suite.save();
   await assert.rejects(exec(process.execPath, [cli, "test", suite.path]), exitCode(1));
 });
@@ -107,7 +107,7 @@ test("report rebuilds report/ from the run record alone, and export inlines it a
 
 test("CLI interruption writes the run record after closing runtimes and fixtures", async () => {
   const suite = await suiteFixture();
-  Object.assign(suite.config.adapters.first.options, { delay: 500 }); await suite.save();
+  Object.assign(suite.config.executors.first.options, { delay: 500 }); await suite.save();
   const child = spawn(process.execPath, [cli, "test", suite.path], { stdio: ["ignore", "pipe", "pipe"] });
   const exit = new Promise<number | null>((done) => child.once("exit", done));
   try {
@@ -126,10 +126,10 @@ test("CLI interruption writes the run record after closing runtimes and fixtures
 test("missing device configuration identifies its test and suggests explicit selection without starting fixtures", async () => {
   const suite = await suiteFixture();
   const tests = suite.config.tests as Record<string, { journeys: object[]; profiles: object[] }>;
-  tests.sharing.journeys = [{ id: "alice", source: "model.json", select: "alice", adapter: "first" }];
+  tests.sharing.journeys = [{ id: "alice", source: "model.json", select: "alice", executor: "first" }];
   tests.sharing.profiles = [{ id: "default", journeys: { alice: "basic" } }];
-  tests["device-required"] = { ...tests.sharing, journeys: [{ id: "bob", source: "model.json", select: "bob", adapter: "second" }], profiles: [{ id: "device", journeys: { bob: "basic" } }] };
-  Object.assign(suite.config.adapters.second.options, { device: "${JOURNEY_TEST_REQUIRED_DEVICE}" });
+  tests["device-required"] = { ...tests.sharing, journeys: [{ id: "bob", source: "model.json", select: "bob", executor: "second" }], profiles: [{ id: "device", journeys: { bob: "basic" } }] };
+  Object.assign(suite.config.executors.second.options, { device: "${JOURNEY_TEST_REQUIRED_DEVICE}" });
   await suite.save();
   const env = { ...process.env };
   delete env.JOURNEY_TEST_REQUIRED_DEVICE;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { androidAccessibilityObserver, androidAdapterName, isAndroidAccessibilityOutput } from "../src/index.js";
+import { androidAccessibilityObserver, androidExecutorName, isAndroidAccessibilityOutput } from "../src/index.js";
 
 test("excluded phases journal frozen not-applicable evidence without device or artifact I/O", async () => {
   let deviceReads = 0;
@@ -70,7 +70,7 @@ test("native capture records a detached journal, measurements and evidence files
   assert.ok(store.files.every((file) => file.href.startsWith("tests/native/files/android-")));
 });
 
-test("the adapter name in the evidence entry matches the Appium adapter", async () => {
-  const { appiumAdapterName } = await import("@openuji/journey-adapter-appium");
-  assert.equal(androidAdapterName, appiumAdapterName);
+test("the executor name in the evidence entry matches the Appium executor", async () => {
+  const { appiumExecutorName } = await import("@openuji/journey-executor-appium");
+  assert.equal(androidExecutorName, appiumExecutorName);
 });

@@ -7,10 +7,10 @@ import { observedOperations, routedElsewhere } from "@openuji/journey-plugin";
 /** `JourneyObserverOutput.kind` of this observer. */
 export const androidAccessibilityKind = "android-accessibility";
 /**
- * The adapter this observer observes. Kept as a literal so evidence consumers need no device runtime;
- * a test checks it equals `appiumAdapterName`.
+ * The executor this observer observes. Kept as a literal so evidence consumers need no device runtime;
+ * a test checks it equals `appiumExecutorName`.
  */
-export const androidAdapterName = "@openuji/journey-adapter-appium";
+export const androidExecutorName = "@openuji/journey-executor-appium";
 
 /** How one planned operation of one execution was assessed. */
 export type AndroidOperationAssessment = Immutable<{
@@ -28,7 +28,7 @@ export function assessAndroidOperations(evidence: readonly AndroidAccessibilityE
     const { observed: observation, attempted, operation } = target;
     const base = { executionId: target.executionId, profileId: target.profileId, operationId: operation.id, kind: operation.kind, ...(attempted ? { outcome: attempted.outcome } : {}), checks: observation?.checks ?? [], ...(observation ? { observation } : {}) };
     if (observation?.notApplicable) return { ...base, status: "not-applicable", reason: observation.notApplicable.reason };
-    if (routedElsewhere(target, androidAdapterName)) return { ...base, status: "not-applicable", reason: `Operation was routed to adapter ${attempted!.adapter!.name}; no native hierarchy was observed.` };
+    if (routedElsewhere(target, androidExecutorName)) return { ...base, status: "not-applicable", reason: `Operation was routed to executor ${attempted!.executor!.name}; no native hierarchy was observed.` };
     if (operation.kind === "control-flow" || observation?.stage === "control-flow-recorded") return { ...base, status: "not-applicable", reason: "Control flow has no native surface." };
     if (observation?.stage === "transition-completed") return { ...base, status: "not-applicable", reason: "No-input transition completed without a native target." };
     if (!observation) return { ...base, status: "skipped", reason: attempted?.outcome.kind === "failed" ? `Operation failed before hierarchy collection: ${attempted.outcome.error.message}` : "No native evidence was collected before execution ended." };

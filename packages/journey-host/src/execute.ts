@@ -3,7 +3,7 @@ import { startService, serviceOutputs } from "./services.js";
 import type { ServiceOutputRef } from "./config/schema.js";
 import { immutableSnapshot, type JourneyObserverOutput } from "@openuji/journey-core";
 import type { JourneyArtifactStore, JourneyObserverComponent } from "@openuji/journey-plugin";
-import { testPassed, testRecordFormat, type SuiteRun, type TestRecord } from "@openuji/journey-run-record";
+import { runRecordVersion, testPassed, testRecordFormat, type SuiteRun, type TestRecord } from "@openuji/journey-run-record";
 import { writeRunRecord } from "@openuji/journey-run-record/node";
 import { errorToJourneyRunError, runJourney, type JourneyProgressSink, type JourneyRunError, type RunResult } from "@openuji/journey-runner";
 import { assembleTest, type AssembledTest, type PreparedTest } from "./assemble.js";
@@ -27,7 +27,7 @@ export type PreparedSuite = Readonly<{
   services: readonly LoadedService[];
   runtimeObservers?: readonly LoadedPlugin<"runtime-observer">[];
   loaded: LoadedSuiteConfig;
-  /** Set when the suite was prepared as a discovery run; its adapters run in discovery mode. */
+  /** Set when the suite was prepared as a discovery run; its executors run in discovery mode. */
   discovery?: SuiteDiscovery;
 }>;
 export type ExecuteOptions = { signal?: AbortSignal; progress?: readonly JourneyProgressSink[]; outputDir?: string };
@@ -63,7 +63,7 @@ function journeySegments(test: AssembledTest): Pick<TestRecord, "segments" | "vi
   return {
     views: Object.fromEntries(test.compiled.views),
     segments: [...test.compiled.segments.values()].map((segment) => ({
-      id: segment.id, journeyId: segment.journeyId, adapter: segment.adapter, ...(test.compiled.views.has(segment.source) ? { view: segment.source } : {})
+      id: segment.id, journeyId: segment.journeyId, executor: segment.executor, ...(test.compiled.views.has(segment.source) ? { view: segment.source } : {})
     }))
   };
 }
@@ -75,13 +75,13 @@ async function executeTest(test: AssembledTest, options: ExecuteOptions): Promis
   const timer = setTimeout(() => controller.abort(new Error(`Test ${test.id} exceeded its ${test.timeoutMs}ms timeout`)), test.timeoutMs);
   let result: RunResult;
   try {
-    result = await runJourney({ plan: test.plan, adapter: test.adapter, profiles: test.profiles, environment: test.environment, signal: controller.signal, progress: options.progress });
+    result = await runJourney({ plan: test.plan, executor: test.executor, profiles: test.profiles, environment: test.environment, signal: controller.signal, progress: options.progress });
   } finally {
     clearTimeout(timer); options.signal?.removeEventListener("abort", abort);
   }
   const { outputs, errors } = await collectObserverOutputs(test.observers, result);
   const verdict = { result, observers: outputs, observerErrors: errors };
-  return immutableSnapshot({ format: testRecordFormat, version: 1, id: test.id, ok: testPassed(verdict), ...journeySegments(test),
+  return immutableSnapshot({ format: testRecordFormat, version: runRecordVersion, id: test.id, ok: testPassed(verdict), ...journeySegments(test),
     plan: test.plan, ...verdict, files: test.artifacts.files });
 }
 

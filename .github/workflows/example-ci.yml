@@ -42,7 +42,7 @@ jobs:
         run: pnpm build
 
       - name: Install Playwright browsers
-        run: pnpm --filter @openuji/journey-adapter-playwright exec playwright install --with-deps chromium
+        run: pnpm --filter @openuji/journey-executor-playwright exec playwright install --with-deps chromium
 
       - name: Run Nextcloud filesharing example
         env:

@@ -1,4 +1,4 @@
-import type { JourneyExecutionContext } from "../adapters/contracts.js";
+import type { JourneyExecutionContext } from "../executors/contracts.js";
 import { errorToJourneyRunError } from "../errors.js";
 import { profileDescriptor } from "../observers/contracts.js";
 import type { JourneyProfileAssessment } from "../results/contracts.js";

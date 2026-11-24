@@ -99,7 +99,7 @@ export type JourneyMapModel = Readonly<{
   view: string;
   segments: readonly string[];
   rootStartIds: readonly string[];
-  /** Touchpoint ID → adapters that executed operations at it. */
+  /** Touchpoint ID → executors that executed operations at it. */
   touchpoints: Readonly<Record<string, readonly string[]>>;
 }>;
 
@@ -149,7 +149,7 @@ export type TestModel = Readonly<{
   excludedPhaseIds: readonly string[];
   /** View key → model snapshot (`{ format, document }` JSON). `format` is e.g. `journey-map`. */
   views: Readonly<Record<string, ViewRef>>;
-  journeys: readonly Readonly<{ segmentId: string; journeyId: string; adapter: string; view?: string }>[];
+  journeys: readonly Readonly<{ segmentId: string; journeyId: string; executor: string; view?: string }>[];
   maps: readonly JourneyMapModel[];
   mapErrors: readonly string[];
   /** Interpreter outputs. */

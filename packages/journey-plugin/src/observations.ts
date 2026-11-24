@@ -13,7 +13,7 @@ export type ObservedOperation<E> = Readonly<{
   operation: JourneyPlanOperation;
   /** The last observation of this operation, if any. */
   observed?: E;
-  /** The runner's record: outcome and the adapter that executed it. */
+  /** The runner's record: outcome and the executor that executed it. */
   attempted?: JourneyOperationEvidence;
 }>;
 
@@ -44,7 +44,7 @@ export function observedOperations<E extends Observation>(journal: readonly Obse
   });
 }
 
-/** True when the runner routed an unobserved operation to an adapter other than the observer's own. */
-export function routedElsewhere(item: ObservedOperation<unknown>, adapterName: string): boolean {
-  return !item.observed && !!item.attempted?.adapter && item.attempted.adapter.name !== adapterName;
+/** True when the runner routed an unobserved operation to an executor other than the observer's own. */
+export function routedElsewhere(item: ObservedOperation<unknown>, executorName: string): boolean {
+  return !item.observed && !!item.attempted?.executor && item.attempted.executor.name !== executorName;
 }

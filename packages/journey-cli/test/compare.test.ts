@@ -20,10 +20,10 @@ async function setup(baselineIds = ["task", "default"], candidateIds = ["task", 
   const directory = await mkdtemp(join(tmpdir(), "journey-comparison-"));
   const mesh = (side: string, [testId, profile]: string[]) => ({
     kind: "suite", label: `${side} system`, outputDir: `${side}-results`, model: { use: fixture("model") },
-    adapters: { adapter: { use: fixture("adapter"), options: { name: side, log: "events.jsonl" } as Record<string, unknown>, observers: [{ use: fixture("observer") }] } },
+    executors: { executor: { use: fixture("executor"), options: { name: side, log: "events.jsonl" } as Record<string, unknown>, observers: [{ use: fixture("executor-observer") }] } },
     profiles: { default: { use: fixture("profile") } },
     report: { interpreters: [{ use: interpreter }] },
-    tests: { [testId]: { journeys: [{ id: "task", source: "model.json", select: testId, adapter: "adapter" }], profiles: [{ id: profile, journeys: { task: "default" } }] } }
+    tests: { [testId]: { journeys: [{ id: "task", source: "model.json", select: testId, executor: "executor" }], profiles: [{ id: profile, journeys: { task: "default" } }] } }
   });
   const meshes = { baseline: mesh("baseline", baselineIds), candidate: mesh("candidate", candidateIds) };
   await writeFile(join(directory, "model.json"), JSON.stringify({ journeys: [...new Set([baselineIds[0], candidateIds[0]])] }));
@@ -68,7 +68,7 @@ test("different test and profile IDs need explicit pairings", async () => {
 });
 
 test("a failed subject keeps its evidence; a missing subject is reported without hiding the other", async () => {
-  const suite = await setup(); Object.assign(suite.meshes.baseline.adapters.adapter.options, { fail: "task" }); await suite.save(); await suite.runAll();
+  const suite = await setup(); Object.assign(suite.meshes.baseline.executors.executor.options, { fail: "task" }); await suite.save(); await suite.runAll();
   const result = await compareRuns({ baseline: suite.run("baseline"), candidate: suite.run("candidate"), outputDir: suite.output });
   assert.equal(result.ok, false);
   assert.equal(result.comparison!.subjects.baseline.ok, false);
@@ -102,7 +102,7 @@ test("CLI preflights every subject before running, and compare exits nonzero for
   const compared = await exec(process.execPath, [cli, "compare", suite.run("baseline"), join(suite.run("candidate"), "run.json"), "--output", suite.output]);
   assert.match(compared.stdout, /PASS baseline \(baseline system\)/);
   assert.match(compared.stdout, /Comparison: .*comparison\/report\/report\.json/);
-  Object.assign(suite.meshes.candidate.adapters.adapter.options, { fail: "task" }); await suite.save(); await suite.runAll();
+  Object.assign(suite.meshes.candidate.executors.executor.options, { fail: "task" }); await suite.save(); await suite.runAll();
   await assert.rejects(exec(process.execPath, [cli, "compare", suite.run("baseline"), suite.run("candidate"), "--output", suite.output]),
     (error: unknown) => (error as { code: number; stdout: string }).code === 1 && /FAIL candidate/.test((error as { stdout: string }).stdout));
 });

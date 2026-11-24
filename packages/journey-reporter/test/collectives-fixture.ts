@@ -8,7 +8,7 @@ import { testRecordFormat, type TestRecord } from "@openuji/journey-run-record";
  */
 export async function collectivesTest(): Promise<TestRecord> {
   const document: UjgDocument = JSON.parse(await readFile(new URL("./fixtures/collective-own.ujg.jsonld", import.meta.url), "utf8"));
-  const segments = ["login", "sharing"].map((id) => ({ id, journeyId: `urn:journey:collective-own:${id}`, adapter: "web", view: "collectives" }));
+  const segments = ["login", "sharing"].map((id) => ({ id, journeyId: `urn:journey:collective-own:${id}`, executor: "web", view: "collectives" }));
   const operations: Awaited<ReturnType<typeof compileUjgJourneyPlan>>["operations"][number][] = [];
   for (const segment of segments) {
     const child = await compileUjgJourneyPlan(document, { journeyId: segment.journeyId });
@@ -18,7 +18,7 @@ export async function collectivesTest(): Promise<TestRecord> {
   const sharing = operations.filter((operation) => operation.segment === "sharing" && operation.kind === "state");
   const counts = { violations: 0, incomplete: 0, passes: 15, inapplicable: 45 };
   return {
-    format: testRecordFormat, version: 1, ok: true,
+    format: testRecordFormat, version: 2, ok: true,
     id: "collective-own", segments, views: { collectives: { format: "journey-map", document: toJourneyMapDocument(document) } },
     plan: { id: "plan", operations }, observerErrors: [], files: [],
     result: { ok: true, runId: "saved", plan: { id: "plan" }, errors: [],

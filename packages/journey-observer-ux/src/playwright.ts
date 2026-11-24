@@ -1,4 +1,4 @@
-import { toPlaywrightObservationLocator, type PlaywrightExecutionObserver } from "@openuji/journey-adapter-playwright";
+import { toPlaywrightObservationLocator, type PlaywrightExecutionObserver } from "@openuji/journey-executor-playwright";
 import type { JourneyInputAction, JourneyObserverOutput } from "@openuji/journey-core";
 import type { RunResult } from "@openuji/journey-runner";
 import { deriveUXOutput, immutableSnapshot, validateUXConfiguration, type UXConfiguration, type UXObservation } from "./index.js";

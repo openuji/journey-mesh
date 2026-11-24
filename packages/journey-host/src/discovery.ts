@@ -1,12 +1,12 @@
 import { dirname, resolve } from "node:path";
-import type { AdapterDiscoveryInput, DiscoveredMaterialization, MaterializationWrite } from "@openuji/journey-plugin";
+import type { ExecutorDiscoveryInput, DiscoveredMaterialization, MaterializationWrite } from "@openuji/journey-plugin";
 import { interpolate, JourneyConfigError, loadSuiteConfig, type Environment } from "./config/load.js";
 import type { TestConfig } from "./config/schema.js";
 import { pluginContext, preflightArtifacts } from "./plugins/context.js";
 import { pluginLoader } from "./plugins/loader.js";
 
 /**
- * A discovery run (`journey-mesh discover`). Every journey of a selected test must run on an adapter
+ * A discovery run (`journey-mesh discover`). Every journey of a selected test must run on an executor
  * that declares a discovery mode; any other test is rejected in preflight. Executor observers are not
  * attached, and profiles accept transitions without declared steps. A test run never sets this.
  */
@@ -17,18 +17,18 @@ export type SuiteDiscovery = Readonly<{
   record(finding: DiscoveredMaterialization): Promise<void> | void;
 }>;
 
-/** The findings port of one test: the adapter reports, the host adds the test. */
-export function discoveryInput(testId: string, discovery: SuiteDiscovery): AdapterDiscoveryInput {
+/** The findings port of one test: the executor reports, the host adds the test. */
+export function discoveryInput(testId: string, discovery: SuiteDiscovery): ExecutorDiscoveryInput {
   return Object.freeze({
     rediscover: discovery.rediscover,
     findings: Object.freeze({ record: (finding: Omit<DiscoveredMaterialization, "testId">) => discovery.record(Object.freeze({ testId, ...finding })) })
   });
 }
 
-/** Preflight of a discovery run: a journey on an adapter without a discovery mode cannot be discovered. */
-export function undiscoverableAdapter(test: TestConfig, adapter: string, use: string): Error {
-  const journeys = test.journeys.filter((item) => item.adapter === adapter).map((item) => item.id);
-  return new Error(`Test ${test.id} cannot be discovered: journeys ${journeys.join(", ")} run on adapter ${adapter} (${use}), which has no discovery mode`);
+/** Preflight of a discovery run: a journey on an executor without a discovery mode cannot be discovered. */
+export function undiscoverableExecutor(test: TestConfig, executor: string, use: string): Error {
+  const journeys = test.journeys.filter((item) => item.executor === executor).map((item) => item.id);
+  return new Error(`Test ${test.id} cannot be discovered: journeys ${journeys.join(", ")} run on executor ${executor} (${use}), which has no discovery mode`);
 }
 
 export type DeclaredSource = Readonly<{ source: string; document?: string; writes: readonly MaterializationWrite[] }>;

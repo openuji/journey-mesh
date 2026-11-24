@@ -8,7 +8,7 @@ import { suiteRun } from "./fixtures.js";
 function suite(testId: string, profileId: string, value: number): SuiteRun {
   const runId = `${testId}-run`;
   const metric: JourneyMeasurement = { id: "custom/effort", label: "Custom effort", method: "custom-provider", unit: "gesture", aggregation: "count", status: "available", value, scope: { runId, executionId: "execution", profileId, operationIds: [] } };
-  return immutableSnapshot(suiteRun([{ format: testRecordFormat, version: 1, id: testId, ok: true, segments: [], views: {}, plan: { id: "plan", operations: [] },
+  return immutableSnapshot(suiteRun([{ format: testRecordFormat, version: 2, id: testId, ok: true, segments: [], views: {}, plan: { id: "plan", operations: [] },
     result: { ok: true, runId, plan: { id: "plan" }, assessments: [{ kind: "applicable", profile: { id: profileId } }], executions: [{ executionId: "execution", profileId, outcome: { kind: "passed" } }], evidence: { executions: [] }, errors: [] },
     observers: [{ id: "third-party-observer", kind: "unfamiliar", measurements: [metric], evidence: { proof: true }, errors: [] }], observerErrors: [], files: [] }]));
 }

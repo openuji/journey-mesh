@@ -2,7 +2,7 @@ import { immutableSnapshot, type Immutable } from "@openuji/journey-core";
 import { observedOperations, routedElsewhere, type ObservedOperation } from "@openuji/journey-plugin";
 import type { RunResult } from "@openuji/journey-runner";
 import {
-  addAxeScanSummaries, axeAdapterName, createAxeJourneyItem, emptyScanSummaries, planSourceMetadata, stringTargets, summarizeResults,
+  addAxeScanSummaries, axeExecutorName, createAxeJourneyItem, emptyScanSummaries, planSourceMetadata, stringTargets, summarizeResults,
   type AxeAuditMetadata, type AxeAuditReport, type AxeAuditScanId, type AxeAuditScanSummaries, type AxeEvidence, type AxeJourneyItem,
   type AxeJourneyOperation, type AxeOperationEvidence, type AxeResults, type AxeRuleResultType, type AxeScreenshotEvidence
 } from "@openuji/journey-observer-axe/evidence";
@@ -86,8 +86,8 @@ function unauditedItem(journeyItem: AxeJourneyItem, status: "skipped" | "not-app
 function projectPathItem(target: ObservedOperation<AxeOperationEvidence>): AxePathAuditItemInput {
   const { observed } = target;
   const item = createAxeJourneyItem(target.profileId, target.executionId, target.operation as AxeJourneyOperation);
-  if (routedElsewhere(target, axeAdapterName)) {
-    return unauditedItem(item, "not-applicable", `Operation was routed to adapter ${target.attempted!.adapter!.name}; no Playwright accessibility surface was observed.`);
+  if (routedElsewhere(target, axeExecutorName)) {
+    return unauditedItem(item, "not-applicable", `Operation was routed to executor ${target.attempted!.executor!.name}; no Playwright accessibility surface was observed.`);
   }
   if (!observed) {
     if (target.operation.kind === "control-flow") return unauditedItem(item, "not-applicable", "Control-flow items do not resolve to a page surface.");

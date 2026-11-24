@@ -1,0 +1,44 @@
+{
+  "name": "@openuji/journey-vendor-nextcloud",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./service": "./src/service.ts",
+    "./web": "./src/web.ts",
+    "./web/plugin": "./src/web-plugin.ts",
+    "./android": "./src/android.ts",
+    "./android/plugin": "./src/android-plugin.ts",
+    "./federated-sharing": "./src/federated-sharing.ts",
+    "./federated-sharing/plugin": "./src/federated-sharing-plugin.ts",
+    "./stack": "./src/runtime/stack.ts",
+    "./stack/service": "./src/runtime/plugin.ts",
+    "./app-build/service": "./src/runtime/app-build-plugin.ts",
+    "./server-build/service": "./src/runtime/server-build-plugin.ts",
+    "./app-install/service": "./src/runtime/app-install-plugin.ts",
+    "./stack-built/service": "./src/runtime/built-stack-plugin.ts"
+  },
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@openuji/journey-service-docker": "workspace:*",
+    "@openuji/journey-platform-web": "workspace:*",
+    "@openuji/journey-platform-android": "workspace:*",
+    "@openuji/journey-execution-model": "workspace:*",
+    "@openuji/journey-runner": "workspace:*",
+    "@openuji/journey-plugin": "workspace:*",
+    "@openuji/journey-service-git": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "@openuji/journey-run-record": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  }
+}

@@ -6,11 +6,11 @@ import type {
 } from "@openuji/journey-execution-model";
 
 import type {
-  JourneyAdapter,
-  JourneyAdapterExecution,
+  JourneyExecutor,
+  JourneyExecutorSession,
   JourneyExecutionContext,
   JourneyProfile
-} from "./adapters/contracts.js";
+} from "./executors/contracts.js";
 import type { JourneyEnvironment } from "./environment/contracts.js";
 import { errorToJourneyRunError } from "./errors.js";
 import { componentDescriptor, executionDescriptor, profileDescriptor } from "./observers/contracts.js";
@@ -31,7 +31,7 @@ import { combineOutcomes, failedOutcome, passedOutcome } from "./results/outcome
 
 export type RunJourneyOptions = {
   plan: JourneyPlan;
-  adapter: JourneyAdapter;
+  executor: JourneyExecutor;
   profiles: readonly JourneyProfile[];
   environment?: JourneyEnvironment;
   observers?: readonly JourneyObserver[];
@@ -55,7 +55,7 @@ type EntryMap = ReadonlyMap<string, string>;
 type OperationFold = ExecutionBatch & Readonly<{ entries: EntryMap }>;
 
 type ProfileExecutionInput = Readonly<{
-  adapter: JourneyAdapter;
+  executor: JourneyExecutor;
   context: JourneyExecutionContext;
   environment?: JourneyEnvironment;
   observerDispatcher: JourneyObserverDispatcher;
@@ -89,7 +89,7 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
   await progress.publish({ type: "profiles-assessed", runId, assessments });
 
   const runStartError = await observerDispatcher.runStarted({
-    adapter: componentDescriptor(options.adapter),
+    executor: componentDescriptor(options.executor),
     plan: options.plan,
     profiles: Object.freeze(options.profiles.map(profileDescriptor)),
     assessments,
@@ -100,7 +100,7 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
       const previous = await pending;
       if (candidate.assessment.kind !== "applicable") return previous;
       const outcome = await runProfileExecution({
-        adapter: options.adapter,
+        executor: options.executor,
         context: candidate.context,
         environment: options.environment,
         observerDispatcher,
@@ -172,11 +172,11 @@ async function runProfileBody(
     input.context.signal?.throwIfAborted();
     await input.observerDispatcher.executionStarted(descriptor);
     // Routing is resolved before shared fixture setup can change service state.
-    const adapters = new Map(input.context.plan.operations.map((operation) => [
+    const executors = new Map(input.context.plan.operations.map((operation) => [
       operation,
-      Object.freeze(componentDescriptor(input.adapter.describeOperation?.(operation) ?? input.adapter))
+      Object.freeze(componentDescriptor(input.executor.describeOperation?.(operation) ?? input.executor))
     ]));
-    return await withEnvironment(input.context, input.environment, () => withAdapter(input, adapters));
+    return await withEnvironment(input.context, input.environment, () => withExecutor(input, executors));
   } catch (error) {
     return emptyBatch(failedOutcome(error));
   }
@@ -201,12 +201,12 @@ async function withEnvironment(
   return Object.freeze({ ...batch, outcome: combineOutcomes(batch.outcome, cleanup, "cleanup") });
 }
 
-async function withAdapter(
+async function withExecutor(
   input: ProfileExecutionInput,
-  adapters: ReadonlyMap<JourneyPlanOperation, JourneyComponentDescriptor>
+  executors: ReadonlyMap<JourneyPlanOperation, JourneyComponentDescriptor>
 ): Promise<ExecutionBatch> {
   try {
-    const execution = input.adapter.createExecution({ context: input.context });
+    const execution = input.executor.createSession({ context: input.context });
     // Closing on cancellation also interrupts pending browser/device commands.
     let closing: Promise<void> | undefined;
     const close = (executionFailed: boolean) => closing ??= Promise.resolve().then(() => execution.close({ executionFailed }));
@@ -214,20 +214,20 @@ async function withAdapter(
     input.context.signal?.addEventListener("abort", onAbort, { once: true });
     const startup = await attempt(() => abortable(() => execution.start(), input.context.signal));
     const batch = startup.kind === "failed" ? emptyBatch(startup) :
-      await attemptBatch(() => runOperations(input, execution, adapters));
+      await attemptBatch(() => runOperations(input, execution, executors));
     input.context.signal?.removeEventListener("abort", onAbort);
     const cleanup = await attempt(() => close(batch.outcome.kind === "failed"));
     return Object.freeze({ ...batch, outcome: combineOutcomes(batch.outcome, cleanup, "cleanup") });
   } catch (error) {
-    // createExecution failed before returning a handle that could be closed.
+    // createSession failed before returning a handle that could be closed.
     return emptyBatch(failedOutcome(error));
   }
 }
 
 async function runOperations(
   input: ProfileExecutionInput,
-  adapterExecution: JourneyAdapterExecution,
-  adapters: ReadonlyMap<JourneyPlanOperation, JourneyComponentDescriptor>
+  session: JourneyExecutorSession,
+  executors: ReadonlyMap<JourneyPlanOperation, JourneyComponentDescriptor>
 ): Promise<ExecutionBatch> {
   const { context, progress } = input;
   const completed = await context.plan.operations.reduce<Promise<OperationFold>>(async (pending, operation, index) => {
@@ -243,14 +243,14 @@ async function runOperations(
     await progress.publish({ type: "operation-started", ...operationProgress });
     const startedAt = performance.now();
     try {
-      const entries = await abortable(() => executeOperation(input, adapterExecution, previous.entries, operation), context.signal);
+      const entries = await abortable(() => executeOperation(input, session, previous.entries, operation), context.signal);
       await progress.publish({
         type: "operation-completed", ...operationProgress, durationMs: performance.now() - startedAt
       });
       return Object.freeze({
         entries,
         outcome: passedOutcome,
-        operations: Object.freeze([...previous.operations, operationEvidence(operation, adapters.get(operation)!, passedOutcome)])
+        operations: Object.freeze([...previous.operations, operationEvidence(operation, executors.get(operation)!, passedOutcome)])
       });
     } catch (error) {
       const outcome = failedOutcome(error);
@@ -262,7 +262,7 @@ async function runOperations(
       return Object.freeze({
         entries: previous.entries,
         outcome,
-        operations: Object.freeze([...previous.operations, operationEvidence(operation, adapters.get(operation)!, outcome)])
+        operations: Object.freeze([...previous.operations, operationEvidence(operation, executors.get(operation)!, outcome)])
       });
     }
   }, Promise.resolve(Object.freeze({ ...emptyBatch(passedOutcome), entries: new Map<string, string>() })));
@@ -271,25 +271,25 @@ async function runOperations(
 
 async function executeOperation(
   input: ProfileExecutionInput,
-  adapterExecution: JourneyAdapterExecution,
+  session: JourneyExecutorSession,
   currentEntries: EntryMap,
   operation: JourneyPlanOperation
 ): Promise<EntryMap> {
   input.context.signal?.throwIfAborted();
-  const entries = await ensureEntryOpen(adapterExecution, currentEntries, operation);
+  const entries = await ensureEntryOpen(session, currentEntries, operation);
   input.context.signal?.throwIfAborted();
   if (operation.kind === "state") {
-    await adapterExecution.assertState(operation);
+    await session.assertState(operation);
   } else if (operation.kind === "transition") {
     const decision = await selectInputModality(operation, input.context);
-    await adapterExecution.performTransition(operation, decision);
+    await session.performTransition(operation, decision);
     input.context.signal?.throwIfAborted();
     for (const effect of operation.effects) {
       input.context.signal?.throwIfAborted();
       await input.environment?.verifyEffect?.({ context: input.context, operation, effect, decision });
     }
   } else {
-    await adapterExecution.recordControlFlow(operation);
+    await session.recordControlFlow(operation);
   }
   return entries;
 }
@@ -306,7 +306,7 @@ async function selectInputModality(
 }
 
 async function ensureEntryOpen(
-  execution: JourneyAdapterExecution,
+  execution: JourneyExecutorSession,
   entries: EntryMap,
   operation: JourneyPlanOperation
 ): Promise<EntryMap> {
@@ -349,7 +349,7 @@ function safeSegment(value: string): string {
 
 function operationEvidence(
   operation: JourneyPlanOperation,
-  adapter: JourneyComponentDescriptor,
+  executor: JourneyComponentDescriptor,
   outcome: JourneyOutcome
 ): JourneyOperationEvidence {
   return Object.freeze({
@@ -358,7 +358,7 @@ function operationEvidence(
       Object.entries(operation.source.references).map(([key, value]) => [key, typeof value === "string" ? value : Object.freeze([...value])])
     )) }) } : {}),
     operationKind: operation.kind,
-    adapter,
+    executor,
     outcome
   });
 }

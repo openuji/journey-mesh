@@ -28,7 +28,7 @@ export type JourneyObserverOutput = Readonly<{
 }>;
 
 /**
- * One adapter command, not a modeled transition. An adapter that performs a declared
+ * One executor command, not a modeled transition. An executor that performs a declared
  * materialization records one command per step and names the step and the gesture it used.
  */
 export type JourneyInputAction = Readonly<{
@@ -45,6 +45,7 @@ export type JourneyInputAction = Readonly<{
   stepId?: string;
   /** The concrete platform gesture, such as a key name or a pointer press. */
   gesture?: string;
+  /** A persisted measurement unit: it keeps its name from before executors were called adapters. */
   unit: "adapter-command";
   status: "attempted" | "completed" | "failed";
   error?: Readonly<{ name: string; message: string }>;

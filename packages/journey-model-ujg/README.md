@@ -95,7 +95,7 @@ the profile sets `requireMaterialization: false`. Preflight runs this selection
 before any service starts.
 
 The Playwright adapter performs the selected steps and checks each one as
-Operability §7 requires. See its [README](../journey-adapter-playwright/README.md).
+Operability §7 requires. See its [README](../journey-executor-playwright/README.md).
 The Appium adapter refuses materializations through the modalities it supports
 until it can perform them. Compilation succeeding says nothing about a
 materialization's runtime result.

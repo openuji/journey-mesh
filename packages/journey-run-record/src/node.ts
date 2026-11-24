@@ -3,7 +3,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { JourneyArtifact, JourneyArtifactStore } from "@openuji/journey-plugin";
 import { testRecordHref, validateHref } from "./paths.js";
 import { loadSuiteRun, type RunReader } from "./read.js";
-import { runRecordFormat, type EvidenceFile, type RunRecord, type SuiteRun } from "./types.js";
+import { runRecordFormat, runRecordVersion, type EvidenceFile, type RunRecord, type SuiteRun } from "./types.js";
 
 export * from "./index.js";
 
@@ -116,7 +116,7 @@ export async function writeRunFiles(target: string, run: SuiteRun, source: strin
   await copyEvidence([...run.files, ...run.tests.flatMap((test) => test.files)], source, target);
   for (const test of run.tests) await writeJson(target, testRecordHref(test.id), test);
   const { tests, ...summary } = run;
-  const record: RunRecord = { format: runRecordFormat, version: 1, ...summary,
+  const record: RunRecord = { format: runRecordFormat, version: runRecordVersion, ...summary,
     tests: tests.map((test) => ({ id: test.id, ok: test.ok, href: testRecordHref(test.id) })) };
   await writeJson(target, "run.json", record);
 }

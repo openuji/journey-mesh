@@ -33,7 +33,7 @@ export type JourneyObserverRunStartedInput = {
   readonly plan: JourneyPlan;
   readonly profiles: readonly JourneyProfileDescriptor[];
   readonly assessments: readonly JourneyProfileAssessment[];
-  readonly adapter: JourneyComponentDescriptor;
+  readonly executor: JourneyComponentDescriptor;
 };
 
 export type JourneyObserverRunCompletedInput = {

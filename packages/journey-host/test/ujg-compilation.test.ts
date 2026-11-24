@@ -17,7 +17,7 @@ test("RC4 materializations and imported provenance survive host plan composition
   await writeFile(join(directory, "nodes.json"), JSON.stringify({ ...document, "@id": "urn:imported", nodes, imports: [] }));
   const compiler = await journeyMeshPlugin.create(undefined, {} as never);
   const compiled = await compileTest({
-    id: "test", profiles: [], services: [], journeys: [{ id: "pages", adapter: "web", select: "urn:journey", source: "./root.json", operations: { selectTab: "urn:transition" } }]
+    id: "test", profiles: [], services: [], journeys: [{ id: "pages", executor: "web", select: "urn:journey", source: "./root.json", operations: { selectTab: "urn:transition" } }]
   } satisfies TestConfig, compiler, join(directory, "mesh.yaml"), {});
   const operation = compiled.plan.operations.find((item) => item.kind === "transition")!;
   assert.equal(operation.kind, "transition");
@@ -40,8 +40,8 @@ test("a keyboard transition without declared steps fails profile preflight befor
   const config = {
     kind: "suite", outputDir: "reports", model: { use: join(packages, "journey-model-ujg/src/plugin.ts") },
     profiles: { keyboard: { use: join(packages, "journey-profiles/src/plugin.ts"), options: { preset: "keyboard-only" } } },
-    adapters: { web: { use: new URL("./fixtures/adapter.mjs", import.meta.url).pathname, options: { name: "web", log: "events.jsonl" } } },
-    tests: { pages: { journeys: [{ id: "pages", source: "model.json", select: "urn:journey", adapter: "web" }], profiles: [{ id: "keyboard-only", journeys: { pages: "keyboard" } }] } }
+    executors: { web: { use: new URL("./fixtures/executor.mjs", import.meta.url).pathname, options: { name: "web", log: "events.jsonl" } } },
+    tests: { pages: { journeys: [{ id: "pages", source: "model.json", select: "urn:journey", executor: "web" }], profiles: [{ id: "keyboard-only", journeys: { pages: "keyboard" } }] } }
   };
   await writeFile(join(directory, "mesh.yaml"), stringify(config));
   const document = fixture();

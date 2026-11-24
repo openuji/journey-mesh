@@ -12,7 +12,7 @@
   "dependencies": {
     "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
-    "@openuji/journey-adapter-playwright": "workspace:*",
+    "@openuji/journey-executor-playwright": "workspace:*",
     "@openuji/journey-core": "workspace:*",
     "@openuji/journey-plugin": "workspace:*"
   },

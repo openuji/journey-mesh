@@ -32,11 +32,11 @@ export type OperabilityStepReport = Readonly<{
   position: number;
   stepId?: string;
   label?: string;
-  /** `move`, `activation` or `shortcut` for declared steps; the adapter command otherwise, such as `text-entry`. */
+  /** `move`, `activation` or `shortcut` for declared steps; the executor command otherwise, such as `text-entry`. */
   kind: string;
   moveKindId?: string;
   locator?: OperabilityLocatorSummary;
-  /** The concrete key or pointer action the adapter used. */
+  /** The concrete key or pointer action the executor used. */
   gesture?: string;
   status: OperabilityStepStatus;
   error?: string;

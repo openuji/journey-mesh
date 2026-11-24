@@ -1,8 +1,8 @@
 /**
- * Discovery contracts: `journey-mesh discover` runs a test with each adapter's discovery mode to find
+ * Discovery contracts: `journey-mesh discover` runs a test with each executor's discovery mode to find
  * the input steps its model does not declare yet. Discovery is an authoring aid and never part of a
- * test run. Only an adapter that can find paths declares a discovery mode; today that is the
- * Playwright adapter, so discovery covers Web journeys only.
+ * test run. Only an executor that can find paths declares a discovery mode; today that is the
+ * Playwright executor, so discovery covers Web journeys only.
  */
 
 /** Whether a run checks the model (`test`) or finds steps for it (`discovery`). */
@@ -15,7 +15,7 @@ export type DiscoveredMaterializationStep = Readonly<
 >;
 
 /**
- * What an adapter's discovery mode found for one transition. A found path is a proposal for the
+ * What an executor's discovery mode found for one transition. A found path is a proposal for the
  * author to review and declare in the model; no test run performs it until it is declared.
  */
 export type DiscoveredMaterialization = Readonly<{
@@ -42,14 +42,14 @@ export type DiscoveredMaterialization = Readonly<{
   note?: string;
 }>;
 
-/** A finding as an adapter reports it; the host adds the test that produced it. */
+/** A finding as an executor reports it; the host adds the test that produced it. */
 export type DiscoveryFinding = Omit<DiscoveredMaterialization, "testId">;
 
-/** The host's port for findings. Adapters report through it and never write findings themselves. */
+/** The host's port for findings. Executors report through it and never write findings themselves. */
 export type DiscoveryFindings = Readonly<{ record(finding: DiscoveryFinding): Promise<void> | void }>;
 
-/** What the host gives an adapter's discovery mode. */
-export type AdapterDiscoveryInput = Readonly<{
+/** What the host gives an executor's discovery mode. */
+export type ExecutorDiscoveryInput = Readonly<{
   /** Find a new path also where the model declares one, and name the declared one as replaced. */
   rediscover: boolean;
   findings: DiscoveryFindings;

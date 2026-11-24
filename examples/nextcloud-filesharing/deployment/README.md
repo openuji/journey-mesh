@@ -1,7 +1,7 @@
 # Nextcloud federation infrastructure
 
 The example declares its deployment in [`../mesh.yaml`](../mesh.yaml) using
-`@openuji/journey-driver-nextcloud/stack/service`, the same packaged infrastructure
+`@openuji/journey-vendor-nextcloud/stack/service`, the same packaged infrastructure
 used by `journey-checks` jobs. This directory contains Compose, database
 initialization, source environment defaults, and the scenario fixture.
 

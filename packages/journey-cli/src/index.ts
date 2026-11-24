@@ -25,9 +25,9 @@ const help = `Usage:
 test writes a run record, then derives its report model below <output>/report/.
 Without --test, every test in the YAML is selected and must pass preflight.
 Validating several configurations checks all of them before any is run.
-discover is Web only: it runs tests whose journeys all run on an adapter with a discovery mode
-(the Playwright adapter) and reports the keyboard and pointer paths the model does not declare
-yet. A test with a journey on any other adapter, such as Android, is rejected. --apply declares
+discover is Web only: it runs tests whose journeys all run on an executor with a discovery mode
+(the Playwright executor) and reports the keyboard and pointer paths the model does not declare
+yet. A test with a journey on any other executor, such as Android, is rejected. --apply declares
 the paths through the suite's model plugin, --rediscover also measures declared paths again.
 It is an authoring aid; test never discovers.
 Without --service, every entry in the YAML's services section is selected.

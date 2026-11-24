@@ -75,7 +75,7 @@ test("several materializations through one modality need an explicit preference"
   assert.equal((await preferring.selectInputModality!(both as never, { profile: preferring } as never)).materialization?.id, "urn:material:shortcut");
 });
 
-test("requireMaterialization false allows adapters with direct commands", async () => {
+test("requireMaterialization false allows executors with direct commands", async () => {
   const touch = inputModalityProfile({ id: "touch", modalityPreference: ["urn:openuji:input:touch-tap"], requireMaterialization: false });
   const decision = await touch.selectInputModality!(withModalities(["urn:openuji:input:touch-tap"], []) as never, { profile: touch } as never);
   assert.equal(decision.modality.id, "urn:openuji:input:touch-tap");

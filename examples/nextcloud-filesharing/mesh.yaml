@@ -18,7 +18,7 @@ runtimeObservers:
           path: /var/www/html/data/nextcloud.log
 services:
   web-stack:
-    use: "@openuji/journey-driver-nextcloud/stack/service"
+    use: "@openuji/journey-vendor-nextcloud/stack/service"
     options:
       project: ${NEXTCLOUD_WEB_STACK_PROJECT:-journey-mesh-filesharing-web}
       composeFiles: &compose-files
@@ -57,7 +57,7 @@ services:
         - federation
         - files_sharing
   android-stack:
-    use: "@openuji/journey-driver-nextcloud/stack/service"
+    use: "@openuji/journey-vendor-nextcloud/stack/service"
     options:
       project: ${NEXTCLOUD_ANDROID_STACK_PROJECT:-journey-mesh-filesharing-android}
       composeFiles: *compose-files
@@ -93,7 +93,7 @@ services:
           password: *bob-password
       enabledApps: *enabled-apps
   android:
-    use: "@openuji/journey-driver-android/service"
+    use: "@openuji/journey-platform-android/service"
     options:
       api: 35
       avd: ${ANDROID_AVD_NAME:-journey-mesh-api35}
@@ -107,7 +107,7 @@ services:
       requiredPackages:
         - com.android.chrome
   appium:
-    use: "@openuji/journey-adapter-appium/service"
+    use: "@openuji/journey-executor-appium/service"
     dependsOn:
       - android
     options:
@@ -131,19 +131,19 @@ tests:
       - id: alice-setup
         source: ./ujg/setup.web.ujg.jsonld
         select: urn:journey:alice-web-setup
-        adapter: web
+        executor: web
       - id: bob-setup
         source: ./ujg/setup.web.ujg.jsonld
         select: urn:journey:bob-web-setup
-        adapter: web
+        executor: web
       - id: alice-offers
         source: ./ujg/filesharing.ujg.jsonld
         select: urn:journey:alice-federated-sharing
-        adapter: web
+        executor: web
       - id: bob-accepts
         source: ./ujg/filesharing.ujg.jsonld
         select: urn:journey:bob-remote-share
-        adapter: web
+        executor: web
     profiles:
       - id: default
         journeys:
@@ -158,7 +158,7 @@ tests:
           alice-offers: keyboard
           bob-accepts: keyboard
     environment:
-      use: "@openuji/journey-driver-nextcloud/federated-sharing/plugin"
+      use: "@openuji/journey-vendor-nextcloud/federated-sharing/plugin"
       options:
         sharerTouchpoint: &web-alice
           baseURL: *web-alice-url
@@ -183,7 +183,7 @@ tests:
       - android-stack
     timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-600000}
     environment:
-      use: "@openuji/journey-driver-nextcloud/federated-sharing/plugin"
+      use: "@openuji/journey-vendor-nextcloud/federated-sharing/plugin"
       options:
         sharerTouchpoint: &android-alice
           baseURL: *android-alice-url
@@ -201,19 +201,19 @@ tests:
       - id: alice-setup
         source: ./ujg/setup.web.ujg.jsonld
         select: urn:journey:alice-web-setup
-        adapter: web-native
+        executor: web-native
       - id: bob-setup
         source: ./ujg/setup.android.ujg.jsonld
         select: urn:journey:bob-android-setup
-        adapter: android
+        executor: android
       - id: alice-offers
         source: ./ujg/filesharing.ujg.jsonld
         select: urn:journey:alice-federated-sharing
-        adapter: web-native
+        executor: web-native
       - id: bob-accepts
         source: ./ujg/filesharing.android.ujg.jsonld
         select: urn:journey:bob-remote-share
-        adapter: android
+        executor: android
     profiles:
       - id: default-web-touch-android
         journeys:
@@ -227,9 +227,9 @@ tests:
           bob-setup: touch
           alice-offers: keyboard
           bob-accepts: touch
-adapters:
+executors:
   web:
-    use: "@openuji/journey-adapter-playwright/plugin"
+    use: "@openuji/journey-executor-playwright/plugin"
     options:
       browser: chromium
       headless: ${HEADLESS:-true}
@@ -240,8 +240,8 @@ adapters:
           path: ./.tmp/diagnostics/alice-sharing.har
           urlFilter: "**/ocs/v2.php/apps/files_sharing/api/v1/shares**"
           content: embed
-    driver:
-      use: "@openuji/journey-driver-nextcloud/web/plugin"
+    client:
+      use: "@openuji/journey-vendor-nextcloud/web/plugin"
       options:
         touchpoints:
           urn:touchpoint:nextcloud-a: *web-alice
@@ -277,15 +277,15 @@ adapters:
           excludedPhaseIds:
             - urn:phase:setup
   web-native:
-    use: "@openuji/journey-adapter-playwright/plugin"
+    use: "@openuji/journey-executor-playwright/plugin"
     options:
       browser: chromium
       headless: ${HEADLESS:-true}
       actionTimeoutMs: 30000
       navigationTimeoutMs: 30000
       contextOptions: *sharing-browser-context
-    driver:
-      use: "@openuji/journey-driver-nextcloud/web/plugin"
+    client:
+      use: "@openuji/journey-vendor-nextcloud/web/plugin"
       options:
         touchpoints: &android-touchpoints
           urn:touchpoint:nextcloud-a: *android-alice
@@ -319,7 +319,7 @@ adapters:
           excludedPhaseIds:
             - urn:phase:setup
   android:
-    use: "@openuji/journey-adapter-appium/plugin"
+    use: "@openuji/journey-executor-appium/plugin"
     options:
       endpoint: ${APPIUM_URL:-http://127.0.0.1:4723/}
       assertionTimeoutMs: 60000
@@ -334,8 +334,8 @@ adapters:
       devices:
         urn:touchpoint:nextcloud-b:
           udid: ${ANDROID_UDID}
-    driver:
-      use: "@openuji/journey-driver-nextcloud/android/plugin"
+    client:
+      use: "@openuji/journey-vendor-nextcloud/android/plugin"
       options:
         touchpoints: *android-touchpoints
         users: *users

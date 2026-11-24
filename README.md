@@ -88,8 +88,8 @@ applicability and select model-declared input modalities. Adapters translate
 operations and selected modalities into execution commands, assert expected
 states, and own their execution resources and cleanup.
 
-An adapter can itself be a composition: `routedAdapter(...)` selects a child
-adapter for each operation, while `touchpointAdapter(...)` offers routing by
+An adapter can itself be a composition: `routedExecutor(...)` selects a child
+adapter for each operation, while `touchpointExecutor(...)` offers routing by
 touchpoint. Profiles can likewise be composed for different parts of a journey.
 This lets one run span different execution mechanisms without putting their
 commands into the runner.
@@ -283,7 +283,7 @@ replaced. The findings go to `<outputDir>/discover/materializations.json`, and
 the discovery run record goes to `<outputDir>/discover/run/`. The exit status is
 1 when a test failed, a path was not found, or two profiles found different
 paths. `test` never discovers. The
-[Playwright adapter](packages/journey-adapter-playwright/README.md#finding-paths)
+[Playwright adapter](packages/journey-executor-playwright/README.md#finding-paths)
 describes how paths are found.
 
 Rendering is done by apps, for example
@@ -322,19 +322,19 @@ only configured input names. See [service composition](docs/service-composition.
 for the plugin API migration and resource ownership rules.
 
 ```ts
-import { defineObserverPlugin, knownOptions, requiredString } from "@openuji/journey-plugin";
-import { playwrightAutomation } from "@openuji/journey-adapter-playwright";
+import { defineExecutorObserverPlugin, knownOptions, requiredString } from "@openuji/journey-plugin";
+import { playwrightObservationContract } from "@openuji/journey-executor-playwright";
 
-export const journeyMeshPlugin = defineObserverPlugin({
-  kind: "observer", automation: playwrightAutomation,
+export const journeyMeshPlugin = defineExecutorObserverPlugin({
+  kind: "executor-observer", observationContract: playwrightObservationContract,
   parse(options) { knownOptions(options, ["id"]); return { id: requiredString(options.id, "id") }; },
   create({ id }) { const observer = myObserver(id); return { observer, output: ({ result }) => observer.output(result) }; }
 });
 ```
 
-Kinds are `model`, `adapter`, `driver`, `observer`, `profile`, `environment`
-and `service`. Driver and automation contracts are typed, so an adapter receives
-its driver and observers without casts. Reporting extensions are not plugins of
+Kinds are `model`, `executor`, `client`, `executor-observer`, `runtime-observer`,
+`profile`, `environment` and `service`. Client and observation contracts are typed,
+so an executor receives its client and observers without casts. Reporting extensions are not plugins of
 the run: an observer's report-side code is an interpreter module exporting
 `journeyMeshInterpreter` (see [report model](docs/report-model.md)).
 
@@ -441,7 +441,7 @@ The roadmap is proposed and is not a delivery commitment.
 
 ## UJG Citation
 
-The compiler and bundled JSON-LD models target [UJG 1.0 Release Candidate 4](https://ujg.specs.openuji.org/tr/1.0-rc4), published 2026-11-21 by the [W3C User Journey Graph Community Group](https://www.w3.org/groups/cg/ujg/). The document contexts select an isolated compiler implementation. See the [UJG compiler contract](packages/journey-model-ujg/README.md) for imports, supported lowering, and RC4 Operability output. The [Playwright adapter](packages/journey-adapter-playwright/README.md) performs keyboard and pointer transitions only through the declared `TransitionMaterialization` steps, with keys from `mesh.yaml`. RC3 documents require an earlier mesh release until migrated.
+The compiler and bundled JSON-LD models target [UJG 1.0 Release Candidate 4](https://ujg.specs.openuji.org/tr/1.0-rc4), published 2026-11-21 by the [W3C User Journey Graph Community Group](https://www.w3.org/groups/cg/ujg/). The document contexts select an isolated compiler implementation. See the [UJG compiler contract](packages/journey-model-ujg/README.md) for imports, supported lowering, and RC4 Operability output. The [Playwright adapter](packages/journey-executor-playwright/README.md) performs keyboard and pointer transitions only through the declared `TransitionMaterialization` steps, with keys from `mesh.yaml`. RC3 documents require an earlier mesh release until migrated.
 
 ## Maintainers / Contact
 

@@ -70,7 +70,7 @@ The web adapter installs its own pinned Chromium build automatically, the
 first time any browser-based test launches one; there is no separate install
 step. On Linux, if that first launch fails because Chromium can't start,
 install its system dependencies once with
-`pnpm --filter @openuji/journey-adapter-playwright exec playwright install --with-deps chromium`.
+`pnpm --filter @openuji/journey-executor-playwright exec playwright install --with-deps chromium`.
 
 Native execution additionally requires a current Android Studio installation and
 an `ANDROID_HOME` (or `ANDROID_SDK_ROOT`) pointing at its SDK. The lifecycle
@@ -81,7 +81,7 @@ supported on Apple Silicon and Intel macOS, and x86-64 Linux.
 ## Nextcloud infrastructure
 
 `mesh.yaml` declares two instances of
-`@openuji/journey-driver-nextcloud/stack/service`. Each test starts its selected
+`@openuji/journey-vendor-nextcloud/stack/service`. Each test starts its selected
 stack once, runs all profiles, and removes its containers and volumes afterward,
 including after failures and cancellation. The fixture environment creates and
 cleans the shared file per profile; no separate provisioning or seeding command
@@ -160,7 +160,7 @@ pnpm android:up
 pnpm appium:up
 ```
 
-`android:up` runs the `@openuji/journey-driver-android/service` plugin, installs
+`android:up` runs the `@openuji/journey-platform-android/service` plugin, installs
 missing platform tools, emulator, command-line tools, and the host-native
 Google APIs API 35 image. It creates or validates the dedicated Pixel 6 AVD
 `journey-mesh-api35`, boots headlessly, disables animations, and writes the
@@ -172,7 +172,7 @@ device profile match the pins. These device pins — `api`, `avd`, `image`,
 `mesh.yaml`'s `services.android.options`; there is no separate manifest file.
 
 `appium:up` includes its Android dependency, then runs the
-`@openuji/journey-adapter-appium/service` plugin, verifies the device, installs the pinned UiAutomator2 driver into a versioned repository
+`@openuji/journey-executor-appium/service` plugin, verifies the device, installs the pinned UiAutomator2 driver into a versioned repository
 cache, starts Appium on port 4723, waits for readiness, and writes
 `.runtime/appium.env`. It neither starts Nextcloud nor runs a journey — nor
 does it download the Nextcloud APK; the Appium adapter does that when its first
@@ -268,7 +268,7 @@ resumes the Files activity and refreshes its notification status. This keeps the
 entry contract explicit when the app was already open during Alice's steps.
 Selecting an adapter does not translate web
 locators into native ones. See the [native journey model](ujg/filesharing.android.ujg.jsonld)
-and [Android driver](../../packages/journey-driver-nextcloud/src/android.ts).
+and [Android driver](../../packages/journey-vendor-nextcloud/src/android.ts).
 
 With `NEXTCLOUD_ANDROID_STACK_HOST` configured and Android and Appium ready,
 select the YAML test; its Nextcloud stack starts automatically:
@@ -326,7 +326,7 @@ values, `outputDir` selects the report root, and `services` declare optional
 infrastructure lifecycles. Changing journey and adapter selections changes where
 execution runs; there are no platform-specific runner files.
 
-`@openuji/journey-driver-nextcloud/federated-sharing/plugin` owns fixture cleanup,
+`@openuji/journey-vendor-nextcloud/federated-sharing/plugin` owns fixture cleanup,
 fixture creation, and OCS/WebDAV effect checks. This example supplies only the
 service/account values, fixture path/name, and journey effect IDs in YAML. UI
 entry routes and transition values are likewise YAML data interpreted by driver

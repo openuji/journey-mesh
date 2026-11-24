@@ -5,9 +5,9 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { executionDescriptor, runJourney, type JourneyPlan } from "@openuji/journey-runner";
-import { playwrightAdapterName } from "@openuji/journey-adapter-playwright";
+import { playwrightExecutorName } from "@openuji/journey-executor-playwright";
 import { fileEvidenceStore } from "@openuji/journey-run-record/node";
-import { axeAdapterName, axeObserver, isAxeOutput } from "../src/index.js";
+import { axeExecutorName, axeObserver, isAxeOutput } from "../src/index.js";
 import { collectAxeEvidence } from "../src/observer/collect-evidence.js";
 
 test("excluded phases append frozen not-applicable evidence before capture or audit", async () => {
@@ -68,7 +68,7 @@ test("axe captures standalone evidence without Playwright TestInfo, example fixt
   } as never);
   const result = await runJourney({
     plan: { id: plan.id, operations: [] }, profiles: [profile], runId: "standalone",
-    adapter: { name: "fixture", createExecution() { return { start() {}, close() {}, openEntry() {}, assertState() {}, performTransition() {}, recordControlFlow() {} }; } }
+    executor: { name: "fixture", createSession() { return { start() {}, close() {}, openEntry() {}, assertState() {}, performTransition() {}, recordControlFlow() {} }; } }
   });
   const output = observer.output(result);
   assert.ok(isAxeOutput(output));
@@ -79,6 +79,6 @@ test("axe captures standalone evidence without Playwright TestInfo, example fixt
   for (const file of artifacts.files) await access(join(directory, file.href));
 });
 
-test("the adapter name in the evidence entry matches the Playwright adapter", () => {
-  assert.equal(axeAdapterName, playwrightAdapterName);
+test("the executor name in the evidence entry matches the Playwright executor", () => {
+  assert.equal(axeExecutorName, playwrightExecutorName);
 });

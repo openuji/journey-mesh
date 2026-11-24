@@ -4,7 +4,7 @@
  */
 export type * from "./evidence.js";
 export type * from "./hierarchy.js";
-export { androidAccessibilityFindings, androidAccessibilityKind, androidAdapterName, assessAndroidOperations } from "./classify.js";
+export { androidAccessibilityFindings, androidAccessibilityKind, androidExecutorName, assessAndroidOperations } from "./classify.js";
 export type { AndroidOperationAssessment } from "./classify.js";
 export { isAndroidAccessibilityOutput } from "./output.js";
 export type { AndroidAccessibilityObserverOutput, AndroidRecordedEvidence } from "./output.js";

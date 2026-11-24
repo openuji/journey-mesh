@@ -1,0 +1,220 @@
+{
+  "format": "journey-mesh/run/test",
+  "version": 2,
+  "id": "mixed",
+  "ok": true,
+  "segments": [
+    {
+      "id": "alice",
+      "journeyId": "urn:journey:alice",
+      "executor": "web"
+    },
+    {
+      "id": "bob",
+      "journeyId": "urn:journey:bob",
+      "executor": "android"
+    }
+  ],
+  "views": {},
+  "plan": {
+    "id": "mixed",
+    "operations": [
+      {
+        "actorId": "alice",
+        "touchpointId": "web",
+        "entry": {
+          "id": "web-entry",
+          "stateId": "web-arrival"
+        },
+        "segment": "alice",
+        "id": "web-arrival",
+        "sequence": 0,
+        "kind": "state",
+        "state": {
+          "id": "web-arrival",
+          "label": "Web arrival"
+        },
+        "surface": {
+          "id": "web-surface"
+        },
+        "target": {
+          "bindings": [],
+          "expectedMatchCount": 0,
+          "observation": {
+            "stateId": "web-arrival",
+            "surfaceId": "web-surface",
+            "bindings": [],
+            "expectedMatchCount": 0
+          }
+        }
+      },
+      {
+        "actorId": "bob",
+        "touchpointId": "android",
+        "entry": {
+          "id": "android-entry",
+          "stateId": "native-arrival"
+        },
+        "segment": "bob",
+        "id": "native-arrival",
+        "sequence": 1,
+        "kind": "state",
+        "state": {
+          "id": "native-arrival",
+          "label": "Native arrival"
+        },
+        "surface": {
+          "id": "android-surface"
+        },
+        "target": {
+          "bindings": [],
+          "expectedMatchCount": 0,
+          "observation": {
+            "stateId": "native-arrival",
+            "surfaceId": "android-surface",
+            "bindings": [],
+            "expectedMatchCount": 0
+          }
+        }
+      },
+      {
+        "actorId": "alice",
+        "touchpointId": "web",
+        "entry": {
+          "id": "web-entry",
+          "stateId": "web-completion"
+        },
+        "segment": "alice",
+        "id": "web-completion",
+        "sequence": 2,
+        "kind": "state",
+        "state": {
+          "id": "web-completion",
+          "label": "Web completion"
+        },
+        "surface": {
+          "id": "web-surface"
+        },
+        "target": {
+          "bindings": [],
+          "expectedMatchCount": 0,
+          "observation": {
+            "stateId": "web-completion",
+            "surfaceId": "web-surface",
+            "bindings": [],
+            "expectedMatchCount": 0
+          }
+        }
+      },
+      {
+        "actorId": "alice",
+        "touchpointId": "web",
+        "entry": {
+          "id": "web-entry",
+          "stateId": "custom-check"
+        },
+        "segment": "alice",
+        "id": "custom-check",
+        "sequence": 3,
+        "kind": "state",
+        "state": {
+          "id": "custom-check",
+          "label": "Custom check"
+        },
+        "surface": {
+          "id": "web-surface"
+        },
+        "target": {
+          "bindings": [],
+          "expectedMatchCount": 0,
+          "observation": {
+            "stateId": "custom-check",
+            "surfaceId": "web-surface",
+            "bindings": [],
+            "expectedMatchCount": 0
+          }
+        }
+      }
+    ]
+  },
+  "result": {
+    "ok": true,
+    "runId": "run",
+    "plan": {
+      "id": "mixed"
+    },
+    "errors": [],
+    "assessments": [
+      {
+        "kind": "applicable",
+        "profile": {
+          "id": "default"
+        }
+      }
+    ],
+    "executions": [
+      {
+        "executionId": "execution",
+        "profileId": "default",
+        "outcome": {
+          "kind": "passed"
+        }
+      }
+    ],
+    "evidence": {
+      "executions": [
+        {
+          "executionId": "execution",
+          "profileId": "default",
+          "operations": [
+            {
+              "operationId": "web-arrival",
+              "operationKind": "state",
+              "executor": {
+                "name": "@openuji/journey-executor-playwright",
+                "version": "0.1.0"
+              },
+              "outcome": {
+                "kind": "passed"
+              }
+            },
+            {
+              "operationId": "native-arrival",
+              "operationKind": "state",
+              "executor": {
+                "name": "@openuji/journey-executor-appium",
+                "version": "0.1.0"
+              },
+              "outcome": {
+                "kind": "passed"
+              }
+            },
+            {
+              "operationId": "web-completion",
+              "operationKind": "state",
+              "executor": {
+                "name": "@openuji/journey-runner/routed-executor"
+              },
+              "outcome": {
+                "kind": "passed"
+              }
+            },
+            {
+              "operationId": "custom-check",
+              "operationKind": "state",
+              "executor": {
+                "name": "@example/journey-custom-adapter"
+              },
+              "outcome": {
+                "kind": "passed"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "observers": [],
+  "observerErrors": [],
+  "files": []
+}

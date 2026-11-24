@@ -14,9 +14,9 @@ resolved materialization steps are already in the test record's plan, so the
 evidence stores only IRIs and commands.
 
 ```yaml
-adapters:
+executors:
   web:
-    use: "@openuji/journey-adapter-playwright/plugin"
+    use: "@openuji/journey-executor-playwright/plugin"
     observers:
       - use: "@openuji/journey-observer-operability/plugin"
         options:

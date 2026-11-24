@@ -31,7 +31,7 @@ const operation = {
 
 /** A recorded keyboard-only run whose arrow key did not move focus, with real operability observer evidence. */
 function recordedTest(): TestRecord {
-  const execution = { runId: "run", executionId: "keyboard-only", profile: { id: "keyboard-only" }, adapter: { name: "playwright" } };
+  const execution = { runId: "run", executionId: "keyboard-only", profile: { id: "keyboard-only" }, executor: { name: "playwright" } };
   const observer = operabilityObserver({ id: "input-steps" });
   observer.observeOperation!({ stage: "transition-ready", execution, operation, decision: { profileId: "keyboard-only", inputModalityProfile: { id: "urn:input-profile:keyboard", modalities: [keyboard] }, modality: keyboard, materialization } } as never);
   const action = (id: string, stepId: string, status: "completed" | "failed", gesture: string, error?: string) =>
@@ -46,7 +46,7 @@ function recordedTest(): TestRecord {
     evidence: { executions: [{ executionId: "keyboard-only", profileId: "keyboard-only", operations: [{ operationId: "select-drafts", operationKind: "transition" as const, outcome: { kind: "failed" as const, error: failure } }] }] }
   };
   return {
-    format: testRecordFormat, version: 1, id: "pages", ok: false, segments: [], views: {}, plan: { id: "plan", operations: [operation] },
+    format: testRecordFormat, version: 2, id: "pages", ok: false, segments: [], views: {}, plan: { id: "plan", operations: [operation] },
     result, observers: [observer.output(result as never)], observerErrors: [], files: []
   };
 }

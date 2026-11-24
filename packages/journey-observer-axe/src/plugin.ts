@@ -1,9 +1,9 @@
-import { playwrightAutomation } from "@openuji/journey-adapter-playwright";
-import { booleanOption, defineObserverPlugin, knownOptions, optionsObject, positiveNumber, requiredString, stringArray } from "@openuji/journey-plugin";
+import { playwrightObservationContract } from "@openuji/journey-executor-playwright";
+import { booleanOption, defineExecutorObserverPlugin, knownOptions, optionsObject, positiveNumber, requiredString, stringArray } from "@openuji/journey-plugin";
 import { axeObserver } from "./index.js";
 
-export const journeyMeshPlugin = defineObserverPlugin({
-  kind: "observer", automation: playwrightAutomation,
+export const journeyMeshPlugin = defineExecutorObserverPlugin({
+  kind: "executor-observer", observationContract: playwrightObservationContract,
   parse(options) {
     knownOptions(options, ["reportId", "strict", "tags", "sourceScreenshots", "evidenceTimeoutMs", "excludedPhaseIds"]);
     const screenshots = options.sourceScreenshots === undefined ? undefined : optionsObject(options.sourceScreenshots, "sourceScreenshots");

@@ -40,7 +40,7 @@ test("compiler returns a detached deeply frozen plan with immutable setup metada
   assert.throws(() => Object.assign(plan.operations[0]!, { actorId: "changed" }), TypeError);
 });
 
-test("CustomLocator extensions remain opaque, detached data for adapter interpretation", async () => {
+test("CustomLocator extensions remain opaque, detached data for executor interpretation", async () => {
   const input = structuredClone(document);
   const locator = input.nodes.find((node) => node["@id"] === "urn:locator")!;
   locator["@type"] = "CustomLocator";

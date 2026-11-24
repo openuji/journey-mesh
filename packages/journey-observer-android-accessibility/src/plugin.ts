@@ -1,9 +1,9 @@
-import { appiumAutomation } from "@openuji/journey-adapter-appium";
-import { booleanOption, defineObserverPlugin, knownOptions, requiredString, stringArray } from "@openuji/journey-plugin";
+import { appiumAndroidObservationContract } from "@openuji/journey-executor-appium";
+import { booleanOption, defineExecutorObserverPlugin, knownOptions, requiredString, stringArray } from "@openuji/journey-plugin";
 import { androidAccessibilityObserver } from "./index.js";
 
-export const journeyMeshPlugin = defineObserverPlugin({
-  kind: "observer", automation: appiumAutomation,
+export const journeyMeshPlugin = defineExecutorObserverPlugin({
+  kind: "executor-observer", observationContract: appiumAndroidObservationContract,
   parse(options) {
     knownOptions(options, ["reportId", "strict", "screenshots", "excludedPhaseIds"]);
     return {

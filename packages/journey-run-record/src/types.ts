@@ -5,18 +5,23 @@ import type { JourneyArtifact, SourceIdentity } from "@openuji/journey-plugin";
 
 export const runRecordFormat = "journey-mesh/run";
 export const testRecordFormat = "journey-mesh/run/test";
+/**
+ * The format version written today. Version 2 renamed the executing component from `adapter` to
+ * `executor`; the reader still accepts version 1 and normalizes it (see `legacy.ts`).
+ */
+export const runRecordVersion = 2;
 
 /** A file registered during a run. `href` is relative to the run directory. */
 export type EvidenceFile = JourneyArtifact;
-/** One configured journey of a test, the adapter that ran it, and the key of its model snapshot. */
-export type JourneySegment = Readonly<{ id: string; journeyId: string; adapter: string; view?: string }>;
+/** One configured journey of a test, the executor that ran it, and the key of its model snapshot. */
+export type JourneySegment = Readonly<{ id: string; journeyId: string; executor: string; view?: string }>;
 /** A snapshot of the journey model document a test was compiled from, recorded with the run. */
 export type JourneyView = Readonly<{ format: string; document: unknown }>;
 
 /** Everything one test executed and observed. No presentation data and no report options. */
 export type TestRecord = Readonly<{
   format: typeof testRecordFormat;
-  version: 1;
+  version: typeof runRecordVersion;
   id: string;
   /** The verdict: see `testPassed`. */
   ok: boolean;
@@ -35,7 +40,7 @@ export type TestEntry = Readonly<{ id: string; ok: boolean; href: string }>;
 /** The index of a run directory (`run.json`). */
 export type RunRecord = Readonly<{
   format: typeof runRecordFormat;
-  version: 1;
+  version: typeof runRecordVersion;
   label?: string;
   target?: SourceIdentity;
   ok: boolean;

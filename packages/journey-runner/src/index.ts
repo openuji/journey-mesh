@@ -5,8 +5,8 @@ export {
 } from "./observers/contracts.js";
 export { errorToJourneyRunError } from "./errors.js";
 export { runJourney } from "./run-journey.js";
-export { routedAdapter } from "./adapters/routed-adapter.js";
-export { touchpointAdapter } from "./adapters/touchpoint-adapter.js";
+export { routedExecutor } from "./executors/routed-executor.js";
+export { touchpointExecutor } from "./executors/touchpoint-executor.js";
 export { executionPassed } from "./results/outcomes.js";
 
 export type {
@@ -40,15 +40,15 @@ export type {
 } from "@openuji/journey-execution-model";
 export type { JourneyRunError } from "./errors.js";
 export type {
-  AdapterExecutionContext,
-  JourneyAdapter,
-  JourneyAdapterCloseInput,
-  JourneyAdapterExecution,
-  JourneyAdapterExecutionInput,
+  ExecutorSessionContext,
+  JourneyExecutor,
+  JourneyExecutorCloseInput,
+  JourneyExecutorSession,
+  JourneyExecutorSessionInput,
   JourneyExecutionContext,
   JourneyProfile
-} from "./adapters/contracts.js";
-export type { JourneyTouchpointAdapters } from "./adapters/touchpoint-adapter.js";
+} from "./executors/contracts.js";
+export type { JourneyTouchpointExecutors } from "./executors/touchpoint-executor.js";
 export type { RunJourneyOptions } from "./run-journey.js";
 export type {
   JourneyComponentDescriptor,

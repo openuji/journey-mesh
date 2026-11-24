@@ -16,10 +16,10 @@
       "path": "packages/journey-execution-model/tsconfig.json"
     },
     {
-      "path": "packages/journey-driver-web/tsconfig.json"
+      "path": "packages/journey-platform-web/tsconfig.json"
     },
     {
-      "path": "packages/journey-driver-android/tsconfig.json"
+      "path": "packages/journey-platform-android/tsconfig.json"
     },
     {
       "path": "packages/journey-runner/tsconfig.json"
@@ -31,16 +31,16 @@
       "path": "packages/journey-profiles/tsconfig.json"
     },
     {
-      "path": "packages/journey-adapter-playwright/tsconfig.json"
+      "path": "packages/journey-executor-playwright/tsconfig.json"
     },
     {
-      "path": "packages/journey-driver-nextcloud/tsconfig.json"
+      "path": "packages/journey-vendor-nextcloud/tsconfig.json"
     },
     {
       "path": "packages/journey-observer-axe/tsconfig.json"
     },
     {
-      "path": "packages/journey-adapter-appium/tsconfig.json"
+      "path": "packages/journey-executor-appium/tsconfig.json"
     },
     {
       "path": "packages/journey-observer-android-accessibility/tsconfig.json"

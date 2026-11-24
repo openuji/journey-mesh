@@ -23,9 +23,9 @@ export type AccessibleFeature = LabeledRef & {
 };
 
 export type ResolvedAccessibleLocator = LabeledRef & {
-  /** Opaque CustomLocator extensions, interpreted only by a compatible adapter. */
+  /** Opaque CustomLocator extensions, interpreted only by a compatible executor. */
   extensions?: Readonly<Record<string, unknown>>;
-  /** Model role identifier. Adapters map its vocabulary to their runtime or reject it. */
+  /** Model role identifier. Executors map its vocabulary to their runtime or reject it. */
   role?: string;
   accessibleName?: string;
   accessibleDescription?: string;
@@ -40,7 +40,7 @@ export const keyboardInputModalityId = "observability:keyboard" as const;
 export const keyboardTextEntryInputModalityId = "urn:openuji:input-modality:keyboard-text-entry" as const;
 export const pointerInputModalityId = "observability:pointer" as const;
 
-/** Operability move kinds that adapters perform and that discovery reports. */
+/** Operability move kinds that executors perform and that discovery reports. */
 export const nextStopMoveKindId = "operability:nextStop" as const;
 export const previousStopMoveKindId = "operability:previousStop" as const;
 export const firstItemMoveKindId = "operability:firstItem" as const;
@@ -193,7 +193,7 @@ export type TransitionPlanOperation = JourneyPlanOperationBase<"transition"> & {
   activation: ResolvedTransitionActivation;
   /**
    * Declared alternatives. A profile chooses at most one for its selected modality and passes it
-   * in the InputModalityDecision; adapters perform only that chain and never derive missing steps.
+   * in the InputModalityDecision; executors perform only that chain and never derive missing steps.
    */
   materializations?: readonly ResolvedTransitionMaterialization[];
   effects: readonly ResolvedEffect[];

@@ -16,15 +16,15 @@ async function setup() {
   const config = {
     kind: "suite", outputDir: "reports", model: { use: fixture("model") },
     profiles: { basic: { use: fixture("profile") } },
-    adapters: {
-      first: { use: fixture("adapter"), options: { name: "first-provider", log: "events.jsonl" }, observers: [{ use: fixture("observer"), options: {} }] },
-      second: { use: fixture("adapter"), options: { name: "second-provider", log: "events.jsonl" }, observers: [] }
+    executors: {
+      first: { use: fixture("executor"), options: { name: "first-provider", log: "events.jsonl" }, observers: [{ use: fixture("executor-observer"), options: {} }] },
+      second: { use: fixture("executor"), options: { name: "second-provider", log: "events.jsonl" }, observers: [] }
     },
     tests: {
       sharing: {
         journeys: [
-          { id: "alice", source: "model.json", select: "alice", adapter: "first" },
-          { id: "bob", source: "model.json", select: "bob", adapter: "second" }
+          { id: "alice", source: "model.json", select: "alice", executor: "first" },
+          { id: "bob", source: "model.json", select: "bob", executor: "second" }
         ],
         profiles: [{ id: "default", journeys: { alice: "basic", bob: "basic" } }],
         environment: { use: fixture("environment"), options: { log: "events.jsonl" } }, timeoutMs: 5_000
@@ -71,8 +71,8 @@ test("independent plugins compose ordered journeys sharing a touchpoint, fixture
   assert.equal(JSON.stringify(saved).includes("nodes"), false);
 });
 
-test("same named adapter is shared while separate definitions remain isolated", async () => {
-  const suite = await setup(); suite.config.tests.sharing.journeys[1].adapter = "first"; await suite.save();
+test("same named executor is shared while separate definitions remain isolated", async () => {
+  const suite = await setup(); suite.config.tests.sharing.journeys[1].executor = "first"; await suite.save();
   assert.equal((await runSuite(suite.path)).ok, true);
   const events = await suite.events();
   assert.equal(events.filter((event) => event.event === "start").length, 1);
@@ -108,10 +108,10 @@ test("every evidence store writes below its own prefix of the run directory", as
 
 test("failed journey stops its profile, retains cleanup/report failures, and independent tests continue", async () => {
   const suite = await setup();
-  Object.assign(suite.config.adapters.first.options, { fail: "alice", failClose: true });
+  Object.assign(suite.config.executors.first.options, { fail: "alice", failClose: true });
   Object.assign(suite.config.tests.sharing.environment.options, { failTeardown: true });
   const second = structuredClone(suite.config.tests.sharing);
-  second.journeys = [{ id: "bob", source: "model.json", select: "bob", adapter: "second" }];
+  second.journeys = [{ id: "bob", source: "model.json", select: "bob", executor: "second" }];
   second.profiles = [{ id: "independent", journeys: { bob: "basic" } } as typeof second.profiles[number]];
   Object.assign(suite.config.tests, { independent: second }); await suite.save();
   const result = await runSuite(suite.path);
@@ -123,8 +123,8 @@ test("failed journey stops its profile, retains cleanup/report failures, and ind
   await access(join(suite.directory, "reports/run.json"));
 });
 
-test("partial adapter startup always closes children and tears down shared fixtures", async () => {
-  const suite = await setup(); Object.assign(suite.config.adapters.second.options, { failStart: true }); await suite.save();
+test("partial executor startup always closes children and tears down shared fixtures", async () => {
+  const suite = await setup(); Object.assign(suite.config.executors.second.options, { failStart: true }); await suite.save();
   assert.equal((await runSuite(suite.path)).ok, false);
   const events = await suite.events();
   assert.deepEqual(events.map((event) => event.event), ["setup", "start", "start", "close", "close", "teardown"]);
@@ -140,44 +140,78 @@ test("all selected tests preflight before any fixture mutation", async () => {
   assert.equal((await runSuite(suite.path, { test: "sharing" })).ok, true);
 });
 
-for (const scenario of ["missing adapter", "missing profile", "missing assignment", "duplicate item", "unsupported target", "wrong plugin kind", "wrong observer automation"] as const) {
+for (const scenario of ["missing executor", "missing profile", "missing assignment", "duplicate item", "unsupported target", "wrong plugin kind", "wrong observation contract"] as const) {
   test(`configuration rejects ${scenario} before setup`, async () => {
     const suite = await setup();
-    if (scenario === "missing adapter") suite.config.tests.sharing.journeys[1].adapter = "missing";
+    if (scenario === "missing executor") suite.config.tests.sharing.journeys[1].executor = "missing";
     if (scenario === "missing profile") suite.config.tests.sharing.profiles[0].journeys.bob = "missing";
     if (scenario === "missing assignment") delete (suite.config.tests.sharing.profiles[0].journeys as Record<string, string>).bob;
     if (scenario === "duplicate item") suite.config.tests.sharing.journeys[1].id = "alice";
-    if (scenario === "unsupported target") Object.assign(suite.config.adapters.second.options, { unsupported: "bob" });
-    if (scenario === "wrong plugin kind") suite.config.adapters.first.use = fixture("profile");
-    if (scenario === "wrong observer automation") {
-      suite.config.adapters.first.observers[0].use = resolve(root, "packages/journey-observer-axe/src/plugin.ts");
-      suite.config.adapters.first.observers[0].options = { reportId: "wrong-runtime" };
+    if (scenario === "unsupported target") Object.assign(suite.config.executors.second.options, { unsupported: "bob" });
+    if (scenario === "wrong plugin kind") suite.config.executors.first.use = fixture("profile");
+    if (scenario === "wrong observation contract") {
+      suite.config.executors.first.observers[0].use = resolve(root, "packages/journey-observer-axe/src/plugin.ts");
+      suite.config.executors.first.observers[0].options = { reportId: "wrong-runtime" };
     }
     await suite.save();
-    await assert.rejects(runSuite(suite.path), scenario === "wrong observer automation" ? /incompatible/ : { name: "JourneyConfigError" });
+    await assert.rejects(runSuite(suite.path), scenario === "wrong observation contract" ? /observation contract .* is incompatible/ : { name: "JourneyConfigError" });
+    await assert.rejects(access(join(suite.directory, "events.jsonl")));
+  });
+}
+
+for (const [scenario, expected] of [
+  ["adapters", /`adapters:` was renamed to `executors:`/],
+  ["adapter", /tests\.sharing\.journeys\[0\]\.`adapter:` was renamed to `executor:`/],
+  ["driver", /executors\.first\.`driver:` was renamed to `client:`/]
+] as const) {
+  test(`a configuration that uses the renamed key ${scenario}: is rejected and names its replacement`, async () => {
+    const suite = await setup();
+    const config = suite.config as Record<string, any>;
+    if (scenario === "adapters") { config.adapters = config.executors; delete config.executors; }
+    if (scenario === "adapter") { const item = config.tests.sharing.journeys[0]; item.adapter = item.executor; delete item.executor; }
+    if (scenario === "driver") config.executors.first.driver = { use: fixture("profile") };
+    await suite.save();
+    await assert.rejects(runSuite(suite.path), expected);
+    await assert.rejects(access(join(suite.directory, "events.jsonl")));
+  });
+}
+
+for (const [legacy, expected] of [
+  [{ kind: "adapter" }, /plugin kind `adapter` was renamed to `executor`/],
+  [{ kind: "driver" }, /plugin kind `driver` was renamed to `client`/],
+  [{ kind: "observer" }, /plugin kind `observer` was renamed to `executor-observer`/],
+  [{ kind: "executor-observer", automation: { id: "fixture" } }, /property `automation` was renamed to `observationContract`/]
+] as const) {
+  test(`a plugin declaring ${JSON.stringify(legacy)} is rejected and names its replacement`, async () => {
+    const suite = await setup();
+    const plugin = join(suite.directory, "legacy-plugin.mjs");
+    await writeFile(plugin, `export const journeyMeshPlugin = { ...${JSON.stringify(legacy)}, parse() { return {}; }, create() { return {}; } };\n`);
+    suite.config.executors.first.observers[0].use = plugin;
+    await suite.save();
+    await assert.rejects(runSuite(suite.path), expected);
     await assert.rejects(access(join(suite.directory, "events.jsonl")));
   });
 }
 
 test("relative paths and selected environment interpolation do not mutate process.env or expose values", async () => {
   const suite = await setup();
-  suite.config.adapters.first.options.name = "${PROVIDER}";
-  suite.config.adapters.second.options.name = "${UNUSED_ANDROID_SECRET}";
-  suite.config.tests.sharing.journeys[1].adapter = "first";
+  suite.config.executors.first.options.name = "${PROVIDER}";
+  suite.config.executors.second.options.name = "${UNUSED_ANDROID_SECRET}";
+  suite.config.tests.sharing.journeys[1].executor = "first";
   Object.assign(suite.config, { envFiles: ["defaults.env", { path: "optional.env", optional: true }] });
   await writeFile(join(suite.directory, "defaults.env"), "PROVIDER=from-file\n"); await suite.save();
   const result = await runSuite(suite.path, { env: { PROVIDER: "from-process" } });
   assert.equal(result.ok, true);
   assert.equal((await suite.events()).find((event) => event.event === "start")?.name, "from-process");
   assert.equal(process.env.PROVIDER, undefined);
-  await assert.rejects(validateSuite(suite.path, { env: { PROVIDER: "" } }), /Missing environment variable PROVIDER at adapters.first.options.name/);
+  await assert.rejects(validateSuite(suite.path, { env: { PROVIDER: "" } }), /Missing environment variable PROVIDER at executors.first.options.name/);
   await writeFile(suite.path, "kind: suite\nkind: suite\n");
   await assert.rejects(loadSuiteConfig(suite.path), /unique/);
 });
 
 test("timeouts interrupt pending operations and retain cleanup", async () => {
   const suite = await setup(); suite.config.tests.sharing.timeoutMs = 40;
-  Object.assign(suite.config.adapters.first.options, { delay: 100 }); await suite.save();
+  Object.assign(suite.config.executors.first.options, { delay: 100 }); await suite.save();
   const result = await runSuite(suite.path);
   assert.equal(result.ok, false); assert.match(result.tests[0].result.errors[0].message, /timeout/);
   const events = await suite.events();
@@ -188,7 +222,7 @@ test("timeouts interrupt pending operations and retain cleanup", async () => {
 
 test("late startup resources are released after cancellation", async () => {
   const suite = await setup(); suite.config.tests.sharing.timeoutMs = 30;
-  Object.assign(suite.config.adapters.first.options, { startDelay: 70 }); await suite.save();
+  Object.assign(suite.config.executors.first.options, { startDelay: 70 }); await suite.save();
   const result = await runSuite(suite.path); assert.equal(result.ok, false);
   await new Promise((done) => setTimeout(done, 100));
   assert.ok((await suite.events()).some((event) => event.event === "late-resource-released"));
@@ -287,11 +321,11 @@ test("managed services start dependencies once and clean up after partial startu
 test("operation aliases are resolved by the model binding before observers are created", async () => {
   const suite = await setup();
   Object.assign(suite.config.tests.sharing.journeys[0], { operations: { arrival: "same-operation-id" } });
-  suite.config.adapters.first.observers[0] = { use: resolve(root, "packages/journey-observer-ux/src/plugin.ts"), options: { id: "ux", counters: [{ id: "effort", label: "Effort", from: "alice.arrival", until: "alice.arrival" }] } };
+  suite.config.executors.first.observers[0] = { use: resolve(root, "packages/journey-observer-ux/src/plugin.ts"), options: { id: "ux", counters: [{ id: "effort", label: "Effort", from: "alice.arrival", until: "alice.arrival" }] } };
   // The UX observer's automation must match; this assertion proves validation happens before fixtures.
   await suite.save();
   await assert.rejects(validateSuite(suite.path), /incompatible/);
-  suite.config.adapters.first.observers = [];
+  suite.config.executors.first.observers = [];
   await suite.save();
   assert.deepEqual((await validateSuite(suite.path)).tests, ["sharing"]);
   Object.assign(suite.config.tests.sharing.journeys[0], { operations: { arrival: "unknown-operation" } }); await suite.save();
