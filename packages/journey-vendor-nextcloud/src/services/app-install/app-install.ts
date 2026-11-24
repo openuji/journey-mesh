@@ -3,6 +3,7 @@ import { join, posix } from "node:path";
 import { randomUUID } from "node:crypto";
 import { execute, type Command } from "@openuji/journey-service-git";
 import { startedService, sourceIdentity, type JourneyService, type SourceIdentity } from "@openuji/journey-plugin";
+import { composeCommand } from "@openuji/journey-service-docker/compose";
 import type { AppBuild, ManagedStack } from "../contracts.js";
 
 export type InstallOptions = Readonly<{ directory: string; services: readonly string[]; enable: boolean }>;
@@ -29,7 +30,7 @@ export function appInstall(options: InstallOptions, run: Command = execute, inpu
         await command(["create", "--name", container, app.image, "true"]);
         const exported = join(temporary, app.id);
         await command(["cp", `${container}:/opt/journey-app`, exported]);
-        const compose = ["compose", "--project-name", stack.project, "--env-file", stack.envFile, ...stack.composeFiles.flatMap((file) => ["-f", file])];
+        const compose = composeCommand(stack);
         for (const service of options.services) {
           const docker = (...args: string[]) => command([...compose, ...args]);
           const occ = (...args: string[]) => docker("exec", "-T", "-u", "www-data", service, "php", "occ", ...args);
