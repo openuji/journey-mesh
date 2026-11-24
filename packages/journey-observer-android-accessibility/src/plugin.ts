@@ -1,4 +1,4 @@
-import { appiumAndroidObservationContract } from "@openuji/journey-executor-appium";
+import { appiumAndroidObservationContract } from "@openuji/journey-executor-appium/observation";
 import { booleanOption, defineExecutorObserverPlugin, knownOptions, requiredString, stringArray } from "@openuji/journey-plugin";
 import { androidAccessibilityObserver } from "./index.js";
 

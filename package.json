@@ -38,6 +38,8 @@
     "@openuji/journey-environment-http": "workspace:*",
     "@openuji/journey-run-record": "workspace:*",
     "@openuji/journey-report-axe": "workspace:*",
-    "@openuji/journey-report-android": "workspace:*"
+    "@openuji/journey-report-android": "workspace:*",
+    "@openuji/journey-toolkit-android": "workspace:*",
+    "@openuji/journey-service-android": "workspace:*"
   }
 }

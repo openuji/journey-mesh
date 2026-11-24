@@ -1,4 +1,4 @@
-import type { PlaywrightOperationObservation } from "@openuji/journey-executor-playwright";
+import type { PlaywrightOperationObservation } from "@openuji/journey-executor-playwright/observation";
 import { errorToJourneyRunError } from "@openuji/journey-runner";
 
 import { createAxeJourneyItem } from "../journey/journey-item.js";

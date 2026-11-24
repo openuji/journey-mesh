@@ -1,4 +1,4 @@
-import type { AndroidDeviceMetrics, AppiumOperationObservation } from "@openuji/journey-executor-appium";
+import type { AndroidDeviceMetrics, AppiumOperationObservation } from "@openuji/journey-executor-appium/observation";
 import type { JourneyExecutionDescriptor, JourneyPlanOperation, JourneyRunError } from "@openuji/journey-runner";
 import type { AndroidHierarchy, AndroidHierarchyCheck } from "./hierarchy.js";
 import type { Immutable } from "@openuji/journey-core";

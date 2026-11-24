@@ -1,4 +1,4 @@
-import type { PlaywrightOperationObservation } from "@openuji/journey-executor-playwright";
+import type { PlaywrightOperationObservation } from "@openuji/journey-executor-playwright/observation";
 import type {
   JourneyExecutionDescriptor,
   JourneyRunError,

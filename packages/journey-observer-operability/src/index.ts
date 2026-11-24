@@ -2,7 +2,7 @@
  * Records how each transition was performed: the input decision a profile made and every executor
  * command, one per declared materialization step. It observes only; it never acts on the page.
  */
-import type { PlaywrightExecutionObserver } from "@openuji/journey-executor-playwright";
+import type { PlaywrightExecutionObserver } from "@openuji/journey-executor-playwright/observation";
 import { immutableSnapshot, type JourneyInputAction } from "@openuji/journey-core";
 import type { RunResult } from "@openuji/journey-runner";
 import {

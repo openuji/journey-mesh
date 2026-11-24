@@ -64,8 +64,8 @@ on temporary copies and may reuse Docker's cache.
 | `journey-vendor-nextcloud/stack/service` | none | `stack` |
 | `journey-vendor-nextcloud/stack-built/service` | `image` | `stack`, `identity` |
 | `journey-vendor-nextcloud/app-install/service` | `app`, `stack` | `identity` |
-| `journey-platform-android/apk-build/service` | `source`, optional `sibling` | `apk`, `identity` |
-| `journey-platform-android/service` | none | `devices` |
+| `journey-service-android/apk-build/service` | `source`, optional `sibling` | `apk`, `identity` |
+| `journey-service-android/emulator/service` | none | `devices` |
 | `journey-executor-appium/service` | optional `devices` | `server` |
 
 All package names in the table have the `@openuji/` prefix. App builds use the

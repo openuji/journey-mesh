@@ -1,7 +1,7 @@
-export * from "./service.js";
+export * from "./shared/ocs.js";
 export type {
   NextcloudTouchpointBinding,
   NextcloudTransitionValue,
   NextcloudTransitionValueSource,
   NextcloudUserBinding
-} from "./resolver.js";
+} from "./shared/resolver.js";

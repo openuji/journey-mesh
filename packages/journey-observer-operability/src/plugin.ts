@@ -1,4 +1,4 @@
-import { playwrightObservationContract } from "@openuji/journey-executor-playwright";
+import { playwrightObservationContract } from "@openuji/journey-executor-playwright/observation";
 import { defineExecutorObserverPlugin, knownOptions, requiredString } from "@openuji/journey-plugin";
 import { operabilityObserver } from "./index.js";
 

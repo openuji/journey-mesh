@@ -15,7 +15,6 @@
     "@openuji/journey-runner": "workspace:*",
     "@openuji/journey-executor-appium": "workspace:*",
     "@openuji/journey-platform-web": "workspace:*",
-    "@openuji/journey-platform-android": "workspace:*",
     "@openuji/journey-observer-android-accessibility": "workspace:*",
     "@openuji/journey-cli": "workspace:*",
     "@openuji/journey-host": "workspace:*",
@@ -23,7 +22,8 @@
     "@openuji/journey-report-axe": "workspace:*",
     "@openuji/journey-report-android": "workspace:*",
     "@openuji/journey-observer-operability": "workspace:*",
-    "@openuji/journey-report-operability": "workspace:*"
+    "@openuji/journey-report-operability": "workspace:*",
+    "@openuji/journey-service-android": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.20.3"
