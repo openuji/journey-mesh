@@ -1,7 +1,7 @@
 # Journey reporter
 
 The reporting layer. It derives aggregated report data from
-[run records](../../docs/run-record.md) and never loads a journey, adapter or
+[run records](../../docs/run-record.md) and never loads a journey, executor or
 observer runtime. It never changes a test verdict. It renders and publishes
 nothing; that is up to the apps that consume its
 [report model](../../docs/report-model.md).

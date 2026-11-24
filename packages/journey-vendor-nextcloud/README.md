@@ -1,12 +1,23 @@
-# Nextcloud driver
+# Nextcloud vendor integration
 
-`@openuji/journey-vendor-nextcloud` provides the Nextcloud services and drivers
-that journeys run against:
-- `stack/service`: a Nextcloud stack
-- `server-build/service`: a server image built from source
-- `app-build/service`: an app image built from source
-- `app-install/service`: installing a built app into a stack
-- web and Android drivers
+`@openuji/journey-vendor-nextcloud` groups everything Journey Mesh needs to run
+journeys against Nextcloud. It implements platform contracts and uses shared
+helpers; it contains no browser or device automation.
+
+| Entry | Kind | Source |
+| --- | --- | --- |
+| `web/plugin` | client for `webClientContract` | `src/web/` |
+| `android/plugin` | client for `androidClientContract` | `src/android/` |
+| `federated-sharing/plugin` | environment: fixtures and OCS/WebDAV effect checks | `src/environments/federated-sharing/` |
+| `stack/service`, `stack-built/service` | a Nextcloud stack on [`journey-service-docker/compose`](../../docs/service-composition.md#compose-stacks-for-any-vendor) | `src/services/stack/` |
+| `server-build/service` | a server image built from source | `src/services/` |
+| `app-build/service` | an app image built from source | `src/services/` |
+| `app-install/service` | installing a built app into a stack | `src/services/` |
+
+The clients resolve bindings with `@openuji/journey-plugin/client`; the stack
+adds only Nextcloud bootstrap (`occ`, apps, trusted domains, users) to the
+generic Compose lifecycle. Any executor of a client's platform can run it, and
+any executor observer attaches to the executor, not to this package.
 
 [Service composition](../../docs/service-composition.md) shows how they connect.
 

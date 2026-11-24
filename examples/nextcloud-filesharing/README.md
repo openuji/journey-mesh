@@ -5,7 +5,7 @@ transition declares its Operability `TransitionMaterialization`:
 - the Tab and Shift+Tab stops, or the pointer target, leading to the control
 - then the activation
 
-The Playwright adapter performs exactly these steps. Text fields that are not
+The Playwright executor performs exactly these steps. Text fields that are not
 autofocused are reached with declared focus moves. The default profile performs
 the pointer materializations, and the keyboard-only profile performs the
 keyboard ones. The browser example runs with `pnpm e2e`.
@@ -19,8 +19,8 @@ the error names the object that has focus. Findings from modeling these paths:
 - On the Files page, "Skip to main content" does not move the keyboard start
   point, so the paths count stops backwards from the top of the page instead.
 - Enter on a file row's "Sharing options" button does not open the sharing
-  panel; Space does. The adapter's default activation for buttons is Space. Set
-  `keyboard.activation.button: Enter` on the adapter to check Enter.
+  panel; Space does. The executor's default activation for buttons is Space. Set
+  `keyboard.activation.button: Enter` on the executor to check Enter.
 
 The Android models and `comparison/nc34.ujg.jsonld` declare no
 materializations. Appium taps the bound object, so the `touch` profile sets
@@ -38,13 +38,13 @@ pull request from a separate repository, see
 [journey-checks](https://github.com/openuji/journey-checks).
 
 [`mesh.yaml`](./mesh.yaml) defines the tests, their selected journeys,
-adapters, drivers, observers, interaction profiles, credentials, and output.
+executors, clients, observers, interaction profiles, credentials, and output.
 The same Journey Mesh command executes any configured runtime combination.
 
-- [`browser-sharing`](#run-the-browser-test): Alice and Bob use the web adapter,
+- [`browser-sharing`](#run-the-browser-test): Alice and Bob use the web executor,
   with default and keyboard-only profile combinations.
 - [`native-recipient-sharing`](#run-the-native-recipient-test): Alice uses the
-  web adapter and Bob uses Appium, with default-web/touch-Android and
+  web executor and Bob uses Appium, with default-web/touch-Android and
   keyboard-web/touch-Android combinations.
 
 Each test first executes explicit Alice and Bob login setup journeys, whose
@@ -66,7 +66,7 @@ pnpm install --frozen-lockfile
 pnpm build
 ```
 
-The web adapter installs its own pinned Chromium build automatically, the
+The web executor installs its own pinned Chromium build automatically, the
 first time any browser-based test launches one; there is no separate install
 step. On Linux, if that first launch fails because Chromium can't start,
 install its system dependencies once with
@@ -121,17 +121,17 @@ persistent stacks.
 
 ## Run the browser test
 
-Both participants use one configured Playwright adapter. For each profile, the
-runner executes the combined plan using a new adapter execution, with isolated
-browser contexts and pages per actor/touchpoint. The Nextcloud web driver
+Both participants use one configured Playwright executor. For each profile, the
+runner executes the combined plan using a new executor session, with isolated
+browser contexts and pages per actor/touchpoint. The Nextcloud web client
 resolves entry URLs and text values. The axe observer collects evidence through
 Playwright's observation contract.
 
 ```mermaid
 flowchart TB
   plan["Combined JourneyPlan<br/>login, offer, accept"] --> runner["Runner<br/>default / keyboard-only"]
-  runner --> web["Playwright adapter"]
-  driver["Nextcloud web driver"] --> web
+  runner --> web["Playwright executor"]
+  client["Nextcloud web client"] --> web
   web --> alice["Alice browser context"]
   web --> bob["Bob browser context"]
   alice --> aliceService["Alice Nextcloud instance"]
@@ -175,10 +175,10 @@ device profile match the pins. These device pins — `api`, `avd`, `image`,
 `@openuji/journey-executor-appium/service` plugin, verifies the device, installs the pinned UiAutomator2 driver into a versioned repository
 cache, starts Appium on port 4723, waits for readiness, and writes
 `.runtime/appium.env`. It neither starts Nextcloud nor runs a journey — nor
-does it download the Nextcloud APK; the Appium adapter does that when its first
+does it download the Nextcloud APK; the Appium executor does that when its first
 execution starts (same as Chromium
-for the web adapter — see "One-time prerequisites" above), from the `application`
-block already declared in `adapters.android.options`. Appium logs are stored
+for the web executor — see "One-time prerequisites" above), from the `application`
+block already declared in `executors.android.options`. Appium logs are stored
 under `.tmp/appium-runtime/`; emulator logs are under `.tmp/android-runtime/`.
 
 Both browser and mixed journeys write `.tmp/diagnostics/alice-sharing.<scope>.har`
@@ -207,7 +207,7 @@ flowchart TB
   test["journey-mesh test"] --> session
 ```
 
-The service commands own the emulator and server processes. The adapter owns
+The service commands own the emulator and server processes. The executor owns
 the test session, application state, and its cleanup; ending a profile does not
 stop the infrastructure. Validation never downloads anything; the checksum-pinned
 APK cache is populated when the first native execution starts.
@@ -240,16 +240,16 @@ Global Appium installations are never modified.
 
 Alice's setup and offer journeys route to Playwright; Bob's setup and acceptance
 journeys route to Appium. Routing follows each journey item's configured
-`adapter`: every operation carries its journey item as its `segment`, so one combined plan retains the order and source references across
-both adapters. Profiles combine Alice's default or keyboard-only interaction
+`executor`: every operation carries its journey item as its `segment`, so one combined plan retains the order and source references across
+both executors. Profiles combine Alice's default or keyboard-only interaction
 with Bob's touch interaction.
 
 ```mermaid
 flowchart TB
-  runner["Runner + adapter routing<br/>one combined plan"] --> web["Playwright adapter"]
-  runner --> native["Appium adapter"]
-  webDriver["Nextcloud web driver"] --> web
-  androidDriver["Nextcloud Android driver"] --> native
+  runner["Runner + executor routing<br/>one combined plan"] --> web["Playwright executor"]
+  runner --> native["Appium executor"]
+  webClient["Nextcloud web client"] --> web
+  androidClient["Nextcloud Android client"] --> native
   web --> alice["Alice browser context"]
   native --> bob["Bob device session<br/>exclusive device UDID"]
   alice --> aliceService["Alice Nextcloud instance"]
@@ -260,13 +260,13 @@ flowchart TB
   native -.->|observations| accessibility["Android accessibility observer"]
 ```
 
-Both drivers are deterministic entry/value resolvers; browser and device
-resources belong to their adapters. The Android model supplies native locators
+Both clients are deterministic entry/value resolvers; browser and device
+resources belong to their executors. The Android model supplies native locators
 and application entry bindings. Login uses the application entry. Subsequent
 journeys enter Files through the client's `/app/openFiles` HTTPS app link, which
 resumes the Files activity and refreshes its notification status. This keeps the
 entry contract explicit when the app was already open during Alice's steps.
-Selecting an adapter does not translate web
+Selecting an executor does not translate web
 locators into native ones. See the [native journey model](ujg/filesharing.android.ujg.jsonld)
 and [Android client](../../packages/journey-vendor-nextcloud/src/android/client.ts).
 
@@ -319,22 +319,22 @@ processes.
 
 The [configuration schema](../../packages/journey-host/src/config/schema.ts) and
 [plugin contracts](../../packages/journey-plugin/src/plugins.ts) define the YAML
-host's interfaces. In this example, `model` selects the UJG compiler, `adapters`
-declare drivers and observers, and each test declares ordered journey items,
+host's interfaces. In this example, `model` selects the UJG compiler, `executors`
+declare clients and observers, and each test declares ordered journey items,
 profile assignments, and a shared environment. `envFiles` supply configuration
 values, `outputDir` selects the report root, and `services` declare optional
-infrastructure lifecycles. Changing journey and adapter selections changes where
+infrastructure lifecycles. Changing journey and executor selections changes where
 execution runs; there are no platform-specific runner files.
 
 `@openuji/journey-vendor-nextcloud/federated-sharing/plugin` owns fixture cleanup,
 fixture creation, and OCS/WebDAV effect checks. This example supplies only the
 service/account values, fixture path/name, and journey effect IDs in YAML. UI
-entry routes and transition values are likewise YAML data interpreted by driver
+entry routes and transition values are likewise YAML data interpreted by client
 plugins.
 
 All selected tests preflight before fixtures are modified: model compilation,
-plugin compatibility, adapter support, and profile applicability/input selection
-are checked first. Only referenced adapters and their dependencies are loaded,
+plugin compatibility, executor support, and profile applicability/input selection
+are checked first. Only referenced executors and their dependencies are loaded,
 so selecting the browser test does not require the Android configuration.
 
 ```mermaid
@@ -342,19 +342,19 @@ sequenceDiagram
   participant Host as YAML host
   participant Runner as Journey runner
   participant Env as Nextcloud environment
-  participant Adapters as Selected adapters
+  participant Executors as Selected executors
   Host->>Host: Preflight all selected tests
-  Host->>Runner: Plan, profiles, adapters, environment
+  Host->>Runner: Plan, profiles, executors, environment
   loop Each applicable profile, sequentially
     Runner->>Env: Set up shared fixtures
-    Runner->>Adapters: Create and start executions
+    Runner->>Executors: Create and start sessions
     loop Operations in plan order, stop on failure
-      Runner->>Adapters: Open entry and execute operation
+      Runner->>Executors: Open entry and execute operation
       opt Successful transition with effects
         Runner->>Env: Verify effects through OCS/WebDAV
       end
     end
-    Runner->>Adapters: Close executions in reverse order
+    Runner->>Executors: Close sessions in reverse order
     Runner->>Env: Tear down fixtures
   end
   Runner-->>Host: Immutable RunResult
@@ -363,7 +363,7 @@ sequenceDiagram
 
 Each applicable profile sets up shared fixtures once and executes its configured
 journeys in order. The first operation failure stops that profile; partial
-adapter startup still triggers cleanup. Cleanup failures are retained alongside
+executor startup still triggers cleanup. Cleanup failures are retained alongside
 the original failure, and fixture teardown also runs after a failed setup.
 Cancellation closes active automation resources and is propagated to environment
 requests.
@@ -372,7 +372,7 @@ requests.
 
 The web observer captures axe scans and optional source screenshots. The native
 observer captures a redacted UI hierarchy, device metrics, optional screenshots,
-and heuristic accessibility checks. Observers collect evidence at adapter stages
+and heuristic accessibility checks. Observers collect evidence at executor stages
 such as state assertion and transition readiness, retain detached evidence, and
 provide detached outputs after execution. The host writes them into the
 [run record](../../docs/run-record.md). `journey-mesh test` then builds the

@@ -6,7 +6,7 @@ Composable, model-driven execution and checking of user journeys. Choose how a
 journey is described, how its steps are executed, and which evidence is collected
 by plugging compatible components together.
 
-In practice Journey Mesh is a configurable, multi-adapter, sequential journey
+In practice Journey Mesh is a configurable, multi-executor, sequential journey
 runner: one test composes several journeys (for example Alice in a browser, Bob
 on Android) into one ordered plan, runs it once per interaction profile, and
 saves outcomes and evidence in one run record.
@@ -32,15 +32,18 @@ you can choose.
 ```mermaid
 flowchart LR
   journey["Journey description<br/>(UJG JSON-LD)"] --> execution["Journey execution and checks<br/>(runJourney)"]
-  components["Composed components<br/>(Playwright, Nextcloud driver, axe)"] --> execution
+  components["Composed components<br/>(Playwright, Nextcloud client, axe)"] --> execution
   execution <--> system["System under check<br/>(Nextcloud)"]
   execution --> evidence["Results and evidence<br/>(operation outcomes, audit findings)"]
 ```
 
-A composition can use one execution adapter or combine several within one
-journey. It can collect additional evidence through observers. Each component
-brings its own capabilities and requirements; composition depends on compatible
-contracts.
+A composition can use one executor or combine several within one journey,
+for example Playwright for a browser and Appium for Android. It can collect
+additional evidence through observers. Each component brings its own
+capabilities and requirements; composition depends on compatible contracts.
+The [architecture](docs/architecture.md#terms) defines the roles: platforms,
+vendors and their clients, executors, toolkits, services, environments,
+profiles, and the three kinds of observers.
 
 Running journeys and reporting on them are separate layers with one boundary:
 execution writes a **run record**, and reporting derives a **report model** from
@@ -59,7 +62,7 @@ flowchart LR
 A model binding translates its source format into the shared execution model.
 `JourneyPlan` carries ordered operations, expected states, transitions, input
 requirements, effects, and source references. Automation handles stay within
-adapters. Callers can also construct and supply a plan directly.
+executors. Callers can also construct and supply a plan directly.
 
 The current runner understands state, transition, and control-flow operations.
 A new model binding must translate into those semantics; choosing a different
@@ -71,9 +74,9 @@ source format does not introduce new operation kinds into the runner.
 flowchart TB
   A["Journey document (JSON-LD)"] --> B["Compiler (UJG)"]
   B --> C["JourneyPlan"] --> D["Runner (runJourney)"]
-  D --> E["Adapters (Playwright/Appium)"]
+  D --> E["Executors (Playwright/Appium)"]
   E <--> F["App (Web/Android)"]
-  G["Drivers (Web/Android)"] --> E
+  G["Clients (Nextcloud Web/Android)"] --> E
   H["Profiles (Default/Keyboard)"] --> D
   I["Hooks (Fixtures)"] --> D
 ```
@@ -83,25 +86,28 @@ composition, the UJG compiler turns UJG JSON-LD into a `JourneyPlan`; the runner
 receives that compiled plan. Other document formats can use their own bindings
 to produce the same execution model.
 
-The runner needs a plan, an adapter, and at least one profile. Profiles determine
-applicability and select model-declared input modalities. Adapters translate
-operations and selected modalities into execution commands, assert expected
-states, and own their execution resources and cleanup.
+The runner needs a plan, an executor, and at least one profile. Profiles
+determine applicability and select model-declared input modalities. Executors
+translate operations and selected modalities into automation commands, assert
+expected states, and own their sessions and cleanup.
 
-An adapter can itself be a composition: `routedExecutor(...)` selects a child
-adapter for each operation, while `touchpointExecutor(...)` offers routing by
+An executor can itself be a composition: `routedExecutor(...)` selects a child
+executor for each operation, while `touchpointExecutor(...)` offers routing by
 touchpoint. Profiles can likewise be composed for different parts of a journey.
 This lets one run span different execution mechanisms without putting their
 commands into the runner.
 
-Application drivers bind operations to an application by providing deterministic
-entry targets and transition values through their adapter family's contract.
+Clients bind operations to an application by providing deterministic entry
+targets and transition values. A client implements its platform's client
+contract (`webClientContract`, `androidClientContract`), so any executor of that
+platform can run it; a vendor package such as `journey-vendor-nextcloud` groups
+an ecosystem's clients, environments and services.
 Optional environment hooks own shared fixture setup, declared-effect
 verification, and teardown. Without a verification hook, declaring an effect
 alone does not perform an external check.
 
 Profiles and operations execute sequentially. A failed operation stops that
-profile execution; adapter cleanup and environment teardown still run. Cleanup
+profile execution; executor cleanup and environment teardown still run. Cleanup
 failures are retained alongside the original failure.
 
 ### Services
@@ -117,11 +123,11 @@ shutdown reads component-scoped ownership records.
 flowchart TB
   host["Journey Mesh host<br/>(services up / down, or a test's services)"] --> service["Service<br/>(Nextcloud stack, Android, Appium)"]
   service -->|prepare and manage| infrastructure["Infrastructure<br/>(containers, emulator, Appium server)"]
-  runner["Journey runner<br/>(runJourney)"] --> execution["Adapter execution<br/>(Appium device session)"]
+  runner["Journey runner<br/>(runJourney)"] --> execution["Executor session<br/>(Appium device session)"]
   execution -.->|uses| infrastructure
 ```
 
-Each profile receives a fresh **adapter execution**, with `start()` and `close()`
+Each profile receives a fresh **executor session**, with `start()` and `close()`
 owning resources such as browser contexts or device sessions. Closing that
 execution leaves separately managed infrastructure available. The
 **environment** has its own per-profile lifecycle for service fixtures and
@@ -146,7 +152,7 @@ sees services.
 flowchart LR
   subgraph execution["Execution (packages)"]
     runner["Journey runner<br/>(runJourney)"] --> result["RunResult"]
-    adapters["Execution adapters<br/>(Playwright, Appium)"] -.->|live observations| capture["Observers<br/>(axe, Android accessibility)"]
+    executors["Executors<br/>(Playwright, Appium)"] -.->|live observations| capture["Executor observers<br/>(axe, Android accessibility)"]
   end
   result --> record[("Run record<br/>run.json + evidence files")]
   capture -->|journal, measurements, policy errors| record
@@ -211,18 +217,19 @@ Catalogue documents provide a `JourneyEntryIndex` with the entries to discover.
 | Component | Responsibility | When needed |
 | --- | --- | --- |
 | Model binding | Parse and validate a source model; produce a plan and source references | When translating a journey description into a plan |
-| Execution adapter | Execute operations, check states, manage execution resources and cleanup | Required; may route to several child adapters |
+| Executor | Execute operations, check states, manage automation sessions and cleanup | Required; may route to several child executors |
 | Service | Prepare infrastructure across executions; return outputs, provenance and a release handle from `start()` | Optional; infrastructure may be managed externally |
-| Application driver | Resolve application entry targets and transition values | When required by the selected adapter |
+| Client | Resolve application entry targets and transition values for one platform | When required by the selected executor |
 | Interaction profile | Assess applicability and select declared input modalities | At least one profile per run |
 | Environment | Set up shared fixtures, verify effects, and tear down fixtures | Optional |
-| Runner observer | Observe run and execution lifecycle events | Optional |
-| Adapter observer | Collect evidence at the adapter's observation boundary | Optional; must match the adapter contract |
+| Journey observer | Observe run and execution lifecycle events | Optional |
+| Executor observer | Collect evidence at the executor's observation boundary | Optional; must implement the executor's observation contract |
+| Runtime observer | Collect infrastructure diagnostics from typed lifecycle topics | Optional; independent of executors |
 | Report interpreter | Derive report data (documents, node metrics) from one observer's recorded evidence | Optional; reporting layer, after execution |
 
-Drivers and live observers follow their adapter's contracts. Input modality IDs
-are open model identifiers; a profile must choose a declared modality that the
-selected adapter can execute. Replacing a component means satisfying these
+Clients and executor observers follow their executor's contracts. Input modality
+IDs are open model identifiers; a profile must choose a declared modality that
+the selected executor can perform. Replacing a component means satisfying these
 contracts and the selected journey's requirements.
 
 ### Ways to compose a run
@@ -240,16 +247,18 @@ host run, call `buildReport(runDirectory, { config })` from
 flowchart LR
   config["Load config<br/>(config/load, config/schema)"] --> plugins["Load plugins<br/>(plugins/loader)"]
   plugins --> compile["Compile<br/>(compile: journeys → one plan with segments)"]
-  compile --> assemble["Assemble<br/>(assemble: adapters, profiles, environment)"]
+  compile --> assemble["Assemble<br/>(assemble: executors, profiles, environment)"]
   assemble --> execute["Execute<br/>(execute: services, runJourney, observer outputs)"]
   execute --> record["Write run record"]
 ```
 
 Every selected test is compiled and assembled before anything starts, so a
 broken test never leaves fixtures or services behind. Each configured journey
-becomes a **segment** of the test plan; the host routes operations to adapters
-and profiles by segment. The host checks plugin kinds, driver contracts and
-observer **automation** compatibility (`playwright`, `appium`). See the
+becomes a **segment** of the test plan; the host routes operations to executors
+and profiles by segment. Before anything starts, the host checks plugin kinds,
+**client contracts** (`@openuji/journey-platform-web/client/v1`) and executor
+observers' **observation contracts** (`@openuji/playwright-observation/v1`,
+`@openuji/appium-android-observation/v1`). See the
 [configuration schema](packages/journey-host/src/config/schema.ts) and the
 [plugin contracts](packages/journey-plugin/src/plugins.ts).
 
@@ -264,9 +273,9 @@ journey-mesh discover mesh.yaml [--test <id>] [--profile <id>] [--output <dir>] 
 ```
 
 `discover` is an authoring aid for the keyboard and pointer steps a model must
-declare. It is Web only. An adapter plugin can declare a discovery mode next to
-`create`, and only the Playwright adapter has one, because finding a path means
-walking the browser's focus order. A test with any journey on another adapter,
+declare. It is Web only. An executor plugin can declare a discovery mode next to
+`create`, and only the Playwright executor has one, because finding a path means
+walking the browser's focus order. A test with any journey on another executor,
 such as Appium on Android, is rejected before anything starts; select a Web
 test with `--test`. `journey-mesh test` never builds a discovery mode, so
 Android tests run as before.
@@ -283,7 +292,7 @@ replaced. The findings go to `<outputDir>/discover/materializations.json`, and
 the discovery run record goes to `<outputDir>/discover/run/`. The exit status is
 1 when a test failed, a path was not found, or two profiles found different
 paths. `test` never discovers. The
-[Playwright adapter](packages/journey-executor-playwright/README.md#finding-paths)
+[Playwright executor](packages/journey-executor-playwright/README.md#finding-paths)
 describes how paths are found.
 
 Rendering is done by apps, for example
@@ -314,16 +323,16 @@ A plugin module exports `journeyMeshPlugin`, built with a typed helper from
 [`@openuji/journey-plugin`](packages/journey-plugin/src/index.ts). `parse`
 validates the raw YAML options into typed settings; `create` builds the
 component from them. Neither may allocate automation resources or mutate
-services. Validation parses settings and calls the adapter's pure
-`validateOperations` hook. Runtime adapters, observers and environments are
+services. Validation parses settings and calls the executor's pure
+`validateOperations` hook. Runtime executors, observers and environments are
 constructed after services start, with fresh instances for each run.
-Services and adapters receive frozen constructor input records; parsers receive
+Services and executors receive frozen constructor input records; parsers receive
 only configured input names. See [service composition](docs/service-composition.md)
 for the plugin API migration and resource ownership rules.
 
 ```ts
 import { defineExecutorObserverPlugin, knownOptions, requiredString } from "@openuji/journey-plugin";
-import { playwrightObservationContract } from "@openuji/journey-executor-playwright";
+import { playwrightObservationContract } from "@openuji/journey-executor-playwright/observation";
 
 export const journeyMeshPlugin = defineExecutorObserverPlugin({
   kind: "executor-observer", observationContract: playwrightObservationContract,
@@ -347,7 +356,7 @@ optional host tooling, independent of an individual journey execution.
 ## Comparison and reporting
 
 A configuration is a suite (`kind: suite`). It selects a model binding,
-journeys, adapters, profiles, observers and services, and may name the system
+journeys, executors, profiles, observers and services, and may name the system
 under test with `label:`. Its `report` section configures the reporting layer.
 
 A comparison is not a configuration: it is a step over two run directories.
@@ -379,7 +388,7 @@ subject did not pass.
 
 Observers own their findings, metric definitions, values, and evidence.
 Numeric differences require matching metric identity, method, unit, aggregation,
-and value type; partial or unavailable values have no delta. Adapter command
+and value type; partial or unavailable values have no delta. Executor command
 counts are not physical keystroke counts.
 
 Journey items can declare `operations: { alias: <model-specific selector> }`.
@@ -396,7 +405,7 @@ feature of the renderer app, not of the packages.
 The repository currently includes:
 
 - A UJG JSON-LD model binding and input-modality profiles.
-- Playwright and Android Appium adapters, with Nextcloud web/native drivers.
+- Playwright and Android Appium executors, with Nextcloud Web and Android clients.
 - Android emulator, Appium server and pinned Nextcloud stack service plugins.
 - Axe and Android accessibility observers and reporters.
 - An optional UX observer with pure metric derivation.
@@ -426,14 +435,15 @@ Explore the [live demo](https://journey-mesh.openuji.org/#demo) and
 
 - The shipped UJG compiler produces deterministic linear plans; ambiguous
   branches and cycles are rejected.
-- Only Nextcloud application drivers are currently supplied in this repository.
+- Only Nextcloud clients are currently supplied in this repository; another
+  vendor's client needs no runner or executor change.
   Deployment and platform prerequisites depend on the selected integrations.
 - Accessibility evidence supports journey review; it does not certify conformance.
 - Extension APIs and report formats are prototype contracts.
 
 ## Proposed Work
 
-The proposed roadmap adds multipath-aware execution, stable extension contracts, Fediversity/Nix post-deployment and upgrade validation, expanded Nextcloud scenarios, a Mastodon driver, runtime reliability evidence, and improved reporting and documentation.
+The proposed roadmap adds multipath-aware execution, stable extension contracts, Fediversity/Nix post-deployment and upgrade validation, expanded Nextcloud scenarios, a Mastodon client, runtime reliability evidence, and improved reporting and documentation.
 
 - [Public roadmap issue](https://github.com/openuji/journey-mesh/issues/11)
 
@@ -441,7 +451,7 @@ The roadmap is proposed and is not a delivery commitment.
 
 ## UJG Citation
 
-The compiler and bundled JSON-LD models target [UJG 1.0 Release Candidate 4](https://ujg.specs.openuji.org/tr/1.0-rc4), published 2026-11-21 by the [W3C User Journey Graph Community Group](https://www.w3.org/groups/cg/ujg/). The document contexts select an isolated compiler implementation. See the [UJG compiler contract](packages/journey-model-ujg/README.md) for imports, supported lowering, and RC4 Operability output. The [Playwright adapter](packages/journey-executor-playwright/README.md) performs keyboard and pointer transitions only through the declared `TransitionMaterialization` steps, with keys from `mesh.yaml`. RC3 documents require an earlier mesh release until migrated.
+The compiler and bundled JSON-LD models target [UJG 1.0 Release Candidate 4](https://ujg.specs.openuji.org/tr/1.0-rc4), published 2026-11-21 by the [W3C User Journey Graph Community Group](https://www.w3.org/groups/cg/ujg/). The document contexts select an isolated compiler implementation. See the [UJG compiler contract](packages/journey-model-ujg/README.md) for imports, supported lowering, and RC4 Operability output. The [Playwright executor](packages/journey-executor-playwright/README.md) performs keyboard and pointer transitions only through the declared `TransitionMaterialization` steps, with keys from `mesh.yaml`. RC3 documents require an earlier mesh release until migrated.
 
 ## Maintainers / Contact
 
