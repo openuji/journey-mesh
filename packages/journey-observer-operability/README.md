@@ -6,7 +6,7 @@ performed:
 - the input decision: the modality the profile selected, the
   `InputModalityProfile` it satisfies, and the IRI of the UJG RC4
   `TransitionMaterialization` it ran
-- every adapter command, one per declared step: the key or pointer action used,
+- every executor command, one per declared step: the key or pointer action used,
   and whether it completed or failed, with the error
 
 It only observes: it never acts on the page and never changes the verdict. The
@@ -26,7 +26,7 @@ report:
     - use: "@openuji/journey-report-operability"
 ```
 
-The observer works with the Playwright adapter. Its output has kind
+The observer works with the Playwright executor. Its output has kind
 `operability`, and its evidence format is `journey-mesh/operability-evidence`.
 Reporting code imports types and the `isOperabilityOutput` guard from the
 `./evidence` entry, which loads no browser runtime.

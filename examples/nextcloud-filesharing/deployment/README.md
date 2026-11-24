@@ -64,7 +64,7 @@ YAML contains the pinned Nextcloud image/version and these overridable defaults:
 
 Shared account and database defaults use the `NEXTCLOUD_ALICE_*`,
 `NEXTCLOUD_BOB_*`, `NEXTCLOUD_ADMIN_*`, and `POSTGRES_*` values in `.env.example`.
-YAML anchors share account and URL values across the stack, drivers, and fixture
+YAML anchors share account and URL values across the stack, clients, and fixture
 environment. Changing a host or port also changes the federated recipient.
 Projects and published ports must be distinct across concurrent deployments.
 

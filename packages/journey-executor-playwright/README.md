@@ -1,4 +1,4 @@
-# Playwright adapter
+# Playwright executor
 
 `@openuji/journey-executor-playwright` runs web journeys in Chromium, Firefox or
 WebKit. It performs keyboard and pointer transitions only through the steps a
@@ -12,8 +12,8 @@ performs each kind of step.
 | --- | --- |
 | UJG document | The materializations of each transition, their modality, the step chain linked by `stepPreviousRef`, and optional step and start locators |
 | Profile (`mesh.yaml`) | The preferred modality, and which materialization to run when several exist (`materializationPreference`) |
-| Adapter (`mesh.yaml`) | The key for each move kind and for activation (`keyboard`), and the interface that expires on its own (`transientUi`) |
-| Adapter | Performs exactly the declared steps, checks each one, and fails with a message that names the step |
+| Executor (`mesh.yaml`) | The key for each move kind and for activation (`keyboard`), and the interface that expires on its own (`transientUi`) |
+| Executor | Performs exactly the declared steps, checks each one, and fails with a message that names the step |
 
 A profile rejects a transition that has no materialization through the modality
 it selects. This check runs during preflight, before any service starts.
@@ -25,7 +25,7 @@ it selects. This check runs during preflight, before any service starts.
 | `observability:keyboard` | `MoveStep` with a FocusMoveKind | The key from `keyboard.moves` for the focused object's role | Focus moved. With a locator, the focused object matches it. |
 | `observability:keyboard` | `ActivationStep` | The key from `keyboard.activation` for the focused object's role | With a locator, the focused object matches it. |
 | `observability:keyboard` | `ShortcutStep` | The object's `aria-keyshortcuts` (the first one), or the step's `urn:openuji:playwright:shortcut` extension, pressed at the current focus | The object matches exactly one element. |
-| `observability:pointer` | `MoveStep` `operability:pointAt` | Scroll the object into view and move the pointer to its centre | The locator matches exactly one object (the adapter never chooses). The pointer is over it and not covered. |
+| `observability:pointer` | `MoveStep` `operability:pointAt` | Scroll the object into view and move the pointer to its centre | The locator matches exactly one object (the executor never chooses). The pointer is over it and not covered. |
 | `observability:pointer` | `ActivationStep` | Press and release at the pointer position | With a locator, the object under the pointer matches it. |
 | `urn:openuji:input-modality:keyboard-text-entry` | `MoveStep` with a FocusMoveKind | Same as the keyboard move above | Same as the keyboard move above |
 
@@ -39,7 +39,7 @@ focused object for keyboard, and the object under the pointer for pointer.
 Whether the transition was taken is checked by the next State operation in
 the plan.
 
-The adapter never calls `focus()`, `click()`, `fill()` or a locator's
+The executor never calls `focus()`, `click()`, `fill()` or a locator's
 `press()`. Keys go to whatever has focus, so a defect in tab order or arrow-key
 handling fails the step instead of being skipped.
 
@@ -70,7 +70,7 @@ filled input, so typing then replaces that text.
 
 ## Keyboard table
 
-`keyboard` is an adapter option. Each value is either a Playwright key, or a
+`keyboard` is an executor option. Each value is either a Playwright key, or a
 map from an ARIA role of the focused object to a key, with `"*"` for any role.
 Roles are tested with Playwright's role engine, the same one `getByRole` uses.
 An entry you give replaces the default entry for that move kind, or the whole
@@ -92,7 +92,7 @@ keyboard:
   activation: { button: Space, checkbox: Space, radio: Space, switch: Space, menuitemcheckbox: Space, menuitemradio: Space, "*": Enter }
 ```
 
-The adapter does not read `aria-orientation` or `dir`. For a vertical tab list
+The executor does not read `aria-orientation` or `dir`. For a vertical tab list
 or a right-to-left page, set the keys:
 
 ```yaml
@@ -133,7 +133,7 @@ executors:
         - { css: ".app-notification" }      # a Playwright CSS selector
 ```
 
-- It is configuration, like `keyboard`. The adapter knows no application's
+- It is configuration, like `keyboard`. The executor knows no application's
   notifications, so nothing is transient unless the suite says so.
 - It waits and nothing more. It never dismisses, hides or clicks anything, adds
   no step, and records no input action, because the user did nothing. The wait
@@ -154,17 +154,17 @@ executors:
 ## Finding paths
 
 `journey-mesh discover` finds the steps a model does not declare yet. The
-plugin declares a discovery mode, which the host builds in place of the adapter
-only in a discovery run; a test run never builds it. It takes the adapter's own
+plugin declares a discovery mode, which the host builds in place of the executor
+only in a discovery run; a test run never builds it. It takes the executor's own
 settings, so the suite's browser, viewport, `keyboard` table and `transientUi`
 apply unchanged. Findings go to the host, not to a file. In code,
 `playwrightDiscoveryExecutor` is the discovery counterpart of `playwrightExecutor`.
 
 Discovery is Web only by construction: it walks the browser's sequential focus
-order, WAI-ARIA composite widgets and `aria-activedescendant`. No other adapter
+order, WAI-ARIA composite widgets and `aria-activedescendant`. No other executor
 has a discovery mode, so `discover` rejects tests with journeys on them.
 
-During discovery, the adapter performs a declared materialization exactly as a
+During discovery, the executor performs a declared materialization exactly as a
 test run would. Discovery acts only on a transition without one:
 
 | Modality | What discovery does | Path it reports |
@@ -206,10 +206,10 @@ Every step records one `JourneyInputAction` with `command` (`move`, `activate`,
 key, `pointer-move`, `pointer-press` or `type`). Each attempt is recorded once
 as attempted and once as completed or failed, under the same `id`.
 
-The adapter passes these actions only to its observers. To get them into the
+The executor passes these actions only to its observers. To get them into the
 run record and the report, add
 [`@openuji/journey-observer-operability`](../journey-observer-operability/README.md)
-to the adapter's observers and `@openuji/journey-report-operability` to the
+to the executor's observers and `@openuji/journey-report-operability` to the
 report interpreters.
 
 ## Tests
@@ -218,3 +218,19 @@ report interpreters.
 headless Chromium. It covers passing and failing tab lists, pointer
 ambiguity, text entry, shortcuts and start checks. Install the browser first
 with `pnpm exec playwright install chromium`.
+
+## Observation contract
+
+Executor observers attach to this executor through its observation contract,
+`@openuji/playwright-observation/v1`. They import it from the `./observation`
+entry, never from the package root, which loads Playwright:
+
+```ts
+import { playwrightObservationContract, type PlaywrightExecutionObserver } from "@openuji/journey-executor-playwright/observation";
+```
+
+The entry holds the observer types (`PlaywrightExecutionObserver`,
+`PlaywrightOperationObservation`), the contract, the executor's recorded name
+(`playwrightExecutorName`) and `toPlaywrightObservationLocator`. It loads no
+browser runtime; `pnpm lint` checks that. The Appium executor has the same entry
+for its Android contract, `@openuji/appium-android-observation/v1`.

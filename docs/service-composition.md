@@ -36,14 +36,14 @@ services:
       enable: true
 ```
 
-The example fragment requires a `stack` service, ordinary model/adapter/profile
+The example fragment requires a `stack` service, ordinary model/executor/profile
 configuration, and digest-pinned build-image environment values. A test requires
 `services: [app-install]`; its dependency closure starts once before profiles run.
 
 An input reference implies a dependency. `dependsOn` adds ordering where no output
 is consumed. Unknown references, cycles, absent required inputs, and incompatible
 contracts fail preflight. `validate` parses settings and validates operations without
-starting services or constructing runtime adapters and observers. All runtime tests
+starting services or constructing runtime executors and observers. All runtime tests
 are constructed after service startup and before the first fixture is changed.
 Producers compensate partial acquisitions before throwing; the host releases
 returned handles in reverse order, including after invalid outputs or cancellation.
@@ -86,6 +86,43 @@ the resolved app path, SHA marker, and version on every selected instance. A fre
 managed stack owns its containers and volumes; teardown removes those resources,
 not unrelated running stacks or shared images.
 
+## Compose stacks for any vendor
+
+The Nextcloud stack is one user of a generic lifecycle,
+`@openuji/journey-service-docker/compose`. `startComposeStack(stack, hooks, ports)`
+owns everything that holds for any Docker Compose stack:
+
+1. creates the stack directory and runs the `prepare` hook, for example to check
+   out a source and build an image; nothing is running yet;
+2. writes a private env file (mode `0600`, values quoted so `$`, `#` and spaces
+   stay literal) and names it in `envFileVariable` for the Compose files;
+3. refuses a project that already has containers or volumes;
+4. writes the persistent ownership record, runs `up -d`, records the containers
+   it started, and publishes `composeLifecycle` `allocated`;
+5. runs the `bootstrap` hook (install, configure and verify the application),
+   whose outputs and provenance become the started service's.
+
+Release publishes `before-release`, checks the project still holds only the
+containers this acquisition started, then runs `down --volumes` and removes the
+ownership record. A failure after `up` is compensated the same way;
+`releaseComposeStack(path, { envFileVariable })` is the explicit shutdown for
+`stopConfigured`. A second vendor writes a service plugin with its own two hooks
+and options; `journey-observer-docker` captures its diagnostics unchanged:
+
+```ts
+create(settings, context) {
+  return { name: `moodle-stack:${settings.project}`, start: ({ signal }) => startComposeStack(
+    { label: "Moodle", project: settings.project, composeFiles: settings.composeFiles, directory: settings.directory,
+      environment: settings.environment, envFileVariable: "MOODLE_STACK_ENV_FILE", services: ["moodle"],
+      ownershipFile: ownershipPath(context.configPath, context.componentId) },
+    { async bootstrap({ compose }) {
+        await compose("exec", "-T", "moodle", "php", "admin/cli/install_database.php", "--agree-license");
+        return { outputs: { site: { baseURL: settings.baseURL } } };
+      } },
+    context, { signal }) };
+}
+```
+
 ## Native subjects
 
 An APK build copies its `source` checkout, and an optional `sibling` checkout next
@@ -113,7 +150,7 @@ The Android service boots one device from a top-level `avd`, or several named
 `devices` sharing the same pins. `reversePorts` lets each device reach host ports
 as its own `localhost`, so a local stack can use one base URL for host clients
 and devices. The Appium service checks its `devices` input and outputs its
-`server`. The Appium adapter's optional `application`, `server` and `devices`
+`server`. The Appium executor's optional `application`, `server` and `devices`
 inputs replace the pinned APK download, the endpoint and per-touchpoint UDIDs:
 
 ```yaml
@@ -133,7 +170,7 @@ executors:
 
 ## Plugin contract
 
-Service and adapter plugins declare `inputs` and `optionalInputs` as contract maps.
+Service and executor plugins declare `inputs` and `optionalInputs` as contract maps.
 The typed helpers infer a plain `ResolvedInputs<Required, Optional>` constructor
 record from those declarations. The host checks references and contract IDs during
 preparation, then supplies a deeply frozen snapshot in `create` dependencies:
@@ -158,8 +195,8 @@ create(settings, context, { inputs }) {
 
 `parse(options, configuration, metadata)` receives configured input names in
 `metadata.names`, never input values, an evidence store, or a runtime accessor.
-Adapter `validateOperations(settings, configuration, { driver })` performs pure
-operation checks before services start. Drivers and observers have no input
+Executor `validateOperations(settings, configuration, { client })` performs pure
+operation checks before services start. Clients and observers have no input
 accessor or input dependency record. Prepared suites retain configuration, compiled
 plans and component recipes. Every execution receives new runtime instances,
 resolved inputs and evidence stores.
@@ -205,7 +242,7 @@ runtimeObservers:
 
 File paths are explicit container paths. The observer captures each file on the
 application services exposed by a Compose resource, as well as optional Compose
-container output, before release. It requires no Nextcloud driver or stack.
+container output, before release. It requires no Nextcloud client or stack.
 Its artifacts live under `diagnostics/observer-<index>/` in the run directory.
 An unavailable file produces a capture-error artifact without hiding other
 sources. Subscriber failures and deadlines are recorded separately in
