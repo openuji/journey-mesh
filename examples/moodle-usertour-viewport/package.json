@@ -1,0 +1,31 @@
+{
+  "name": "@openuji/example-moodle-usertour-viewport",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@openuji/journey-cli": "workspace:*",
+    "@openuji/journey-executor-playwright": "workspace:*",
+    "@openuji/journey-host": "workspace:*",
+    "@openuji/journey-model-ujg": "workspace:*",
+    "@openuji/journey-observer-docker": "workspace:*",
+    "@openuji/journey-observer-ux": "workspace:*",
+    "@openuji/journey-profiles": "workspace:*",
+    "@openuji/journey-service-git": "workspace:*",
+    "@openuji/journey-vendor-moodle": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3"
+  },
+  "scripts": {
+    "validate": "journey-mesh validate mesh.yaml",
+    "e2e": "journey-mesh test mesh.yaml",
+    "e2e:fix": "MOODLE_SOURCE_SHA=b5b1675c7967fea1df5f1bd4961710c33a74ea43 journey-mesh test mesh.yaml --output test-results/fix",
+    "e2e:baseline": "MOODLE_SOURCE_SHA=46c042e7da65f8cb2ec7dc19f46566ce61a393e1 journey-mesh test mesh.yaml --output test-results/baseline",
+    "compare": "journey-mesh compare test-results/baseline test-results/fix --title 'MDL-90255: baseline and fix' --config mesh.yaml --output test-results/comparison",
+    "report": "pnpm --filter @openuji/report-renderer serve",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  }
+}

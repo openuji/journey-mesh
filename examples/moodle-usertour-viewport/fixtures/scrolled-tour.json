@@ -1,0 +1,31 @@
+{
+  "name": "Scrolled tour",
+  "description": "Scrolled tour",
+  "pathmatch": "/admin/search.php%",
+  "enabled": "1",
+  "sortorder": "0",
+  "endtourlabel": "",
+  "configdata": "{\"placement\":\"bottom\",\"orphan\":\"0\",\"backdrop\":\"1\",\"reflex\":\"0\",\"filtervalues\":{\"accessdate\":{\"filter_accessdate\":\"tool_usertours_accountcreation\",\"filter_accessdate_range\":7776000,\"filter_accessdate_enabled\":\"0\"},\"category\":[],\"course\":[],\"courseformat\":[],\"role\":[],\"theme\":[],\"cssselector\":[]},\"majorupdatetime\":0}",
+  "displaystepnumbers": true,
+  "version": "2026102100",
+  "steps": [
+    {
+      "title": "Page footer",
+      "content": "This step scrolls the page.",
+      "contentformat": "1",
+      "targettype": "0",
+      "targetvalue": "#page-footer",
+      "sortorder": "0",
+      "configdata": "{}"
+    },
+    {
+      "title": "Orphaned step",
+      "content": "This step remains in the viewport.",
+      "contentformat": "1",
+      "targettype": "2",
+      "targetvalue": "",
+      "sortorder": "1",
+      "configdata": "{}"
+    }
+  ]
+}

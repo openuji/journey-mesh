@@ -54,7 +54,7 @@ test("a site is installed from the built image, configured, verified, and releas
   const { options, calls, phases, config, execute, files, ports, directory } = await fixture();
   const lease = await moodleStackRuntime(options, image, ports, execute).start({});
   const install = calls.find((call) => call.includes("admin/cli/install.php"))!;
-  assert.ok(install.includes("--wwwroot=http://localhost:18090") && install.includes("--dbtype=pgsql") && install.includes("--adminuser=admin") && install.includes("--non-interactive"));
+  assert.ok(install.includes("--wwwroot=http://localhost:18090") && install.includes("--dbtype=pgsql") && install.includes("--adminuser=admin") && install.includes("--non-interactive") && install.includes("--allow-unstable"));
   assert.deepEqual(install.slice(install.indexOf("exec"), install.indexOf("php")), ["exec", "-T", "-u", "www-data", "-w", "/var/www/html", "moodle"]);
   assert.ok(index(calls, (call) => call.at(-1) === "/proc/1/cmdline") < index(calls, (call) => call.includes("admin/cli/install.php")), "installs only after the entrypoint");
   assert.equal(config.get("theme"), "boost");

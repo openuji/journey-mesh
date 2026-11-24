@@ -12,3 +12,5 @@ apps/web/
 
 # Local Netlify folder
 .netlify
+examples/moodle-usertour-viewport/test-results/
+examples/moodle-usertour-viewport/.runtime/

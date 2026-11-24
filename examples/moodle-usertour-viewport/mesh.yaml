@@ -1,0 +1,155 @@
+# MDL-90255: a user tour's orphaned step must stay inside the viewport after the previous,
+# targeted step scrolled the page. MOODLE_SOURCE_SHA selects the Moodle source: the fix by default,
+# or the baseline (46c042e7da65f8cb2ec7dc19f46566ce61a393e1) to reproduce the bug.
+kind: suite
+label: Moodle user tour viewport
+outputDir: ./test-results
+target:
+  service: stack
+  output: identity
+report:
+  excludedPhaseIds:
+    - urn:phase:setup
+envFiles:
+  - path: ./deployment/.env
+    optional: true
+model:
+  use: "@openuji/journey-model-ujg/plugin"
+runtimeObservers:
+  - use: "@openuji/journey-observer-docker/plugin"
+    options:
+      containerLogs: true
+      tail: 5000
+      timeoutMs: 10000
+
+services:
+  source:
+    use: "@openuji/journey-service-git/plugin"
+    options:
+      repository: https://github.com/zavalit/moodle.git
+      sha: ${MOODLE_SOURCE_SHA:-b5b1675c7967fea1df5f1bd4961710c33a74ea43}
+      directory: ./.runtime/source/moodle
+  build:
+    use: "@openuji/journey-vendor-moodle/build/service"
+    inputs:
+      source: { service: source, output: source }
+    options:
+      directory: ./.runtime/build
+      image: journey/moodle
+      runtimeImage: moodlehq/moodle-php-apache:8.3-bookworm@sha256:514011c7f2cf58feb8f6bb8cbaabaaac74c52548b87e37202eadd167e5febc8f
+      composerImage: composer:2@sha256:cd3a90dc5624c59a2f9ddf80dad08569f06416db31de519024f249d63bca554b
+      verifyFiles:
+        # The compiled tour code MDL-90255 changes; the running site must serve exactly these bytes.
+        - public/admin/tool/usertours/amd/build/tour.min.js
+  stack:
+    use: "@openuji/journey-vendor-moodle/stack/service"
+    inputs:
+      image: { service: build, output: image }
+    options:
+      project: ${MOODLE_STACK_PROJECT:-journey-mesh-moodle-tour}
+      composeFiles:
+        - ./deployment/compose.yaml
+      directory: ./.runtime/stack
+      environment:
+        MOODLE_PORT: ${MOODLE_PORT:-18090}
+        POSTGRES_DB: moodle
+        POSTGRES_USER: moodle
+        POSTGRES_PASSWORD: &database-password ${MOODLE_DB_PASSWORD:-moodle}
+      service: moodle
+      baseURL: &site http://localhost:${MOODLE_PORT:-18090}
+      site:
+        fullname: Journey Mesh Moodle
+        shortname: mesh
+      admin: &admin
+        username: admin
+        password: ${MOODLE_ADMIN_PASSWORD:-JourneyMesh-2026!}
+        email: admin@example.test
+      database:
+        host: postgres
+        name: moodle
+        user: moodle
+        password: *database-password
+      config:
+        # Land on the dashboard after login, with the theme the upstream scenario uses.
+        defaulthomepage: "1"
+        theme: boost
+  tours:
+    use: "@openuji/journey-vendor-moodle/user-tours/service"
+    inputs:
+      stack: { service: stack, output: stack }
+    options:
+      directory: ./.runtime/tours
+      service: moodle
+      tours:
+        - ./fixtures/scrolled-tour.json
+
+tests:
+  orphaned-step-viewport:
+    services:
+      - tours
+    timeoutMs: ${MOODLE_EXAMPLE_TIMEOUT_MS:-600000}
+    journeys:
+      - id: login
+        source: ./ujg/usertour.ujg.jsonld
+        select: urn:journey:admin-login
+        executor: web
+      - id: tour
+        source: ./ujg/usertour.ujg.jsonld
+        select: urn:journey:scrolled-tour
+        executor: web
+        operations:
+          footer: urn:state:tour-footer-step
+          orphaned: urn:state:tour-orphaned-step
+    profiles:
+      - id: pointer
+        journeys:
+          login: default
+          tour: default
+
+executors:
+  web:
+    use: "@openuji/journey-executor-playwright/plugin"
+    options:
+      browser: chromium
+      headless: ${HEADLESS:-true}
+      contextOptions:
+        viewport: { width: 1024, height: 768 }
+    client:
+      use: "@openuji/journey-vendor-moodle/web/plugin"
+      options:
+        touchpoints:
+          urn:touchpoint:moodle: { baseURL: *site }
+        users:
+          urn:user:admin: *admin
+        entries:
+          moodle.login: /login/index.php
+          # The tour runs on Site administration: it is long enough that the targeted footer step
+          # scrolls the page further than the orphaned dialog's centred offset (see README).
+          moodle.administration: /admin/search.php
+        transitionValues:
+          urn:transition:admin-enters-username: { source: user.username }
+          urn:transition:admin-enters-password: { source: user.password }
+    observers:
+      - use: "@openuji/journey-observer-ux/plugin"
+        options:
+          id: user-tour
+          probes:
+            - id: footer-step
+              label: Footer step
+              at: tour.footer
+              target: tour.footer
+              # Precondition of the bug: the targeted step scrolled the page.
+              expect: [scrolled]
+            - id: orphaned-step
+              label: Orphaned step
+              at: tour.orphaned
+              target: tour.orphaned
+              # MDL-90255: the orphaned dialog must be fully inside the 1024×768 viewport.
+              expect: [visible, inViewport]
+              screenshot: true
+
+profiles:
+  default:
+    use: "@openuji/journey-profiles/plugin"
+    options:
+      preset: default
