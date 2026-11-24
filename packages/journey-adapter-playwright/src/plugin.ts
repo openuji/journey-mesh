@@ -2,7 +2,7 @@ import { chromium, firefox, webkit, type LaunchOptions, type BrowserContextOptio
 import { booleanOption, defineAdapterPlugin, knownOptions, optionsObject, positiveNumber } from "@openuji/journey-plugin";
 import { webDriverContract } from "@openuji/journey-driver-web";
 import { playwrightAutomation } from "./automation.js";
-import { playwrightAdapter } from "./index.js";
+import { playwrightAdapter, playwrightDiscoveryAdapter } from "./index.js";
 import { parsePlaywrightKeyboard } from "./keyboard.js";
 import { parsePlaywrightTransientUi } from "./transient.js";
 
@@ -34,5 +34,16 @@ export const journeyMeshPlugin = defineAdapterPlugin({
   create({ browser, ...settings }, _context, { driver, observers }) {
     if (!driver) throw new Error("Playwright requires a driver");
     return playwrightAdapter({ ...settings, driver, executionObservers: observers, browserType: browsers[browser] });
+  },
+  /**
+   * `journey-mesh discover` builds this instead of `create`, with the same settings, so a suite's
+   * browser, viewport, keyboard table and transientUi apply unchanged. Web only: it walks the
+   * browser's focus order. Findings go to the host's port, never to a file of the adapter's own.
+   */
+  discovery: {
+    create({ browser, ...settings }, _context, { driver }, { rediscover, findings }) {
+      if (!driver) throw new Error("Playwright requires a driver");
+      return playwrightDiscoveryAdapter({ ...settings, driver, browserType: browsers[browser] }, { rediscover, record: (finding) => findings.record(finding) });
+    }
   }
 });

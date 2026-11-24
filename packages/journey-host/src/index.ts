@@ -13,4 +13,6 @@ export type { RunSuiteOptions } from "./suite.js";
 export { collectObserverOutputs, executeSuite } from "./execute.js";
 export type { PreparedSuite } from "./execute.js";
 export { runConfiguredServices } from "./services.js";
+export { declareFindings } from "./discovery.js";
+export type { DeclaredSource, SuiteDiscovery } from "./discovery.js";
 export type { ServicesOptions } from "./services.js";

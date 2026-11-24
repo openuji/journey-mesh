@@ -30,6 +30,7 @@ import type { PlaywrightExecutionObserver } from "./observers/contracts.js";
 import { PlaywrightObserverDispatcher } from "./observers/playwright-observer-dispatcher.js";
 import { defaultPlaywrightKeyboard, type PlaywrightKeyboard } from "./keyboard.js";
 import { type PlaywrightTransientUi } from "./transient.js";
+import { PlaywrightPathFinder, discoverTransition, type PlaywrightDiscovery } from "./discovery.js";
 import { assertPlaywrightLocator, toPlaywrightObservationLocator, validatePlaywrightBindings } from "./locators.js";
 import {
   PlaywrightStepPerformer,
@@ -46,6 +47,8 @@ import {
 } from "./lifecycle.js";
 
 export { playwrightAutomation } from "./automation.js";
+export { PlaywrightPathFinder, boundLocator, discoverTransition } from "./discovery.js";
+export type { DiscoverTransitionInput, PlaywrightDiscovery, PlaywrightFoundPath, PlaywrightPathFinderOptions } from "./discovery.js";
 export { defaultPlaywrightKeyboard, parsePlaywrightKeyboard, resolveKey } from "./keyboard.js";
 export type { PlaywrightKeyBinding, PlaywrightKeyboard } from "./keyboard.js";
 export { noPlaywrightTransientUi, parsePlaywrightTransientUi, playwrightTransientUiPresent } from "./transient.js";
@@ -119,6 +122,19 @@ export function playwrightSessionKey(operation: JourneyPlanOperation): string {
 }
 
 export function playwrightAdapter(options: PlaywrightAdapterOptions): JourneyAdapter {
+  return createPlaywrightAdapter(options);
+}
+
+/**
+ * The adapter in discovery mode, for `journey-mesh discover` only: a transition without a declared
+ * materialization is reached by a measured walk instead of failing, taken, and reported. A test run
+ * uses `playwrightAdapter`, which never discovers.
+ */
+export function playwrightDiscoveryAdapter(options: PlaywrightAdapterOptions, discovery: PlaywrightDiscovery): JourneyAdapter {
+  return createPlaywrightAdapter(options, discovery);
+}
+
+function createPlaywrightAdapter(options: PlaywrightAdapterOptions, discovery?: PlaywrightDiscovery): JourneyAdapter {
   const configured = freezePlaywrightOptions(options);
   return Object.freeze({
     name: playwrightAdapterName,
@@ -132,7 +148,7 @@ export function playwrightAdapter(options: PlaywrightAdapterOptions): JourneyAda
       return Object.freeze({ name: playwrightAdapterName, version: "0.1.0" });
     },
     createExecution(input) {
-      return new PlaywrightAdapterExecution(input, configured);
+      return new PlaywrightAdapterExecution(input, configured, discovery);
     }
   });
 }
@@ -166,7 +182,9 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
 
   constructor(
     input: JourneyAdapterExecutionInput,
-    private readonly options: PlaywrightAdapterOptions
+    private readonly options: PlaywrightAdapterOptions,
+    /** Set only by `playwrightDiscoveryAdapter`. */
+    private readonly discovery?: PlaywrightDiscovery
   ) {
     this.context = input.context;
     this.execution = executionDescriptor(input.context);
@@ -244,7 +262,10 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     if (materialization && materialization.modality.id !== modalityId) {
       throw new Error(`Transition ${operation.transition.id}: materialization ${materialization.id} is through ${materialization.modality.id}, not the selected ${modalityId}`);
     }
-    if (!materialization && !textEntry) {
+    const discovery = this.discovery;
+    // Rediscovery measures a new path where the model declares one; a test run never does.
+    const declared = discovery?.rediscover ? undefined : materialization;
+    if (!declared && !textEntry && !discovery) {
       throw new Error(`Transition ${operation.transition.id}: Playwright performs ${modalityId} only through a declared TransitionMaterialization, and the profile selected none`);
     }
     const page = (await this.sessionForOperation(operation)).page;
@@ -266,17 +287,34 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     const text = textEntry ? this.options.driver.resolveTransitionValue(operation) : undefined;
     if (textEntry && !text) throw new Error(`Transition ${operation.transition.id}: text entry requires a transition text value`);
     this.context.signal?.throwIfAborted();
-    const performer = new PlaywrightStepPerformer({
+    const performerOptions = {
       page,
       keyboard: this.options.keyboard ?? defaultPlaywrightKeyboard,
       transientUi: this.options.transientUi,
       pointer: this.pointerState(page),
-      record: (command, work) => this.recordCommand(operation, decision, command, work),
+      record: (command: Parameters<PlaywrightCommandRecorder>[0], work: Parameters<PlaywrightCommandRecorder>[1]) => this.recordCommand(operation, decision, command, work),
       timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs,
       signal: this.context.signal
-    });
-    if (materialization) await performer.perform(materialization);
-    if (textEntry) await performer.typeAtFocus(locator, text!, `Transition ${operation.transition.id}`, materialization?.id);
+    };
+    const performer = new PlaywrightStepPerformer(performerOptions);
+    if (discovery && !declared) {
+      await discoverTransition({
+        operation, decision, target: locator, ...(text ? { text } : {}), discovery, performer,
+        finder: new PlaywrightPathFinder(performerOptions, discovery),
+        ...(materialization ? { replaces: materialization.id } : {})
+      });
+      this.context.signal?.throwIfAborted();
+      return;
+    }
+    if (declared) await performer.perform(declared);
+    if (textEntry) await performer.typeAtFocus(locator, text!, `Transition ${operation.transition.id}`, declared?.id);
+    if (discovery) {
+      await discovery.record({
+        profileId: decision.profileId, operationId: operation.id, transitionId: operation.transition.id,
+        ...(operation.transition.label ? { transitionLabel: operation.transition.label } : {}),
+        modalityId, status: "declared"
+      });
+    }
     this.context.signal?.throwIfAborted();
   }
 

@@ -151,6 +151,54 @@ adapters:
   meet it there. The option makes the count repeatable, and it does not hide the
   defect.
 
+## Finding paths
+
+`journey-mesh discover` finds the steps a model does not declare yet. The
+plugin declares a discovery mode, which the host builds in place of the adapter
+only in a discovery run; a test run never builds it. It takes the adapter's own
+settings, so the suite's browser, viewport, `keyboard` table and `transientUi`
+apply unchanged. Findings go to the host, not to a file. In code,
+`playwrightDiscoveryAdapter` is the discovery counterpart of `playwrightAdapter`.
+
+Discovery is Web only by construction: it walks the browser's sequential focus
+order, WAI-ARIA composite widgets and `aria-activedescendant`. No other adapter
+has a discovery mode, so `discover` rejects tests with journeys on them.
+
+During discovery, the adapter performs a declared materialization exactly as a
+test run would. Discovery acts only on a transition without one:
+
+| Modality | What discovery does | Path it reports |
+| --- | --- | --- |
+| Keyboard | Walks with the `operability:nextStop` key until the user is at the bound object. Then it retraces the walk and measures the `operability:previousStop` walk from the same start, keeping the shorter one. An object with an item role (`tab`, `menuitem`, `option`, `treeitem`, `radio`) is reached by walking into its container, then with `operability:nextItem` or `operability:previousItem`, again the shorter way. A combobox that controls a listbox counts as being in it. | The moves, then an activation. The last move names the bound object. |
+| Text entry | Walks to the bound field the same way, matched by DOM focus | The moves, or nothing when the field already has focus |
+| Pointer | Points at the bound object and presses | `operability:pointAt` naming the object, then an activation |
+
+Discovery then takes the transition with the table's activation key, or types
+the value, or presses the pointer, so the journey goes on to its next state.
+Each transition gives one entry: `declared`, `found` with its steps, `at-target`,
+or `not-found` with the objects the walk passed. When no path is found, the
+transition fails, because the journey cannot go on.
+
+- Keys come only from the keyboard table. Discovery never calls `focus()` or
+  `click()`, so it only reports paths a keyboard user can take.
+- A walk is measured once focus has stayed on one object for 500 ms. An
+  application often moves focus a moment after a transition: a dialog focuses
+  its first field, or a closing menu loses focus.
+- After each walk is retraced, focus must be back at the start. Sometimes it
+  cannot be:
+  - the start is outside the tab order, such as a `main` element focused by
+    script, or the document itself
+  - the page changed during the walk
+
+  Then the backward count is taken around the tab cycle, and the entry's `note`
+  says so.
+- Walks start once the declared `transientUi` has expired, like the walks of a
+  test run.
+- Discovery cannot know a shortcut, such as Escape closing a menu, or a start
+  locator. Declare those yourself.
+- A report is a proposal. Review the start and the objects passed before
+  declaring it.
+
 ## Recorded input actions
 
 Every step records one `JourneyInputAction` with `command` (`move`, `activate`,
@@ -166,7 +214,7 @@ report interpreters.
 
 ## Tests
 
-`pnpm test` runs unit tests. `pnpm test:browser` runs the step checks in
+`pnpm test` runs unit tests. `pnpm test:browser` runs the step checks and path discovery in
 headless Chromium. It covers passing and failing tab lists, pointer
 ambiguity, text entry, shortcuts and start checks. Install the browser first
 with `pnpm exec playwright install chromium`.

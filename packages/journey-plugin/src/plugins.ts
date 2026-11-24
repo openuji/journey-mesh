@@ -2,6 +2,7 @@ import type { JourneyObserverOutput } from "@openuji/journey-core";
 import type { JourneyPlan, JourneyPlanOperation } from "@openuji/journey-execution-model";
 import type { JourneyAdapter, JourneyEnvironment, JourneyProfile, RunResult } from "@openuji/journey-runner";
 import type { JourneyArtifactStore } from "./artifacts.js";
+import type { AdapterDiscoveryInput, DeclaredMaterializations, DiscoveredMaterialization, JourneyRunMode } from "./discovery.js";
 import type { ObservationPublisher, RuntimeObserver } from "./runtime-observations.js";
 
 /**
@@ -19,6 +20,11 @@ export type JourneyConfigContext = {
   readonly testId: string;
   readonly operations: readonly JourneyPlanOperation[];
   readonly env: Readonly<Record<string, string | undefined>>;
+  /**
+   * `discovery` in a run of `journey-mesh discover`, where transitions may lack declared steps
+   * because the adapter finds them. Absent or `test` everywhere else.
+   */
+  readonly mode?: JourneyRunMode;
   resolvePath(path: string): string;
   resolveOperation(reference: string): JourneyPlanOperation;
 };
@@ -60,6 +66,11 @@ export type JourneyModelCompiler = {
   resolveOperation(plan: Pick<JourneyPlan, "id" | "operations">, selector: string): JourneyPlanOperation;
   /** The model document behind `source`, if the model has one, so consumers need no model sources. Read-only; called during preparation. */
   view?(source: string): Promise<JourneyModelView | undefined>;
+  /**
+   * Declare reviewed discovery findings in the model document at `source` (`journey-mesh discover --apply`).
+   * Returns the rewritten document instead of writing it. A model without it cannot take discovered steps.
+   */
+  declareMaterializations?(source: string, found: readonly DiscoveredMaterialization[]): Promise<DeclaredMaterializations>;
 };
 
 export type JourneyObserverComponent<O = unknown> = {
@@ -79,12 +90,23 @@ type Plugin<K extends string, S, T, D = undefined> = {
   create: D extends undefined ? (settings: S, context: JourneyPluginContext) => T | Promise<T> : (settings: S, context: JourneyPluginContext, dependencies: D) => T | Promise<T>;
 };
 
+/**
+ * An adapter's discovery mode, built only in a run of `journey-mesh discover` and never in a test run.
+ * It takes the adapter's own settings, so a suite's adapter options apply unchanged; executor observers
+ * are not attached. Only adapters that can find paths declare one: today the Playwright (Web) adapter.
+ */
+export type AdapterDiscovery<S = unknown, D = unknown, O = unknown, I = ResolvedInputs> = Readonly<{
+  create(settings: S, context: JourneyPluginContext, dependencies: AdapterDependencies<D, O, I>, discovery: AdapterDiscoveryInput): JourneyAdapter | Promise<JourneyAdapter>;
+}>;
+
 export type AdapterPlugin<S = unknown, D = unknown, O = unknown, I = ResolvedInputs> = Plugin<"adapter", S, JourneyAdapter, AdapterDependencies<D, O, I>> & InputDeclarations & {
   /** Observers must declare the same automation. */
   readonly automation: Contract<O>;
   validateOperations?(settings: S, context: JourneyConfigContext, dependencies: Readonly<{ driver?: D }>): void;
   /** Drivers must declare the same contract; omitted when the adapter needs no driver. */
   readonly driverContract?: Contract<D>;
+  /** Omitted by adapters that cannot find paths; `journey-mesh discover` rejects tests that use them. */
+  readonly discovery?: AdapterDiscovery<S, D, O, I>;
 };
 export type DriverPlugin<S = unknown, D = unknown> = Plugin<"driver", S, D> & { readonly driverContract: Contract<D> };
 export type ObserverPlugin<S = unknown, O = unknown> = Plugin<"observer", S, JourneyObserverComponent<O>> & { readonly automation: Contract<O> };

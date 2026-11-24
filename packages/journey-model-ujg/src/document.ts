@@ -1,4 +1,5 @@
 import type { JourneyPlan } from "@openuji/journey-execution-model";
+import type { DiscoveredMaterialization, MaterializationWrite } from "@openuji/journey-plugin";
 import type { JourneyMapDocument } from "./journey-map.js";
 
 export type UjgNode = {
@@ -63,4 +64,9 @@ export type UjgVersionCompiler = Readonly<{
   validate(graph: ResolvedUjgDocumentGraph): void;
   compile(graph: ResolvedUjgDocumentGraph, options: CompileUjgJourneyPlanOptions): JourneyPlan;
   view(graph: ResolvedUjgDocumentGraph): JourneyMapDocument;
+  /** Declare discovery findings in a document of this version; omitted by versions that cannot. */
+  declareMaterializations?(document: unknown, found: readonly DiscoveredMaterialization[]): { document: UjgJsonDocument; writes: MaterializationWrite[] };
 }>;
+
+/** A UJG JSON-LD document as written to disk, edited node by node. */
+export type UjgJsonDocument = Record<string, unknown> & { nodes: (Record<string, unknown> & { "@id": string })[] };
