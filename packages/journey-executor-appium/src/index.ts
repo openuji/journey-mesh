@@ -1,3 +1,4 @@
+import { appiumExecutorName } from "./name.js";
 import type { JourneyInputAction } from "@openuji/journey-core";
 import { type AndroidJourneyClient } from "@openuji/journey-platform-android";
 import {
@@ -32,7 +33,7 @@ export { appiumCommandForModality, appiumLocatorQuery, appiumObservationQuery, t
 export type { AppiumInteractionCommand } from "./queries.js";
 export { initialAppiumLifecycleState, reduceAppiumLifecycle } from "./lifecycle.js";
 export type { AppiumLifecycleEvent, AppiumLifecycleState, AppiumLifecycleStatus, AppiumResource } from "./lifecycle.js";
-export const appiumExecutorName = "@openuji/journey-executor-appium";
+export { appiumExecutorName };
 
 export type AppiumExecutorOptions = Readonly<{
   client: AndroidJourneyClient;

@@ -1,4 +1,4 @@
-import { verifyInstalledApk, verifyApkChecksum } from "@openuji/journey-platform-android/installation";
+import { verifyInstalledApk, verifyApkChecksum } from "@openuji/journey-toolkit-android/installation";
 import { androidApkContract, androidDevicesContract, androidClientContract, type AndroidApk, type AndroidDevices } from "@openuji/journey-platform-android";
 import { defineExecutorPlugin, knownOptions, optionsObject, positiveNumber, requiredString } from "@openuji/journey-plugin";
 import { ensureApk } from "./application.js";

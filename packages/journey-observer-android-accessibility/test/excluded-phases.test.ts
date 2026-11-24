@@ -71,6 +71,6 @@ test("native capture records a detached journal, measurements and evidence files
 });
 
 test("the executor name in the evidence entry matches the Appium executor", async () => {
-  const { appiumExecutorName } = await import("@openuji/journey-executor-appium");
+  const { appiumExecutorName } = await import("@openuji/journey-executor-appium/observation");
   assert.equal(androidExecutorName, appiumExecutorName);
 });

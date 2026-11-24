@@ -1,0 +1,26 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "composite": true,
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../journey-host"
+    },
+    {
+      "path": "../journey-platform-android"
+    },
+    {
+      "path": "../journey-plugin"
+    },
+    {
+      "path": "../journey-toolkit-android"
+    }
+  ]
+}

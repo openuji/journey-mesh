@@ -1,4 +1,4 @@
-import { playwrightObservationContract } from "@openuji/journey-executor-playwright";
+import { playwrightObservationContract } from "@openuji/journey-executor-playwright/observation";
 import { defineExecutorObserverPlugin, knownOptions, optionsObject, requiredString, type JourneyPluginContext } from "@openuji/journey-plugin";
 import { validateUXConfiguration, type UXConfiguration, type UXCounter, type UXCheckpoint, type UXProbe } from "./index.js";
 import { uxObserver } from "./playwright.js";

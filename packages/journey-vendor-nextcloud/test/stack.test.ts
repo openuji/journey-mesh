@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileEvidenceStore } from "@openuji/journey-run-record/node";
-import { executeStackCommand, nextcloudStackRuntime, validateStackOptions, type StackOptions, type StackExecutor } from "../src/runtime/stack.js";
+import { executeStackCommand, nextcloudStackRuntime, validateStackOptions, type StackOptions, type StackExecutor } from "../src/services/stack/stack.js";
 
 test("stack commands parse stdout separately while retaining stderr on failure", async () => {
   const output = await executeStackCommand(process.execPath, ["-e", 'console.error("warning"); console.log(JSON.stringify({ installed: true }))'], { cwd: process.cwd(), env: process.env });

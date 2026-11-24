@@ -160,7 +160,7 @@ pnpm android:up
 pnpm appium:up
 ```
 
-`android:up` runs the `@openuji/journey-platform-android/service` plugin, installs
+`android:up` runs the `@openuji/journey-service-android/emulator/service` plugin, installs
 missing platform tools, emulator, command-line tools, and the host-native
 Google APIs API 35 image. It creates or validates the dedicated Pixel 6 AVD
 `journey-mesh-api35`, boots headlessly, disables animations, and writes the
@@ -268,7 +268,7 @@ resumes the Files activity and refreshes its notification status. This keeps the
 entry contract explicit when the app was already open during Alice's steps.
 Selecting an adapter does not translate web
 locators into native ones. See the [native journey model](ujg/filesharing.android.ujg.jsonld)
-and [Android driver](../../packages/journey-vendor-nextcloud/src/android.ts).
+and [Android client](../../packages/journey-vendor-nextcloud/src/android/client.ts).
 
 With `NEXTCLOUD_ANDROID_STACK_HOST` configured and Android and Appium ready,
 select the YAML test; its Nextcloud stack starts automatically:

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { executionDescriptor, runJourney, type JourneyPlan } from "@openuji/journey-runner";
-import { playwrightExecutorName } from "@openuji/journey-executor-playwright";
+import { playwrightExecutorName } from "@openuji/journey-executor-playwright/observation";
 import { fileEvidenceStore } from "@openuji/journey-run-record/node";
 import { axeExecutorName, axeObserver, isAxeOutput } from "../src/index.js";
 import { collectAxeEvidence } from "../src/observer/collect-evidence.js";

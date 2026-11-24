@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
-import { nextcloudAndroidClient } from "../src/android.js";
-import { createNextcloudFederatedSharingEnvironment } from "../src/federated-sharing.js";
-import { nextcloudWebClient } from "../src/web.js";
+import { nextcloudAndroidClient } from "../src/android/client.js";
+import { createNextcloudFederatedSharingEnvironment } from "../src/environments/federated-sharing/environment.js";
+import { nextcloudWebClient } from "../src/web/client.js";
 import type { JourneyPlanOperation, TransitionPlanOperation } from "@openuji/journey-execution-model";
 
 const base = {
@@ -107,8 +107,14 @@ test("Nextcloud package has no automation runtime dependency or mutable client s
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { dependencies?: Record<string, string> };
   const dependencyNames = Object.keys(packageJson.dependencies ?? {});
   assert.ok(!dependencyNames.some((name) => /playwright|appium|webdriverio/.test(name)));
-  const sourceDirectory = new URL("../src/", import.meta.url);
-  const sources = await Promise.all((await readdir(sourceDirectory)).filter((name) => name.endsWith(".ts")).map((name) => readFile(new URL(name, sourceDirectory), "utf8")));
+  // Client code: the platform clients and the binding resolution they share. Services and environments own resources.
+  const sources: string[] = [];
+  for (const directory of ["shared", "web", "android"]) {
+    const sourceDirectory = new URL(`../src/${directory}/`, import.meta.url);
+    const names = (await readdir(sourceDirectory)).filter((name) => name.endsWith(".ts"));
+    assert.ok(names.length, `src/${directory} has client sources`);
+    sources.push(...await Promise.all(names.map((name) => readFile(new URL(name, sourceDirectory), "utf8"))));
+  }
   const clientSources = sources.join("\n");
   assert.doesNotMatch(clientSources, /PlaywrightJourneyExecutor|AppiumJourneyExecutor|createSession\s*\(|new Map\s*\(|new Set\s*\(|\.push\s*\(|\.splice\s*\(/);
   await assert.rejects(readFile(new URL("../../journey-vendor-nextcloud-android/package.json", import.meta.url), "utf8"));

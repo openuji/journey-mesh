@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./observation": "./src/observation.ts",
     "./plugin": "./src/plugin.ts",
     "./service": "./src/runtime/plugin.ts"
   },
@@ -21,7 +22,8 @@
     "appium-uiautomator2-driver": "8.7.3",
     "webdriverio": "9.20.0",
     "@openuji/journey-core": "workspace:*",
-    "@openuji/journey-plugin": "workspace:*"
+    "@openuji/journey-plugin": "workspace:*",
+    "@openuji/journey-toolkit-android": "workspace:*"
   },
   "devDependencies": {
     "@xmldom/xmldom": "0.9.12",

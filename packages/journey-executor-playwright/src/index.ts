@@ -1,3 +1,4 @@
+import { playwrightExecutorName } from "./name.js";
 import type { JourneyInputAction } from "@openuji/journey-core";
 import { createHash } from "node:crypto";
 import { basename, dirname, extname, join } from "node:path";
@@ -115,7 +116,7 @@ type PlaywrightSession = Readonly<{
 
 const defaultAssertionTimeoutMs = 30_000;
 
-export const playwrightExecutorName = "@openuji/journey-executor-playwright";
+export { playwrightExecutorName };
 
 export function playwrightSessionKey(operation: JourneyPlanOperation): string {
   return JSON.stringify([operation.actorId, operation.touchpointId]);

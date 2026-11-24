@@ -1,0 +1,29 @@
+{
+  "name": "@openuji/journey-service-android",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./emulator/service": "./src/emulator/plugin.ts",
+    "./apk-build/service": "./src/apk-build/plugin.ts"
+  },
+  "bin": {
+    "journey-service-android": "./bin/journey-service-android.mjs"
+  },
+  "dependencies": {
+    "@openuji/journey-host": "workspace:*",
+    "@openuji/journey-platform-android": "workspace:*",
+    "@openuji/journey-plugin": "workspace:*",
+    "@openuji/journey-toolkit-android": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3"
+  }
+}

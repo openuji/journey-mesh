@@ -7,7 +7,7 @@ import type { AxeEvidence } from "./observer/evidence.js";
 import type {
   PlaywrightExecutionObserver,
   PlaywrightOperationObservation
-} from "@openuji/journey-executor-playwright";
+} from "@openuji/journey-executor-playwright/observation";
 import type {
   RunResult,
   JsonObject

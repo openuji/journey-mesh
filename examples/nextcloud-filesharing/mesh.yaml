@@ -93,7 +93,7 @@ services:
           password: *bob-password
       enabledApps: *enabled-apps
   android:
-    use: "@openuji/journey-platform-android/service"
+    use: "@openuji/journey-service-android/emulator/service"
     options:
       api: 35
       avd: ${ANDROID_AVD_NAME:-journey-mesh-api35}

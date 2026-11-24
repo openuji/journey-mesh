@@ -118,7 +118,7 @@ test("example delegates Android/Appium infrastructure lifecycle to the owning pa
   assert.ok(!("appium" in allDependencies));
   assert.ok(!("appium-uiautomator2-client" in allDependencies));
   assert.ok(!("playwright" in allDependencies));
-  assert.ok("@openuji/journey-platform-android" in packageJson.dependencies);
+  assert.ok("@openuji/journey-service-android" in packageJson.dependencies);
   assert.ok("@openuji/journey-executor-appium" in packageJson.dependencies);
   assert.equal(packageJson.scripts["android:apk"], undefined);
   // Every lifecycle script that used to live here moved into the packages

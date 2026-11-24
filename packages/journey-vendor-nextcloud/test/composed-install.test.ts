@@ -3,9 +3,9 @@ import { test } from "node:test";
 import { access, mkdir, mkdtemp, readFile, readlink, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { buildService } from "../src/runtime/build.js";
-import { appInstall } from "../src/runtime/app-install.js";
-import type { AppBuild, ManagedStack } from "../src/runtime/contracts.js";
+import { buildService } from "../src/services/build/build.js";
+import { appInstall } from "../src/services/app-install/app-install.js";
+import type { AppBuild, ManagedStack } from "../src/services/contracts.js";
 
 async function installFixture(services = ["cloud"]) {
   const directory = await mkdtemp(join(tmpdir(), "composed-install-"));
@@ -148,8 +148,8 @@ test("composerScripts runs the app's composer scripts only when asked, and only 
 });
 
 test("the app-build plugin parses composerScripts and the server-build plugin rejects it", async () => {
-  const { journeyMeshPlugin: app } = await import("../src/runtime/app-build-plugin.js");
-  const { journeyMeshPlugin: server } = await import("../src/runtime/server-build-plugin.js");
+  const { journeyMeshPlugin: app } = await import("../src/services/app-build/plugin.js");
+  const { journeyMeshPlugin: server } = await import("../src/services/server-build/plugin.js");
   const image = `example@sha256:${"a".repeat(64)}`;
   const context = { resolvePath: (path: string) => `/job/${path}` } as never;
   const base = { directory: "builds", image: "journey/app", nodeImage: image, composerImage: image };

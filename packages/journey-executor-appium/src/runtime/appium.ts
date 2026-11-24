@@ -1,5 +1,5 @@
 import { runOwnedProcess, spawnOwnedProcess } from "@openuji/journey-plugin/node";
-import { findSdk } from "@openuji/journey-platform-android/service";
+import { findSdk } from "@openuji/journey-toolkit-android";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname, resolve } from "node:path";
