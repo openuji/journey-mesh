@@ -15,7 +15,7 @@ export function moodleWebClient(options: MoodleWebClientOptions): WebJourneyClie
       const binding = bindingForOperation(config, operation);
       // A site may live below a path (https://host/moodle); routes resolve inside it.
       const base = normalizedURL(binding.touchpoint.baseURL);
-      return webEntryTarget(new URL(`${base.pathname}${binding.entry}`, base).href);
+      return webEntryTarget(new URL(`${base.pathname.replace(/\/+$/, "")}${binding.entry}`, base).href);
     },
     resolveTransitionValue(operation) {
       return transitionValueForOperation(config, operation);

@@ -405,8 +405,10 @@ feature of the renderer app, not of the packages.
 The repository currently includes:
 
 - A UJG JSON-LD model binding and input-modality profiles.
-- Playwright and Android Appium executors, with Nextcloud Web and Android clients.
-- Android emulator, Appium server and pinned Nextcloud stack service plugins.
+- Playwright and Android Appium executors, with Nextcloud Web and Android clients
+  and a Moodle Web client.
+- Android emulator, Appium server, Nextcloud stack and Moodle build, stack and
+  user-tour service plugins.
 - Axe and Android accessibility observers and reporters.
 - An optional UX observer with pure metric derivation.
 
@@ -435,8 +437,8 @@ Explore the [live demo](https://journey-mesh.openuji.org/#demo) and
 
 - The shipped UJG compiler produces deterministic linear plans; ambiguous
   branches and cycles are rejected.
-- Only Nextcloud clients are currently supplied in this repository; another
-  vendor's client needs no runner or executor change.
+- Nextcloud (Web, Android) and Moodle (Web) clients are supplied in this
+  repository; another vendor's client needs no runner or executor change.
   Deployment and platform prerequisites depend on the selected integrations.
 - Accessibility evidence supports journey review; it does not certify conformance.
 - Extension APIs and report formats are prototype contracts.
