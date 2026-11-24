@@ -1,21 +1,19 @@
 import {
   androidApplicationEntryTarget, androidDeepLinkEntryTarget, type AndroidJourneyClient
 } from "@openuji/journey-platform-android";
-import {
-  bindingForOperation, nextcloudResolverConfig, normalizedURL, transitionValueForOperation,
-  type NextcloudResolverOptions
-} from "../shared/resolver.js";
+import { bindingForOperation, clientBindings, normalizedURL, transitionValueForOperation } from "@openuji/journey-plugin/client";
+import { application, type NextcloudResolverOptions } from "../shared/resolver.js";
 
 export type NextcloudAndroidEntry = "application" | Readonly<{ kind: "deep-link"; route: string }>;
 export type NextcloudAndroidClientOptions = NextcloudResolverOptions<NextcloudAndroidEntry>;
 
 export function nextcloudAndroidClient(options: NextcloudAndroidClientOptions): AndroidJourneyClient {
-  const config = nextcloudResolverConfig(options, (entry, id) => {
+  const config = clientBindings(options, { application, validateEntry: (entry, id) => {
     if (entry === "application") return;
     if (!entry || entry.kind !== "deep-link" || !entry.route || entry.route.startsWith("//")) {
       throw new Error(`Invalid Nextcloud Android entry ${id}`);
     }
-  });
+  } });
   return Object.freeze({
     name: "@openuji/journey-vendor-nextcloud/android",
     version: "0.1.0",

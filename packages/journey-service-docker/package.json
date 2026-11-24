@@ -4,7 +4,20 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "exports": { "./observations": "./src/observations.ts" },
-  "dependencies": { "@openuji/journey-plugin": "workspace:*" },
-  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit" }
+  "exports": {
+    "./compose": "./src/compose.ts",
+    "./observations": "./src/observations.ts"
+  },
+  "dependencies": {
+    "@openuji/journey-plugin": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3"
+  }
 }

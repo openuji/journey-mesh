@@ -1,7 +1,7 @@
 import { androidClientContract } from "@openuji/journey-platform-android";
 import { defineClientPlugin, knownOptions, optionsObject, requiredString } from "@openuji/journey-plugin";
 import { nextcloudAndroidClient, type NextcloudAndroidEntry } from "./client.js";
-import { pluginBindings, validateConfiguredOperations } from "../shared/plugin-options.js";
+import { parseClientBindings, validateConfiguredOperations } from "@openuji/journey-plugin/client";
 
 function entries(options: Record<string, unknown>): Record<string, NextcloudAndroidEntry> {
   return Object.fromEntries(Object.entries(optionsObject(options.entries, "entries")).map(([id, raw]) => {
@@ -17,7 +17,7 @@ export const journeyMeshPlugin = defineClientPlugin({
   parse(options, context) {
     knownOptions(options, ["touchpoints", "users", "entries", "transitionValues"]);
     validateConfiguredOperations(options, context.operations);
-    const settings = { ...pluginBindings(options), entries: entries(options) };
+    const settings = { ...parseClientBindings(options), entries: entries(options) };
     nextcloudAndroidClient(settings);
     return settings;
   },
