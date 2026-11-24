@@ -19,15 +19,56 @@ async function fixture() {
   const options: StackOptions = { project: "isolated-stack", composeFiles: ["/compose.yaml"], image: "nextcloud@sha256:pinned", expectedVersion: "34.0.2", directory, environment: { PASSWORD: "literal$# value" }, enabledApps: ["notifications"], services: { first: { baseURL: "http://example.test:18081", username: "account", password: "private-password" } } };
   const artifacts = fileEvidenceStore(join(directory, "evidence"));
   const calls: readonly string[][] = [];
+  /** config.php as `occ config:system:set|get` see it, by key path (e.g. "trusted_domains 0"). */
+  const systemConfig = new Map<string, string>();
   const execute: StackExecutor = async (command, args) => {
     (calls as string[][]).push([command, ...args]);
+    const occ = args.indexOf("occ");
+    if (occ >= 0 && args[occ + 1] === "config:system:set") {
+      systemConfig.set(args.slice(occ + 2).filter((arg) => !arg.startsWith("--")).join(" "), args.find((arg) => arg.startsWith("--value="))!.slice("--value=".length));
+      return "";
+    }
+    if (occ >= 0 && args[occ + 1] === "config:system:get") return systemConfig.get(args.slice(occ + 2).join(" ")) ?? "";
     if (args.includes("status")) return JSON.stringify({ installed: true, versionstring: "34.0.2" });
     if (args.includes("app:list")) return JSON.stringify({ enabled: { notifications: "1.0" } });
     if (args.includes("inspect")) return "sha256:actual-image";
     return "";
   };
-  return { options, artifacts, calls, execute, ports: { artifacts, observations: recordingPublisher(() => {}) } };
+  return { options, artifacts, calls, systemConfig, execute, ports: { artifacts, observations: recordingPublisher(() => {}) } };
 }
+
+/** The image's entrypoint still runs as PID 1 for the first `checks` reads of /proc/1/cmdline, then execs Apache. */
+function entrypointRunning(inner: StackExecutor, checks: number): StackExecutor {
+  let seen = 0;
+  return (command, args, context) => args.at(-1) === "/proc/1/cmdline"
+    ? Promise.resolve(++seen <= checks ? "/bin/sh\0/entrypoint.sh\0apache2-foreground" : "apache2-foreground")
+    : inner(command, args, context);
+}
+
+test("configuration waits until the image's entrypoint has finished writing config.php", async () => {
+  const { options, ports, calls, execute } = await fixture();
+  const lease = await nextcloudStackRuntime(options, ports, entrypointRunning(execute, 1)).start({}); await lease.release();
+  const firstWrite = calls.findIndex((call) => call.includes("config:system:set"));
+  const statusPolls = calls.filter((call, index) => index < firstWrite && call.includes("status"));
+  assert.equal(statusPolls.length, 2, "polls again while the entrypoint is still PID 1");
+});
+
+test("a setting another config.php writer dropped is applied again, and one that never sticks fails startup", async () => {
+  const flaky = await fixture();
+  let dropped = false;
+  const dropOnce: StackExecutor = async (command, args, context) => {
+    const result = await flaky.execute(command, args, context);
+    if (!dropped && args.includes("config:system:get") && args.at(-1) === "allow_local_remote_servers") { dropped = true; return "false"; }
+    return result;
+  };
+  const lease = await nextcloudStackRuntime(flaky.options, flaky.ports, dropOnce).start({}); await lease.release();
+  assert.equal(flaky.calls.filter((call) => call.includes("config:system:set") && call.includes("allow_local_remote_servers")).length, 2);
+  const stuck = await fixture();
+  const neverSticks: StackExecutor = async (command, args, context) =>
+    args.includes("config:system:get") && args.at(-1) === "allow_local_remote_servers" ? "false" : stuck.execute(command, args, context);
+  await assert.rejects(nextcloudStackRuntime(stuck.options, stuck.ports, neverSticks).start({}), /first: allow_local_remote_servers did not keep the configured value/);
+  assert.ok(stuck.calls.some((call) => call.includes("down")), "the failed acquisition is released");
+});
 
 /** Awaits each delivery like the host's publisher; source stamping and deadlines are tested in journey-host. */
 function recordingPublisher(observe: (value: ComposeLifecycleObservation) => Promise<void> | void): ObservationPublisher {

@@ -131,24 +131,43 @@ export function nextcloudStackRuntime(options: StackOptions, { artifacts, observ
         /** Install, configure and verify every Nextcloud service of the running stack, then record its identity. */
         async bootstrap({ run, compose: docker, signal: activeSignal }) {
           const occ = (service: string, ...args: string[]) => docker("exec", "-T", "-u", "www-data", service, "php", "occ", ...args);
+          /**
+           * The image's entrypoint keeps writing config.php (one `occ config:system:set` per trusted domain) after
+           * `occ status` reports installed, and only then execs the web server. Nextcloud writes config.php from the
+           * copy each process loaded, so a setting written concurrently is lost. Configure only once PID 1 is no
+           * longer the entrypoint script. An image without that script counts as started.
+           */
+          const started = (service: string) => docker("exec", "-T", service, "cat", "/proc/1/cmdline").then((cmdline) => !cmdline.includes("entrypoint.sh"), () => false);
           const services: unknown[] = [];
           for (const [service, account] of Object.entries(options.services)) {
             let status: { installed?: boolean; versionstring?: string } | undefined;
+            let ready = false;
             for (let attempt = 0; attempt < 120; attempt++) {
               activeSignal?.throwIfAborted();
               status = await occ(service, "status", "--output=json").then((text) => JSON.parse(text)).catch(() => undefined);
-              if (status?.installed) break;
+              if (status?.installed && (ready = await started(service))) break;
               await new Promise<void>((accept) => setTimeout(accept, 2000));
             }
             if (!status?.installed || !(status.versionstring === expectedVersion || status.versionstring?.startsWith(`${expectedVersion} `))) throw new Error(`${service}: installed version does not match ${expectedVersion}`);
+            if (!ready) throw new Error(`${service}: the image's entrypoint script did not finish`);
             const url = new URL(account.baseURL);
             for (const app of ["federation", "files_sharing", ...options.enabledApps]) await occ(service, "app:enable", app);
             await occ(service, "app:disable", "firstrunwizard").catch(() => {});
-            for (const [key, value] of Object.entries({ "trusted_domains 0": url.hostname, "trusted_domains 1": url.host, "trusted_domains 2": service, "overwritehost": url.host, "overwriteprotocol": url.protocol.slice(0, -1), "overwrite.cli.url": url.origin })) await occ(service, "config:system:set", ...key.split(" "), `--value=${value}`);
-            await occ(service, "config:system:set", "allow_local_remote_servers", "--type=boolean", "--value=true");
-            for (const [key, value] of Object.entries(options.systemConfig ?? {})) {
-              const type = typeof value === "boolean" ? "boolean" : typeof value === "number" ? "integer" : "string";
-              await occ(service, "config:system:set", key, `--type=${type}`, `--value=${value}`);
+            const system: readonly Readonly<{ key: readonly string[]; value: string; type?: string }>[] = [
+              ...Object.entries({ "trusted_domains 0": url.hostname, "trusted_domains 1": url.host, "trusted_domains 2": service, "overwritehost": url.host, "overwriteprotocol": url.protocol.slice(0, -1), "overwrite.cli.url": url.origin })
+                .map(([key, value]) => ({ key: key.split(" "), value })),
+              { key: ["allow_local_remote_servers"], value: "true", type: "boolean" },
+              ...Object.entries(options.systemConfig ?? {}).map(([key, value]) => ({ key: [key], value: String(value), type: typeof value === "boolean" ? "boolean" : typeof value === "number" ? "integer" : "string" }))
+            ];
+            const set = (setting: (typeof system)[number]) => occ(service, "config:system:set", ...setting.key, ...(setting.type ? [`--type=${setting.type}`] : []), `--value=${setting.value}`);
+            for (const setting of system) await set(setting);
+            // Any later concurrent config.php write could still drop a value: read every one back and apply the lost ones again.
+            for (let round = 1; ; round++) {
+              const lost: (typeof system)[number][] = [];
+              for (const setting of system) if ((await occ(service, "config:system:get", ...setting.key).catch(() => undefined))?.trim() !== setting.value) lost.push(setting);
+              if (!lost.length) break;
+              if (round === 3) throw new Error(`${service}: ${lost.map((setting) => setting.key.join(" ")).join(", ")} did not keep the configured value`);
+              for (const setting of lost) await set(setting);
             }
             for (const key of ["incoming_server2server_share_enabled", "outgoing_server2server_share_enabled"]) await occ(service, "config:app:set", "files_sharing", key, "--value=yes");
             const exists = await occ(service, "user:info", account.username).then(() => true).catch(() => false);
