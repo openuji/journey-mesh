@@ -12,7 +12,7 @@ performs each kind of step.
 | --- | --- |
 | UJG document | The materializations of each transition, their modality, the step chain linked by `stepPreviousRef`, and optional step and start locators |
 | Profile (`mesh.yaml`) | The preferred modality, and which materialization to run when several exist (`materializationPreference`) |
-| Adapter (`mesh.yaml`) | The key for each move kind and for activation (`keyboard`) |
+| Adapter (`mesh.yaml`) | The key for each move kind and for activation (`keyboard`), and the interface that expires on its own (`transientUi`) |
 | Adapter | Performs exactly the declared steps, checks each one, and fails with a message that names the step |
 
 A profile rejects a transition that has no materialization through the modality
@@ -109,6 +109,47 @@ adapters:
 When the focused object has a role the binding doesn't list and there is no
 `"*"`, the step fails and the error names the role to add. Producer-defined
 FocusMoveKinds work once the table gives them a key.
+
+## Transient interface
+
+Some interface removes itself on a timer: a toast, a snackbar, a banner that
+fades. While it is on the page, its controls are tab stops, so how many stops a
+declared focus walk crosses depends on how long ago something else happened. That
+is worst when a walk starts from lost focus, because it then runs from an end of
+the document, where such controls usually sit. A count probed on a fast machine
+fails on a slow one.
+
+`transientUi` names that interface, and a materialization with a focus move
+starts only once none of it is on the page:
+
+```yaml
+adapters:
+  web:
+    use: "@openuji/journey-adapter-playwright/plugin"
+    options:
+      transientUi:
+        - { role: status }                  # any object with this ARIA role
+        - { role: alert, name: Saved }      # role with its exact accessible name
+        - { css: ".app-notification" }      # a Playwright CSS selector
+```
+
+- It is configuration, like `keyboard`. The adapter knows no application's
+  notifications, so nothing is transient unless the suite says so.
+- It waits and nothing more. It never dismisses, hides or clicks anything, adds
+  no step, and records no input action, because the user did nothing. The wait
+  uses the same polling and `assertionTimeoutMs` as every other check, and
+  fails naming what never went away.
+- It applies to keyboard and text-entry materializations that have a focus move.
+  Pointer paths, and keyboard paths that only activate at the current focus or
+  press a shortcut, do not count stops and never wait.
+- Declare an object whose role or selector no persistent element shares. `<output>`
+  and live regions have the implicit role `status`, so `{ role: status }` fits a
+  page only if nothing permanent uses it. A persistent match makes every walk
+  time out instead of passing silently.
+- Declare walks against a page without that interface, and probe their counts
+  that way. The interface is still in the tab order while it is up, and users
+  meet it there. The option makes the count repeatable, and it does not hide the
+  defect.
 
 ## Recorded input actions
 

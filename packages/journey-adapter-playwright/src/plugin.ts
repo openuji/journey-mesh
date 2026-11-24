@@ -4,13 +4,14 @@ import { webDriverContract } from "@openuji/journey-driver-web";
 import { playwrightAutomation } from "./automation.js";
 import { playwrightAdapter } from "./index.js";
 import { parsePlaywrightKeyboard } from "./keyboard.js";
+import { parsePlaywrightTransientUi } from "./transient.js";
 
 const browsers = { chromium, firefox, webkit };
 
 export const journeyMeshPlugin = defineAdapterPlugin({
   kind: "adapter", automation: playwrightAutomation, driverContract: webDriverContract,
   parse(options) {
-    knownOptions(options, ["browser", "headless", "launchOptions", "contextOptions", "assertionTimeoutMs", "actionTimeoutMs", "navigationTimeoutMs", "keyboard"]);
+    knownOptions(options, ["browser", "headless", "launchOptions", "contextOptions", "assertionTimeoutMs", "actionTimeoutMs", "navigationTimeoutMs", "keyboard", "transientUi"]);
     const browser = String(options.browser ?? "chromium");
     if (!Object.hasOwn(browsers, browser)) throw new Error("Unknown browser");
     return {
@@ -21,7 +22,8 @@ export const journeyMeshPlugin = defineAdapterPlugin({
       assertionTimeoutMs: positiveNumber(options.assertionTimeoutMs, 30_000),
       actionTimeoutMs: positiveNumber(options.actionTimeoutMs, 30_000),
       navigationTimeoutMs: positiveNumber(options.navigationTimeoutMs, 30_000),
-      keyboard: parsePlaywrightKeyboard(options.keyboard)
+      keyboard: parsePlaywrightKeyboard(options.keyboard),
+      transientUi: parsePlaywrightTransientUi(options.transientUi)
     };
   },
   validateOperations(settings, context, { driver }) {

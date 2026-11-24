@@ -17,10 +17,12 @@ import {
   PlaywrightStepPerformer,
   defaultPlaywrightKeyboard,
   parsePlaywrightKeyboard,
+  parsePlaywrightTransientUi,
   playwrightAdapter,
   toPlaywrightLocator,
   type PlaywrightKeyboard,
-  type PlaywrightRecordedCommand
+  type PlaywrightRecordedCommand,
+  type PlaywrightTransientUi
 } from "../src/index.js";
 
 let browser: Browser;
@@ -45,15 +47,15 @@ const materialization = (modality: string, steps: ResolvedMaterializationStep[],
 
 type Logged = PlaywrightRecordedCommand & { gesture?: string };
 
-async function fixture(html: string, run: (page: Page, perform: (m: ResolvedTransitionMaterialization, keys?: PlaywrightKeyboard) => Promise<Logged[]>) => Promise<void>): Promise<void> {
+async function fixture(html: string, run: (page: Page, perform: (m: ResolvedTransitionMaterialization, keys?: PlaywrightKeyboard, transientUi?: PlaywrightTransientUi) => Promise<Logged[]>) => Promise<void>): Promise<void> {
   const page = await browser.newPage();
   try {
     await page.setContent(html);
     const pointerState = {};
-    await run(page, async (m, keys = defaultPlaywrightKeyboard) => {
+    await run(page, async (m, keys = defaultPlaywrightKeyboard, transientUi) => {
       const log: Logged[] = [];
       await new PlaywrightStepPerformer({
-        page, keyboard: keys, pointer: pointerState, timeoutMs: 500,
+        page, keyboard: keys, transientUi, pointer: pointerState, timeoutMs: 500,
         record: async (command, work) => { let gesture: string | undefined; await work((value) => { gesture = value; }); log.push({ ...command, ...(gesture ? { gesture } : {}) }); }
       }).perform(m);
       return log;
@@ -190,6 +192,61 @@ test("an object covered by another fails the pointer check", async () => {
   });
 });
 
+/**
+ * Focus is lost, as after a menu closes, so a backward walk starts at the end of the document,
+ * where a toast's Close button is a tab stop until the toast expires. `window.expire()` ends it.
+ */
+const toastPage = `<button onclick="document.getElementById('out').textContent = 'shared'">Share</button>
+  <div role="status" id="toast">Saved <button aria-label="Close">x</button></div>
+  <div id="out"></div>
+  <script>window.expire = () => document.getElementById('toast')?.remove();</script>`;
+const share = locator("urn:locator:share", "button", "Share");
+const expireToastAfter = async (page: Page, afterMs: number): Promise<void> => {
+  await new Promise((resolve) => setTimeout(resolve, afterMs));
+  await page.evaluate(() => (window as unknown as { expire(): void }).expire());
+};
+
+test("a walk that starts while a toast is up counts the toast's stop, which is why its count would not be stable", async () => {
+  await fixture(toastPage, async (_page, perform) => {
+    await assert.rejects(
+      perform(materialization(keyboard, [move("operability:previousStop", share)])),
+      /MoveStep operability:previousStop via Shift\+Tab from .*; last value: focus is at button "Close", expected urn:locator:share/
+    );
+  });
+});
+
+test("the declared transient interface expires before a focus walk starts, so the walk counts only stable stops", async () => {
+  await fixture(toastPage, async (page, perform) => {
+    const expiry = expireToastAfter(page, 100);
+    const log = await perform(materialization(keyboard, [move("operability:previousStop", share), activate(share)]), defaultPlaywrightKeyboard, parsePlaywrightTransientUi([{ role: "status" }]));
+    await expiry;
+    assert.deepEqual(log.map((entry) => entry.gesture), ["Shift+Tab", "Space"]);
+    assert.equal(await page.locator("#out").textContent(), "shared");
+  });
+});
+
+test("transient interface that never expires fails the walk and names what is still there", async () => {
+  await fixture(toastPage, async (_page, perform) => {
+    await assert.rejects(
+      perform(materialization(keyboard, [move("operability:previousStop", share)]), defaultPlaywrightKeyboard, parsePlaywrightTransientUi([{ css: "#toast" }, { role: "status" }])),
+      /its focus moves start once the transientUi declared for this adapter has expired; last value: css "#toast" is still present \(1\)/
+    );
+  });
+});
+
+test("only focus walks wait: activation at the current focus and pointer paths act with the toast up", async () => {
+  await fixture(toastPage, async (page, perform) => {
+    const transientUi = parsePlaywrightTransientUi([{ role: "status" }]);
+    await page.focus("button:has-text('Share')");
+    await perform(materialization(keyboard, [activate(share)]), defaultPlaywrightKeyboard, transientUi);
+    assert.equal(await page.locator("#out").textContent(), "shared");
+    await page.evaluate(() => { document.getElementById("out")!.textContent = ""; });
+    await perform(materialization(pointer, [move("operability:pointAt", share), activate(share)]), defaultPlaywrightKeyboard, transientUi);
+    assert.equal(await page.locator("#out").textContent(), "shared");
+    assert.equal(await page.locator("#toast").count(), 1, "nothing was dismissed");
+  });
+});
+
 const formPage = (titleTabIndex = "0") => `<label>Title <input id="title" tabindex="${titleTabIndex}"></label><label>Slug <input id="slug"></label>`;
 
 test("text entry types only at a field that focus moves reached", async () => {
@@ -241,19 +298,52 @@ test("the declared start object is checked before the first step", async () => {
   });
 });
 
+const heading = (name: string) => [{ id: `urn:obs:${name}`, surfaceId: `urn:surface:${name}`, eventId: "urn:observation-event:presence", requiredInputModalityProfiles: [], locators: [locator(`urn:locator:heading-${name}`, "heading", name[0]!.toUpperCase() + name.slice(1))] }];
+const state = (name: string, sequence: number) => ({
+  id: `state-${name}`, sequence, kind: "state", actorId: "actor", touchpointId: "touchpoint",
+  entry: { id: "entry", stateId: "state-home" }, entryBinding: { id: "entry-binding", value: "tabs" },
+  state: { id: `urn:state:${name}` }, surface: { id: `urn:surface:${name}` },
+  target: { expectedMatchCount: 1, bindings: heading(name), observation: { stateId: `urn:state:${name}`, surfaceId: `urn:surface:${name}`, expectedMatchCount: 1, bindings: heading(name) } }
+});
+
+test("the adapter waits for the declared transient interface before it starts a focus walk", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "playwright-transient-"));
+  after(() => rm(directory, { recursive: true, force: true }));
+  const file = join(directory, "toast.html");
+  // The toast outlives the walk's first key press by far, and its Close button is the last tab stop.
+  await writeFile(file, `<h1 id="title">Home</h1><button onclick="document.getElementById('title').textContent = 'Done'">Share</button>
+    <div role="status" id="toast">Saved <button aria-label="Close">x</button></div>
+    <script>setTimeout(() => document.getElementById('toast').remove(), 1000)</script>`);
+  const driver = Object.freeze({ name: "driver", resolveEntry: () => Object.freeze({ kind: "url" as const, url: pathToFileURL(file).href }), resolveTransitionValue: () => undefined });
+  const walk = materialization(keyboard, [move("operability:previousStop", share), activate(share)]);
+  const profiles = [{ id: keyboard, modalities: [{ id: keyboard }] }];
+  const transition = {
+    ...state("home", 1), id: "share", kind: "transition", transition: { id: "urn:transition", from: "urn:state:home", to: "urn:state:done" },
+    from: { id: "urn:state:home", type: "State" }, to: { id: "urn:state:done", type: "State" }, effects: [], surface: { id: "urn:surface:share" },
+    activation: { transitionId: "urn:transition", eventId: "urn:observation-event:select", from: { id: "urn:state:home", type: "State" }, to: { id: "urn:state:done", type: "State" }, surfaceId: "urn:surface:share", requiredInputModalityProfiles: profiles,
+      bindings: [{ id: "urn:obs:share", surfaceId: "urn:surface:share", eventId: "urn:observation-event:select", requiredInputModalityProfiles: profiles, locators: [share] }] },
+    materializations: [walk]
+  } as unknown as TransitionPlanOperation;
+  const plan = { id: "toast", operations: [state("home", 0), transition, state("done", 2)] } as unknown as JourneyPlan;
+  const run = (transientUi?: PlaywrightTransientUi) => runJourney({
+    plan,
+    profiles: [{ id: keyboard, selectInputModality: () => ({ profileId: keyboard, inputModalityProfile: profiles[0]!, modality: walk.modality, materialization: walk }) }],
+    adapter: playwrightAdapter({ driver, browser, assertionTimeoutMs: 3_000, transientUi })
+  });
+  const started = Date.now();
+  const waited = await run(parsePlaywrightTransientUi([{ role: "status" }]));
+  assert.equal(waited.ok, true, JSON.stringify(waited.errors));
+  assert.ok(Date.now() - started >= 900, "the walk started only after the toast expired");
+  const unwaited = await run();
+  assert.equal(unwaited.ok, false, "without the option the walk starts at the toast's Close button");
+});
+
 test("the adapter runs a selected materialization end to end and records each step", async () => {
   const directory = await mkdtemp(join(tmpdir(), "playwright-materialization-"));
   after(() => rm(directory, { recursive: true, force: true }));
   const file = join(directory, "tabs.html");
   await writeFile(file, tabsPage());
   const driver = Object.freeze({ name: "driver", resolveEntry: () => Object.freeze({ kind: "url" as const, url: pathToFileURL(file).href }), resolveTransitionValue: () => undefined });
-  const heading = (name: string) => [{ id: `urn:obs:${name}`, surfaceId: `urn:surface:${name}`, eventId: "urn:observation-event:presence", requiredInputModalityProfiles: [], locators: [locator(`urn:locator:heading-${name}`, "heading", name[0]!.toUpperCase() + name.slice(1))] }];
-  const state = (name: string, sequence: number) => ({
-    id: `state-${name}`, sequence, kind: "state", actorId: "actor", touchpointId: "touchpoint",
-    entry: { id: "entry", stateId: "state-home" }, entryBinding: { id: "entry-binding", value: "tabs" },
-    state: { id: `urn:state:${name}` }, surface: { id: `urn:surface:${name}` },
-    target: { expectedMatchCount: 1, bindings: heading(name), observation: { stateId: `urn:state:${name}`, surfaceId: `urn:surface:${name}`, expectedMatchCount: 1, bindings: heading(name) } }
-  });
   const keyboardMaterialization = materialization(keyboard, [move("operability:nextStop"), move("operability:nextStop", tab("Home")), move("operability:nextItem", tab("Drafts")), activate(tab("Drafts"))]);
   const pointerMaterialization = materialization(pointer, [move("operability:pointAt", tab("Drafts")), activate()]);
   const profiles = [keyboard, pointer].map((id) => ({ id, modalities: [{ id }] }));

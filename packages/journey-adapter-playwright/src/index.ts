@@ -29,6 +29,7 @@ import { ensureChromiumInstalled } from "./browser-binary.js";
 import type { PlaywrightExecutionObserver } from "./observers/contracts.js";
 import { PlaywrightObserverDispatcher } from "./observers/playwright-observer-dispatcher.js";
 import { defaultPlaywrightKeyboard, type PlaywrightKeyboard } from "./keyboard.js";
+import { type PlaywrightTransientUi } from "./transient.js";
 import { assertPlaywrightLocator, toPlaywrightObservationLocator, validatePlaywrightBindings } from "./locators.js";
 import {
   PlaywrightStepPerformer,
@@ -47,6 +48,8 @@ import {
 export { playwrightAutomation } from "./automation.js";
 export { defaultPlaywrightKeyboard, parsePlaywrightKeyboard, resolveKey } from "./keyboard.js";
 export type { PlaywrightKeyBinding, PlaywrightKeyboard } from "./keyboard.js";
+export { noPlaywrightTransientUi, parsePlaywrightTransientUi, playwrightTransientUiPresent } from "./transient.js";
+export type { PlaywrightTransientObject, PlaywrightTransientUi } from "./transient.js";
 export {
   assertPlaywrightLocator,
   toPlaywrightLocator,
@@ -97,6 +100,8 @@ export type PlaywrightAdapterOptions = Readonly<{
   navigationTimeoutMs?: number;
   /** Keys for Operability move kinds and activation; defaults to defaultPlaywrightKeyboard. */
   keyboard?: PlaywrightKeyboard;
+  /** Interface that expires on its own (toasts); focus walks start only once none is present. */
+  transientUi?: PlaywrightTransientUi;
 }>;
 
 type PlaywrightSession = Readonly<{
@@ -264,6 +269,7 @@ class PlaywrightAdapterExecution implements JourneyAdapterExecution {
     const performer = new PlaywrightStepPerformer({
       page,
       keyboard: this.options.keyboard ?? defaultPlaywrightKeyboard,
+      transientUi: this.options.transientUi,
       pointer: this.pointerState(page),
       record: (command, work) => this.recordCommand(operation, decision, command, work),
       timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs,

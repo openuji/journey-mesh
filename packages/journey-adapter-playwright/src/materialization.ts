@@ -9,6 +9,7 @@ import {
 } from "@openuji/journey-execution-model";
 import { anyRole, resolveKey, type PlaywrightKeyBinding, type PlaywrightKeyboard } from "./keyboard.js";
 import { pollUntil, toPlaywrightLocator, validatePlaywrightLocator } from "./locators.js";
+import { noPlaywrightTransientUi, playwrightTransientUiPresent, type PlaywrightTransientUi } from "./transient.js";
 
 /**
  * Performs declared UJG RC4 Operability steps (Operability §7). It never places focus
@@ -41,6 +42,8 @@ export type PlaywrightPointerState = { position?: Readonly<{ x: number; y: numbe
 export type PlaywrightStepPerformerOptions = Readonly<{
   page: Page;
   keyboard: PlaywrightKeyboard;
+  /** Interface that expires on its own; a materialization that moves focus waits until none is present. */
+  transientUi?: PlaywrightTransientUi;
   pointer: PlaywrightPointerState;
   record: PlaywrightCommandRecorder;
   timeoutMs: number;
@@ -90,6 +93,7 @@ export class PlaywrightStepPerformer {
   /** Perform every step in declared order, checking each as Operability §7 requires. */
   async perform(materialization: ResolvedTransitionMaterialization): Promise<void> {
     const pointer = materialization.modality.id === pointerInputModalityId;
+    if (!pointer) await this.awaitTransientUiGone(materialization);
     if (materialization.startLocator) await this.checkStart(materialization, pointer);
     for (const step of materialization.steps) {
       this.options.signal?.throwIfAborted();
@@ -113,6 +117,20 @@ export class PlaywrightStepPerformer {
       gesture("type");
       await this.options.page.keyboard.type(text);
     });
+  }
+
+  /**
+   * A focus walk crosses the tab stops of whatever is on the page, so it starts only once the
+   * interface the suite declared transient has expired. Only walks are affected: activation and
+   * shortcuts act at the current focus and do not count stops. Never dismisses anything.
+   */
+  private async awaitTransientUiGone(materialization: ResolvedTransitionMaterialization): Promise<void> {
+    const transientUi = this.options.transientUi ?? noPlaywrightTransientUi;
+    if (transientUi.length === 0 || !materialization.steps.some((step) => step.kind === "move")) return;
+    await this.poll(
+      `Materialization ${materialization.id}: its focus moves start once the transientUi declared for this adapter has expired`,
+      async () => await playwrightTransientUiPresent(this.options.page, transientUi)
+    );
   }
 
   private async checkStart(materialization: ResolvedTransitionMaterialization, pointer: boolean): Promise<void> {
