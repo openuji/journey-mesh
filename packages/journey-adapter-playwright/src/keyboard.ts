@@ -1,3 +1,6 @@
+import {
+  firstItemMoveKindId, lastItemMoveKindId, nextItemMoveKindId, nextStopMoveKindId, previousItemMoveKindId, previousStopMoveKindId
+} from "@openuji/journey-execution-model";
 import { isPlaywrightRole } from "./locators.js";
 
 /**
@@ -25,12 +28,12 @@ export const anyRole = "*";
  */
 export const defaultPlaywrightKeyboard: PlaywrightKeyboard = deepFreeze({
   moves: {
-    "operability:nextStop": "Tab",
-    "operability:previousStop": "Shift+Tab",
-    "operability:firstItem": "Home",
-    "operability:lastItem": "End",
-    "operability:nextItem": { tab: "ArrowRight", option: "ArrowDown", combobox: "ArrowDown", menuitem: "ArrowDown", treeitem: "ArrowDown", radio: "ArrowDown" },
-    "operability:previousItem": { tab: "ArrowLeft", option: "ArrowUp", combobox: "ArrowUp", menuitem: "ArrowUp", treeitem: "ArrowUp", radio: "ArrowUp" }
+    [nextStopMoveKindId]: "Tab",
+    [previousStopMoveKindId]: "Shift+Tab",
+    [firstItemMoveKindId]: "Home",
+    [lastItemMoveKindId]: "End",
+    [nextItemMoveKindId]: { tab: "ArrowRight", option: "ArrowDown", combobox: "ArrowDown", menuitem: "ArrowDown", treeitem: "ArrowDown", radio: "ArrowDown" },
+    [previousItemMoveKindId]: { tab: "ArrowLeft", option: "ArrowUp", combobox: "ArrowUp", menuitem: "ArrowUp", treeitem: "ArrowUp", radio: "ArrowUp" }
   },
   activation: { button: "Space", checkbox: "Space", radio: "Space", switch: "Space", menuitemcheckbox: "Space", menuitemradio: "Space", [anyRole]: "Enter" }
 });

@@ -1,13 +1,15 @@
-import type { JSHandle, Locator, Page } from "playwright";
+import type { Locator, Page } from "playwright";
 import {
   keyboardInputModalityId,
   keyboardTextEntryInputModalityId,
+  pointAtMoveKindId,
   pointerInputModalityId,
   type ResolvedMaterializationStep,
   type ResolvedTransitionMaterialization,
   type TransitionPlanOperation
 } from "@openuji/journey-execution-model";
-import { anyRole, resolveKey, type PlaywrightKeyBinding, type PlaywrightKeyboard } from "./keyboard.js";
+import { describeElement, focusedObject, PlaywrightFocus } from "./focus.js";
+import type { PlaywrightKeyboard } from "./keyboard.js";
 import { pollUntil, toPlaywrightLocator, validatePlaywrightLocator } from "./locators.js";
 import { noPlaywrightTransientUi, playwrightTransientUiPresent, type PlaywrightTransientUi } from "./transient.js";
 
@@ -19,7 +21,6 @@ import { noPlaywrightTransientUi, playwrightTransientUiPresent, type PlaywrightT
 /** Core `extensions` key on a ShortcutStep whose object does not expose its shortcut: `{ "keys": "Control+K" }`. */
 export const playwrightShortcutExtension = "urn:openuji:playwright:shortcut";
 
-const pointAtMoveKindId = "operability:pointAt";
 const performedModalities: readonly string[] = [keyboardInputModalityId, pointerInputModalityId, keyboardTextEntryInputModalityId];
 
 export type PlaywrightStepCommand = "move" | "activate" | "shortcut" | "text-entry";
@@ -88,7 +89,11 @@ export function validatePlaywrightMaterializations(operation: TransitionPlanOper
 }
 
 export class PlaywrightStepPerformer {
-  constructor(private readonly options: PlaywrightStepPerformerOptions) {}
+  private readonly focus: PlaywrightFocus;
+
+  constructor(private readonly options: PlaywrightStepPerformerOptions) {
+    this.focus = new PlaywrightFocus(options.page);
+  }
 
   /** Perform every step in declared order, checking each as Operability §7 requires. */
   async perform(materialization: ResolvedTransitionMaterialization): Promise<void> {
@@ -112,7 +117,7 @@ export class PlaywrightStepPerformer {
     await this.options.record({ command: "text-entry", ...(materializationId ? { materializationId } : {}) }, async (gesture) => {
       await this.poll(
         `${where}: text entry types at the focused object, which must match the transition's ObservationBinding; declare focus moves that reach the field`,
-        async () => await this.focusMatches(field, "dom") ? "ok" : `focus is at ${await this.describeFocus("dom")}`
+        async () => await this.focus.focusMatches(field, "dom") ? "ok" : `focus is at ${await this.focus.describeFocus("dom")}`
       );
       gesture("type");
       await this.options.page.keyboard.type(text);
@@ -138,23 +143,23 @@ export class PlaywrightStepPerformer {
     const target = await toPlaywrightLocator(this.options.page, start);
     await this.poll(`Materialization ${materialization.id}: the user must start at ${start.id}`, async () => pointer
       ? await this.pointerMatches(target) ? "ok" : `pointer is at ${await this.describePointer()}`
-      : await this.focusMatches(target) ? "ok" : `focus is at ${await this.describeFocus()}`);
+      : await this.focus.focusMatches(target) ? "ok" : `focus is at ${await this.focus.describeFocus()}`);
   }
 
   private async moveFocus(step: ResolvedMaterializationStep, where: string, gesture: (value: string) => void): Promise<void> {
     const { page } = this.options;
     const kind = step.moveKind!.id;
-    const key = await this.keyFor(this.options.keyboard.moves[kind], `moves["${kind}"]`, where);
-    const from = await this.describeFocus();
+    const key = await this.focus.keyFor(this.options.keyboard.moves[kind], `moves["${kind}"]`, where);
+    const from = await this.focus.describeFocus();
     gesture(key);
     const before = await page.evaluateHandle(focusedObject);
     try {
       await page.keyboard.press(key);
       const target = step.locator ? await toPlaywrightLocator(page, step.locator) : undefined;
       await this.poll(`${where} (MoveStep ${kind} via ${key} from ${from})`, async () => {
-        if (await this.focusIs(before)) return "focus did not move";
+        if (await this.focus.focusIs(before)) return "focus did not move";
         if (!target) return "ok";
-        return await this.focusMatches(target) ? "ok" : `focus is at ${await this.describeFocus()}, expected ${step.locator!.id}`;
+        return await this.focus.focusMatches(target) ? "ok" : `focus is at ${await this.focus.describeFocus()}, expected ${step.locator!.id}`;
       });
     } finally {
       await before.dispose();
@@ -164,11 +169,11 @@ export class PlaywrightStepPerformer {
   private async keyboardActivate(step: ResolvedMaterializationStep, where: string, gesture: (value: string) => void): Promise<void> {
     if (step.locator) {
       const target = await toPlaywrightLocator(this.options.page, step.locator);
-      await this.poll(`${where} (ActivationStep): the user must be at ${step.locator.id}`, async () => await this.focusMatches(target) ? "ok" : `focus is at ${await this.describeFocus()}`);
-    } else if (!await this.hasFocus()) {
+      await this.poll(`${where} (ActivationStep): the user must be at ${step.locator.id}`, async () => await this.focus.focusMatches(target) ? "ok" : `focus is at ${await this.focus.describeFocus()}`);
+    } else if (!await this.focus.hasFocus()) {
       throw new Error(`${where} (ActivationStep): no object has focus`);
     }
-    const key = await this.keyFor(this.options.keyboard.activation, "activation", where);
+    const key = await this.focus.keyFor(this.options.keyboard.activation, "activation", where);
     gesture(key);
     await this.options.page.keyboard.press(key);
   }
@@ -218,46 +223,6 @@ export class PlaywrightStepPerformer {
     await this.options.page.keyboard.press(keys);
   }
 
-  /** The key a binding names for the focused object's role, tested with Playwright's role engine. */
-  private async keyFor(binding: PlaywrightKeyBinding | undefined, path: string, where: string): Promise<string> {
-    if (binding === undefined) throw new Error(`${where}: no key for ${path}; set adapters.<name>.options.keyboard.${path}`);
-    const focused = typeof binding === "string" ? undefined : await this.focusLocator("object");
-    const key = await resolveKey(binding, async (role) =>
-      focused !== undefined && await this.options.page.getByRole(role as Parameters<Page["getByRole"]>[0]).and(focused).count() > 0);
-    if (key) return key;
-    throw new Error(`${where}: no key for ${path} at ${await this.describeFocus()}; name its role or "${anyRole}" in adapters.<name>.options.keyboard.${path}`);
-  }
-
-  private async hasFocus(focus: "object" | "dom" = "object"): Promise<boolean> {
-    const focused = await this.options.page.evaluateHandle(focus === "object" ? focusedObject : deepActiveElement);
-    try { return await focused.evaluate((element) => element !== null); }
-    finally { await focused.dispose(); }
-  }
-
-  private async focusIs(previous: JSHandle<Element | null>): Promise<boolean> {
-    const focused = await this.options.page.evaluateHandle(focusedObject);
-    try { return await this.options.page.evaluate(([left, right]) => left === right, [previous, focused] as const); }
-    finally { await focused.dispose(); }
-  }
-
-  /**
-   * Whether the object the user is at (`object`) or the element keys go to (`dom`) matches the target.
-   * Matching is a locator count, which Playwright runs in its isolated world: on some pages the
-   * role engine fails in the page's own world, where `evaluateAll` runs.
-   */
-  private async focusMatches(target: Locator, focus: "object" | "dom" = "object"): Promise<boolean> {
-    const focused = await this.focusLocator(focus);
-    return focused !== undefined && await target.and(focused).count() > 0;
-  }
-
-  /** A locator for the focused object: the focused element, or the active descendant it names. */
-  private async focusLocator(focus: "object" | "dom"): Promise<Locator | undefined> {
-    const { page } = this.options;
-    if (!await this.hasFocus(focus)) return undefined;
-    const descendantId = focus === "object" ? await page.evaluate(activeDescendantId) : null;
-    return descendantId === null ? page.locator("*:focus") : page.locator(`[id="${descendantId.replace(/["\\]/g, "\\$&")}"]`);
-  }
-
   /**
    * The pointer is at an object when the topmost object under it is that object or inside it.
    * The target resolves to handles first, so no selector engine runs in the page's own world.
@@ -284,13 +249,6 @@ export class PlaywrightStepPerformer {
     }
   }
 
-  /** A diagnostic description of the focused object; never used to decide anything. */
-  private async describeFocus(focus: "object" | "dom" = "object"): Promise<string> {
-    const focused = await this.options.page.evaluateHandle(focus === "object" ? focusedObject : deepActiveElement);
-    try { return await focused.evaluate(describeElement) ?? "the document (no object has focus)"; }
-    finally { await focused.dispose(); }
-  }
-
   private async describePointer(): Promise<string> {
     const position = this.options.pointer.position;
     if (!position) return "an unknown position";
@@ -315,44 +273,3 @@ function shortcutHint(step: ResolvedMaterializationStep, where: string): string 
   if (typeof keys !== "string" || !keys.trim()) throw new Error(`${where}: ${playwrightShortcutExtension} must be an object with a nonempty keys string`);
   return keys;
 }
-
-// Page functions: self-contained, with no nested named functions, so they serialize into the page.
-/** The element with DOM focus, where keys and typed text go. */
-const deepActiveElement = (): Element | null => {
-  let element = document.activeElement;
-  while (element?.shadowRoot?.activeElement) element = element.shadowRoot.activeElement;
-  return element === null || element === document.body || element === document.documentElement ? null : element;
-};
-
-/**
- * The object the user is at, as the accessibility API reports focus: the focused element,
- * or the element its aria-activedescendant names (a combobox or listbox option).
- */
-const focusedObject = (): Element | null => {
-  let element = document.activeElement;
-  while (element?.shadowRoot?.activeElement) element = element.shadowRoot.activeElement;
-  if (element === null || element === document.body || element === document.documentElement) return null;
-  const descendantId = element.getAttribute("aria-activedescendant");
-  const root = element.getRootNode() as Document | ShadowRoot;
-  return (descendantId ? root.getElementById(descendantId) : null) ?? element;
-};
-
-/** The id that the focused element's aria-activedescendant names, when that element exists. */
-const activeDescendantId = (): string | null => {
-  let element = document.activeElement;
-  while (element?.shadowRoot?.activeElement) element = element.shadowRoot.activeElement;
-  const descendantId = element?.getAttribute("aria-activedescendant");
-  if (!element || !descendantId) return null;
-  return (element.getRootNode() as Document | ShadowRoot).getElementById(descendantId) ? descendantId : null;
-};
-
-const describeElement = (element: Element | null): string | undefined => {
-  if (!element) return undefined;
-  const role = element.getAttribute("role") ?? element.tagName.toLowerCase();
-  const labelled = element.getAttribute("aria-label")
-    ?? (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement
-      ? element.labels?.[0]?.textContent
-      : element.textContent);
-  const name = (labelled ?? "").trim().replace(/\s+/g, " ").slice(0, 60);
-  return name ? `${role} "${name}"` : role;
-};

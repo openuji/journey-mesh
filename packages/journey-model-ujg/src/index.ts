@@ -5,6 +5,8 @@ import { registry } from "./versions/index.js";
 export type { UjgNode, UjgDocument, UjgInput, ResolvedUjgDocumentGraph, CompileUjgJourneyPlanOptions } from "./document.js";
 export { UjgCompileError } from "./document.js";
 export { loadUjgDocumentGraph } from "./imports.js";
+export { declareDiscoveredMaterializations } from "./materializations.js";
+export type { UjgJsonDocument } from "./document.js";
 export type { JourneyMapDocument } from "./journey-map.js";
 
 /** Parse a single document; reference validation requires its import closure. */

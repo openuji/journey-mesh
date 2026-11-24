@@ -23,10 +23,12 @@ export const journeyMeshPlugin = defineProfilePlugin({
     if (!modalityPreference.length) throw new Error("modalityPreference must be a nonempty array");
     return { kind: "custom", id: requiredString(options.id, "profile id"), modalityPreference, selection };
   },
-  create(settings) {
+  create(settings, context) {
+    // A discovery run finds the steps a model does not declare yet, so it cannot require them.
+    const selection: Selection = context.mode === "discovery" ? { ...settings.selection, requireMaterialization: false } : settings.selection;
     if (settings.kind === "custom") {
-      return inputModalityProfile({ id: settings.id, modalityPreference: settings.modalityPreference, ...settings.selection });
+      return inputModalityProfile({ id: settings.id, modalityPreference: settings.modalityPreference, ...selection });
     }
-    return settings.preset === "default" ? defaultProfile(settings.selection) : keyboardOnlyProfile(settings.selection);
+    return settings.preset === "default" ? defaultProfile(selection) : keyboardOnlyProfile(selection);
   }
 });

@@ -260,7 +260,31 @@ journey-mesh report <run-dir> [--config mesh.yaml]          # rebuild report/ fr
 journey-mesh export <run-dir> [--output <file>] [--data]    # the report as one JSON value
 journey-mesh compare <baseline-run> <candidate-run> [--pairings <file>] [--title <text>] [--config mesh.yaml] [--output <dir>]
 journey-mesh services up|down mesh.yaml [--service <key>]
+journey-mesh discover mesh.yaml [--test <id>] [--profile <id>] [--output <dir>] [--apply] [--rediscover]
 ```
+
+`discover` is an authoring aid for the keyboard and pointer steps a model must
+declare. It is Web only. An adapter plugin can declare a discovery mode next to
+`create`, and only the Playwright adapter has one, because finding a path means
+walking the browser's focus order. A test with any journey on another adapter,
+such as Appium on Android, is rejected before anything starts; select a Web
+test with `--test`. `journey-mesh test` never builds a discovery mode, so
+Android tests run as before.
+
+During discovery, profiles accept transitions without steps, and observers are
+left out. Transitions that declare steps are performed as declared. For every
+other transition, discover:
+- finds a path and takes the transition, so the journey continues
+- reports the path
+
+`--apply` declares the reviewed paths through the suite's model plugin (the UJG
+plugin writes UJG 1.0 RC4 documents) and runs preflight again. `--rediscover` measures declared paths again so they can be
+replaced. The findings go to `<outputDir>/discover/materializations.json`, and
+the discovery run record goes to `<outputDir>/discover/run/`. The exit status is
+1 when a test failed, a path was not found, or two profiles found different
+paths. `test` never discovers. The
+[Playwright adapter](packages/journey-adapter-playwright/README.md#finding-paths)
+describes how paths are found.
 
 Rendering is done by apps, for example
 [`apps/report-renderer`](apps/report-renderer/README.md):

@@ -3,6 +3,7 @@ import type { JourneyProgressSink } from "@openuji/journey-runner";
 import { JourneyConfigError, loadSuiteConfig } from "./config/load.js";
 import { compileTest } from "./compile.js";
 import { prepareTest, type PreparedTest } from "./assemble.js";
+import type { SuiteDiscovery } from "./discovery.js";
 import { executeSuite, type PreparedSuite } from "./execute.js";
 import { pluginContext, preflightArtifacts } from "./plugins/context.js";
 import { pluginLoader } from "./plugins/loader.js";
@@ -16,6 +17,10 @@ export type RunSuiteOptions = {
   signal?: AbortSignal;
   progress?: readonly JourneyProgressSink[];
   outputDir?: string;
+  /** Run only this profile combination of each selected test. */
+  profile?: string;
+  /** A discovery run (`journey-mesh discover`); a test run never sets it. */
+  discovery?: SuiteDiscovery;
 };
 
 /**
@@ -26,20 +31,26 @@ export async function prepareSuite(path: string, options: RunSuiteOptions = {}):
   const loaded = await loadSuiteConfig(path, options.env);
   const { config } = loaded;
   const testIds = config.tests.map((test) => test.id);
-  const selected = config.tests.filter((test) => options.test === undefined || test.id === options.test);
+  const selected = config.tests.filter((test) => options.test === undefined || test.id === options.test).map((test) => {
+    if (options.profile === undefined) return test;
+    const profiles = test.profiles.filter((combination) => combination.id === options.profile);
+    if (!profiles.length) throw new JourneyConfigError(`Test ${test.id} has no profile combination ${options.profile}`, { testId: test.id, testIds });
+    return Object.freeze({ ...test, profiles: Object.freeze(profiles) });
+  });
   if (!selected.length) throw new JourneyConfigError(`Unknown test ${options.test}`, { testIds });
+  const mode = options.discovery ? "discovery" as const : "test" as const;
   let current: string | undefined;
   try {
     const outputDir = outputDirectory(loaded, options.outputDir);
     const load = pluginLoader(loaded.path, loaded.env);
     const artifacts = preflightArtifacts;
-    const suiteContext = (testId: string) => pluginContext({ configPath: loaded.path, env: loaded.env, testId, artifacts });
+    const suiteContext = (testId: string) => pluginContext({ configPath: loaded.path, env: loaded.env, testId, artifacts, mode });
     const compiler = await (await load("model", config.model, "model", suiteContext("suite"))).create();
     const tests: PreparedTest[] = [];
     for (const test of selected) {
       current = test.id;
       const compiled = await compileTest(test, compiler, loaded.path, loaded.env);
-      tests.push(await prepareTest(test, compiled, { loaded, load, artifacts: preflightArtifacts }));
+      tests.push(await prepareTest(test, compiled, { loaded, load, artifacts: preflightArtifacts, ...(options.discovery ? { discovery: options.discovery } : {}) }));
     }
     current = undefined;
     const keys = [...new Set(tests.flatMap((test) => test.services))];
@@ -52,7 +63,8 @@ export async function prepareSuite(path: string, options: RunSuiteOptions = {}):
       const component = await load("adapter", definition, `adapters.${name}`, suiteContext(test.id), undefined, Object.keys(definition.inputs));
       validateInputs(component.plugin, definition.inputs, contracts, `adapters.${name}`);
     }
-    return Object.freeze({ ...(config.target ? { target: config.target } : {}), ...(config.label ? { label: config.label } : {}), outputDir, tests: Object.freeze(tests), services: Object.freeze(services), runtimeObservers: Object.freeze(runtimeObservers), loaded });
+    return Object.freeze({ ...(config.target ? { target: config.target } : {}), ...(config.label ? { label: config.label } : {}), outputDir, tests: Object.freeze(tests), services: Object.freeze(services), runtimeObservers: Object.freeze(runtimeObservers), loaded,
+      ...(options.discovery ? { discovery: options.discovery } : {}) });
   } catch (error) {
     if (error instanceof JourneyConfigError && error.testIds.length) throw error;
     throw new JourneyConfigError(error instanceof Error ? error.message : "Invalid journey test configuration", { testId: current, testIds });

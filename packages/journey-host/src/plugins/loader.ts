@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
-  AdapterDependencies, AdapterPlugin, ServicePlugin, ServiceDependencies, JourneyMeshPlugin, JourneyPluginContext, JourneyPluginKind, PluginOfKind
+  AdapterDependencies, AdapterDiscoveryInput, AdapterPlugin, ServicePlugin, ServiceDependencies, JourneyMeshPlugin, JourneyPluginContext, JourneyPluginKind, PluginOfKind
 } from "@openuji/journey-plugin";
 import { configContext } from "./context.js";
 import { interpolate, type Environment } from "../config/load.js";
@@ -15,6 +15,8 @@ export type LoadedPlugin<K extends JourneyPluginKind> = Readonly<{
   plugin: PluginOfKind<K>;
   validate(driver?: unknown): void;
   create(dependencies?: AdapterDependencies | ServiceDependencies, runtimeContext?: JourneyPluginContext): Promise<ComponentOf<K>>;
+  /** An adapter's discovery mode, for `journey-mesh discover` only; fails for any other plugin. */
+  createDiscovery(dependencies: AdapterDependencies, discovery: AdapterDiscoveryInput, runtimeContext?: JourneyPluginContext): Promise<ComponentOf<K>>;
   stopConfigured(context?: JourneyPluginContext): Promise<void>;
 }>;
 export type PluginLoader = <K extends JourneyPluginKind>(
@@ -87,6 +89,13 @@ export function pluginLoader(configPath: string, env: Environment): PluginLoader
             ? await plugin.create(settings, runtimeContext, dependencies as ServiceDependencies)
             : await plugin.create(settings, runtimeContext);
         if (!shapes[kind](created)) throw new Error(`${label} must create a ${kind}`);
+        return created as ComponentOf<K>;
+      },
+      async createDiscovery(dependencies: AdapterDependencies, discovery: AdapterDiscoveryInput, runtimeContext = context): Promise<ComponentOf<K>> {
+        const mode = typed.kind === "adapter" ? (typed as AdapterPlugin).discovery : undefined;
+        if (!mode) throw new Error(`${label} has no discovery mode`);
+        const created: unknown = await mode.create(settings, runtimeContext, dependencies, discovery);
+        if (!shapes[kind](created)) throw new Error(`${label} discovery mode must create a ${kind}`);
         return created as ComponentOf<K>;
       }
     });

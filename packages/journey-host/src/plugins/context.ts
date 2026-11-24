@@ -1,6 +1,6 @@
 import { immutableSnapshot } from "@openuji/journey-core";
 import { dirname, resolve } from "node:path";
-import { type JourneyConfigContext, type JourneyArtifactStore, type JourneyPluginContext, type ObservationPublisher } from "@openuji/journey-plugin";
+import { type JourneyConfigContext, type JourneyArtifactStore, type JourneyPluginContext, type JourneyRunMode, type ObservationPublisher } from "@openuji/journey-plugin";
 import type { JourneyPlanOperation } from "@openuji/journey-runner";
 import type { Environment } from "../config/load.js";
 
@@ -17,16 +17,18 @@ export type ContextInput = Readonly<{
   componentId?: string;
   /** Omitted where no runtime observer runs, e.g. explicit `services up`. */
   observations?: ObservationPublisher;
+  /** `discovery` only in a run of `journey-mesh discover`. */
+  mode?: JourneyRunMode;
 }>;
 
 /** Nothing subscribes outside a suite run, so producers always publish without checking for a port. */
 const unobserved: ObservationPublisher = Object.freeze({ async publish() {} });
 
 /** Every plugin context is built here, with its operation scope fixed at construction. */
-export function pluginContext({ configPath, env, testId, artifacts, operations = [], aliases = new Map(), componentId = testId, observations = unobserved }: ContextInput): JourneyPluginContext {
+export function pluginContext({ configPath, env, testId, artifacts, operations = [], aliases = new Map(), componentId = testId, observations = unobserved, mode = "test" }: ContextInput): JourneyPluginContext {
   const scope = immutableSnapshot(operations);
   return Object.freeze({
-    configPath, env: immutableSnapshot(env), testId, artifacts, operations: scope, componentId, observations,
+    configPath, env: immutableSnapshot(env), testId, artifacts, operations: scope, componentId, observations, mode,
     resolvePath: (path: string) => resolve(dirname(configPath), path),
     resolveOperation(reference: string) {
       const id = aliases.get(reference) ?? reference;

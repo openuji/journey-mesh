@@ -15,6 +15,7 @@ import type { LoadedSuiteConfig } from "./config/load.js";
 import type { ServiceValues } from "./inputs.js";
 import type { LoadedPlugin } from "./plugins/loader.js";
 import { runtimeObservers } from "./runtime-observers.js";
+import type { SuiteDiscovery } from "./discovery.js";
 
 /** A suite ready to run: every selected test passed preflight and no resource has been allocated. */
 export type PreparedSuite = Readonly<{
@@ -26,6 +27,8 @@ export type PreparedSuite = Readonly<{
   services: readonly LoadedService[];
   runtimeObservers?: readonly LoadedPlugin<"runtime-observer">[];
   loaded: LoadedSuiteConfig;
+  /** Set when the suite was prepared as a discovery run; its adapters run in discovery mode. */
+  discovery?: SuiteDiscovery;
 }>;
 export type ExecuteOptions = { signal?: AbortSignal; progress?: readonly JourneyProgressSink[]; outputDir?: string };
 
@@ -114,7 +117,8 @@ export async function executeSuite(prepared: PreparedSuite, options: ExecuteOpti
     if (prepared.target) target = sourceIdentity(values[prepared.target.service]?.[prepared.target.output]);
     const load = pluginLoader(prepared.loaded.path, prepared.loaded.env);
     for (const test of prepared.tests) runtimeTests = [...runtimeTests, await assembleTest(test.config, test.compiled, {
-      loaded: prepared.loaded, load, values, artifacts: fileEvidenceStore(outputDir, testFilesPrefix(test.id)), observations: observation.observable
+      loaded: prepared.loaded, load, values, artifacts: fileEvidenceStore(outputDir, testFilesPrefix(test.id)), observations: observation.observable,
+      ...(prepared.discovery ? { discovery: prepared.discovery } : {})
     })];
   } catch (error) { ready = false; errors.push(errorToJourneyRunError(error)); }
   try {

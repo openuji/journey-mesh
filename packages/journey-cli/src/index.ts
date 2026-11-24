@@ -6,6 +6,7 @@ import { testFailures } from "@openuji/journey-run-record";
 import { runDirectory } from "@openuji/journey-run-record/node";
 import { buildReport, compareRuns, defaultReportConfig, exportReport, loadReportConfig, type ComparisonPairing, type ReportConfig } from "@openuji/journey-reporter";
 import { consoleJourneyProgress } from "@openuji/journey-runner/console";
+import { discover } from "./discover.js";
 
 /**
  * The composition root: the only place that wires execution (host → run record) to reporting
@@ -14,6 +15,7 @@ import { consoleJourneyProgress } from "@openuji/journey-runner/console";
 const help = `Usage:
   journey-mesh test <config.yaml> [--test <id>] [--output <directory>] [--no-report]
   journey-mesh validate <config.yaml>... [--test <id>]
+  journey-mesh discover <config.yaml> [--test <id>] [--profile <id>] [--output <directory>] [--apply] [--rediscover]
   journey-mesh report <run-directory> [--config <config.yaml>]
   journey-mesh export <run-directory> [--output <file.json>] [--data]
   journey-mesh compare <baseline-run> <candidate-run> [--pairings <file.yaml>] [--title <text>] [--config <config.yaml>] [--output <directory>]
@@ -23,6 +25,11 @@ const help = `Usage:
 test writes a run record, then derives its report model below <output>/report/.
 Without --test, every test in the YAML is selected and must pass preflight.
 Validating several configurations checks all of them before any is run.
+discover is Web only: it runs tests whose journeys all run on an adapter with a discovery mode
+(the Playwright adapter) and reports the keyboard and pointer paths the model does not declare
+yet. A test with a journey on any other adapter, such as Android, is rejected. --apply declares
+the paths through the suite's model plugin, --rediscover also measures declared paths again.
+It is an authoring aid; test never discovers.
 Without --service, every entry in the YAML's services section is selected.
 View a generated report with the workspace renderer:
   pnpm --filter @openuji/report-renderer serve <run-directory>
@@ -35,6 +42,7 @@ type CommandSpec = { positionals: [number, number]; flags: readonly string[]; sw
 const commands: Record<string, CommandSpec> = {
   test: { positionals: [1, 1], flags: ["--test", "--output"], switches: ["--no-report"] },
   validate: { positionals: [1, Infinity], flags: ["--test"] },
+  discover: { positionals: [1, 1], flags: ["--test", "--profile", "--output"], switches: ["--apply", "--rediscover"] },
   report: { positionals: [1, 1], flags: ["--config"] },
   export: { positionals: [1, 1], flags: ["--output"], switches: ["--data"] },
   compare: { positionals: [2, 2], flags: ["--pairings", "--title", "--config", "--output"] },
@@ -142,6 +150,9 @@ export async function main(args: string[]): Promise<number> {
       return comparison.ok ? exitCodes.passed : exitCodes.failed;
     }
     process.once("SIGINT", interrupt); process.once("SIGTERM", interrupt);
+    if (name === "discover") {
+      return await discover(path, { test: flags["--test"], profile: flags["--profile"], outputDir: flags["--output"], apply: switches.has("--apply"), rediscover: switches.has("--rediscover"), signal: controller.signal });
+    }
     if (name === "validate") {
       const valid: string[] = [];
       for (const config of positionals) {

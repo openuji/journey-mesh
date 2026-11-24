@@ -1,5 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { defineModelPlugin, noOptions } from "@openuji/journey-plugin";
-import { compileUjgJourneyPlan, loadUjgDocumentGraph } from "./index.js";
+import { compileUjgJourneyPlan, declareDiscoveredMaterializations, loadUjgDocumentGraph } from "./index.js";
 import { toJourneyMapDocument } from "./journey-map.js";
 
 export const journeyMeshPlugin = defineModelPlugin({
@@ -23,6 +25,14 @@ export const journeyMeshPlugin = defineModelPlugin({
       /** The journey map is projected from the same JSON-LD document that is executed. */
       async view(source) {
         return { format: "journey-map", document: toJourneyMapDocument(await graphFor(source)) };
+      },
+      /** Rewrites a local document only; the caller writes the returned text. */
+      async declareMaterializations(source, found) {
+        const path = source.startsWith("file:") ? fileURLToPath(source) : URL.canParse(source) ? undefined : source;
+        if (!path) throw new Error(`Discovered steps can be declared only in a local UJG document, not ${source}`);
+        const result = declareDiscoveredMaterializations(JSON.parse(await readFile(path, "utf8")), found);
+        const changed = result.writes.some((write) => write.outcome !== "kept");
+        return { ...(changed ? { document: `${JSON.stringify(result.document, null, 2)}\n` } : {}), writes: result.writes };
       }
     };
   }
