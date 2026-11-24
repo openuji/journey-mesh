@@ -67,6 +67,9 @@ on temporary copies and may reuse Docker's cache.
 | `journey-service-android/apk-build/service` | `source`, optional `sibling` | `apk`, `identity` |
 | `journey-service-android/emulator/service` | none | `devices` |
 | `journey-executor-appium/service` | optional `devices` | `server` |
+| `journey-vendor-moodle/build/service` | `source` | `image` |
+| `journey-vendor-moodle/stack/service` | `image` | `stack`, `identity` |
+| `journey-vendor-moodle/user-tours/service` | `stack` | none |
 
 All package names in the table have the `@openuji/` prefix. App builds use the
 app's `appinfo/info.xml` ID/version and its Node/Composer build conventions. The

@@ -43,6 +43,9 @@
       "path": "packages/journey-vendor-nextcloud/tsconfig.json"
     },
     {
+      "path": "packages/journey-vendor-moodle/tsconfig.json"
+    },
+    {
       "path": "packages/journey-observer-axe/tsconfig.json"
     },
     {
