@@ -100,14 +100,28 @@ owns everything that holds for any Docker Compose stack:
 4. writes the persistent ownership record, runs `up -d`, records the containers
    it started, and publishes `composeLifecycle` `allocated`;
 5. runs the `bootstrap` hook (install, configure and verify the application),
-   whose outputs and provenance become the started service's.
+   whose outputs and provenance become the started service's. Besides `run` and
+   `compose`, the hook gets `entrypointFinished(service, script)`: whether the
+   image has finished its entrypoint script (PID 1 is no longer that script).
+   Images such as Nextcloud's keep configuring the application from their
+   entrypoint after it reports itself installed, so configure only once this is
+   true.
 
 Release publishes `before-release`, checks the project still holds only the
 containers this acquisition started, then runs `down --volumes` and removes the
 ownership record. A failure after `up` is compensated the same way;
 `releaseComposeStack(path, { envFileVariable })` is the explicit shutdown for
-`stopConfigured`. A second vendor writes a service plugin with its own two hooks
-and options; `journey-observer-docker` captures its diagnostics unchanged:
+`stopConfigured`.
+
+A stack service outputs the running stack as `composeStackContract`
+(`ComposeStack`: project, Compose files, env file, services). Services that act
+inside a stack, such as Nextcloud's `app-install`, take it as an input and
+address the project with `composeCommand(stack)`. Any Compose stack satisfies
+the contract, so such a service checks that the services it needs are in
+`stack.services`.
+
+A second vendor writes a service plugin with its own two hooks and options;
+`journey-observer-docker` captures its diagnostics unchanged:
 
 ```ts
 create(settings, context) {
@@ -115,9 +129,10 @@ create(settings, context) {
     { label: "Moodle", project: settings.project, composeFiles: settings.composeFiles, directory: settings.directory,
       environment: settings.environment, envFileVariable: "MOODLE_STACK_ENV_FILE", services: ["moodle"],
       ownershipFile: ownershipPath(context.configPath, context.componentId) },
-    { async bootstrap({ compose }) {
+    { async bootstrap({ compose, entrypointFinished }) {
+        while (!await entrypointFinished("moodle", settings.entrypointScript)) await new Promise((done) => setTimeout(done, 1000));
         await compose("exec", "-T", "moodle", "php", "admin/cli/install_database.php", "--agree-license");
-        return { outputs: { site: { baseURL: settings.baseURL } } };
+        return { outputs: { stack: { project: settings.project, composeFiles: settings.composeFiles, envFile: resolve(settings.directory, "stack.env"), services: ["moodle"] } } };
       } },
     context, { signal }) };
 }

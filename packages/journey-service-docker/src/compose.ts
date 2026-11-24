@@ -9,13 +9,26 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { startedService, type ObservationPublisher, type StartedService } from "@openuji/journey-plugin";
+import { contract, startedService, type ObservationPublisher, type StartedService } from "@openuji/journey-plugin";
 import { readJsonRecord, removeOwnership, runOwnedProcess, writeJsonRecord } from "@openuji/journey-plugin/node";
 import { composeLifecycle, type ComposeResource } from "./observations.js";
 
 /** Runs a command and returns its stdout; stderr is retained in the error on failure. */
 export type ComposeExecutor = (command: string, args: readonly string[], options: { cwd: string; env: Record<string, string | undefined>; signal?: AbortSignal }) => Promise<string>;
 export const executeComposeCommand: ComposeExecutor = (command, args, options) => runOwnedProcess(command, args, { ...options, stdoutOnly: true });
+
+/**
+ * A running stack as other services see it: enough to run `docker compose` against its project.
+ * A stack service publishes it as an output; services that act inside the stack (installing an app,
+ * importing fixtures) take it as an input. Runtime connection metadata only, never provenance.
+ */
+export type ComposeStack = Readonly<{ project: string; composeFiles: readonly string[]; envFile: string; services: readonly string[] }>;
+export const composeStackContract = contract<ComposeStack>("@openuji/docker-compose-stack/v1");
+
+/** `docker` arguments that address a stack's own Compose project; append the Compose command. */
+export function composeCommand(stack: Pick<ComposeStack, "project" | "envFile" | "composeFiles">): string[] {
+  return ["compose", "--project-name", stack.project, "--env-file", stack.envFile, ...stack.composeFiles.flatMap((file) => ["-f", file])];
+}
 
 export type ComposeStackOptions = Readonly<{
   /** Names the stack in errors, e.g. `Nextcloud` in "Nextcloud startup and cleanup failed". */
@@ -40,7 +53,16 @@ export type ComposeTools = Readonly<{
   signal?: AbortSignal;
 }>;
 /** After `up`: also `docker compose` against this stack's own project. */
-export type ComposeProjectTools = ComposeTools & Readonly<{ compose(...args: string[]): Promise<string> }>;
+export type ComposeProjectTools = ComposeTools & Readonly<{
+  compose(...args: string[]): Promise<string>;
+  /**
+   * Whether a service's image has finished its entrypoint `script`: PID 1 is no longer that script.
+   * Images such as Nextcloud's keep configuring the application from their entrypoint after the
+   * application reports itself installed, and start the web server last; configure or use the
+   * service only once this is true. An image that does not run `script` counts as finished.
+   */
+  entrypointFinished(service: string, script: string): Promise<boolean>;
+}>;
 
 export type ComposeStackHooks = Readonly<{
   /** Before the env file is written and before any container exists. Returns environment to add or override. */
@@ -66,7 +88,7 @@ export async function releaseComposeStack(path: string, { envFileVariable, expec
   const owned = await readJsonRecord<ComposeOwnership>(path);
   if (!owned || expectedToken && owned.token !== expectedToken) return;
   const env = { ...process.env, [envFileVariable]: owned.envFile };
-  const args = ["compose", "--project-name", owned.project, "--env-file", owned.envFile, ...owned.composeFiles.flatMap((file) => ["-f", file])];
+  const args = composeCommand(owned);
   if (owned.containers?.length) {
     const current = await execute("docker", [...args, "ps", "--all", "--quiet"], { cwd: owned.directory, env, signal: AbortSignal.timeout(30000) });
     if (current.split(/\s+/).filter(Boolean).some((id) => !owned.containers!.includes(id))) throw new Error(`Compose project ${owned.project} no longer belongs to this acquisition`);
@@ -95,7 +117,7 @@ export async function startComposeStack(
   const envFile = resolve(stack.directory, "stack.env");
   let environment: Readonly<Record<string, string>> = stack.environment;
   const env: Record<string, string | undefined> = { ...process.env, ...environment, [stack.envFileVariable]: envFile };
-  const compose = ["compose", "--project-name", stack.project, "--env-file", envFile, ...stack.composeFiles.flatMap((file) => ["-f", file])];
+  const compose = composeCommand({ project: stack.project, envFile, composeFiles: stack.composeFiles });
   const run = (command: string, args: readonly string[], cwd = stack.directory) => execute(command, args, { cwd, env, signal });
   const docker = (...args: string[]) => run("docker", [...compose, ...args]);
   await mkdir(stack.directory, { recursive: true });
@@ -117,7 +139,9 @@ export async function startComposeStack(
     const containers = (await docker("ps", "--all", "--quiet")).split(/\s+/).filter(Boolean);
     await writeJsonRecord(stack.ownershipFile, { ...owned, containers });
     await observations.publish(composeLifecycle, { phase: "allocated", resource });
-    const { outputs, provenance } = await hooks.bootstrap({ run, compose: docker, signal });
+    const entrypointFinished = (service: string, script: string) =>
+      docker("exec", "-T", service, "cat", "/proc/1/cmdline").then((cmdline) => !cmdline.includes(script), () => false);
+    const { outputs, provenance } = await hooks.bootstrap({ run, compose: docker, entrypointFinished, signal });
     return startedService(outputs, provenance, release);
   } catch (error) {
     try { await release(); } catch (cleanup) { throw new AggregateError([error, cleanup], `${stack.label} startup and cleanup failed`); }
