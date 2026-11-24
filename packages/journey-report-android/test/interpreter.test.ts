@@ -27,7 +27,7 @@ test("a recorded native journal becomes an evidence report and native node metri
       checks: [{ rule: "label", status: "finding", message: "Missing label" }, { rule: "size", status: "passed", message: "OK" }] } } as unknown as AndroidAccessibilityEvidence
   ];
   const output: AndroidAccessibilityObserverOutput = { id: "native", kind: "android-accessibility", measurements: [], errors: [], evidence: { reportId: "native", createdAt: "now", strict: false, journal } };
-  const record: TestRecord = { format: testRecordFormat, version: 1, id: "native", ok: true, segments: [], views: {}, plan, observers: [output], observerErrors: [],
+  const record: TestRecord = { format: testRecordFormat, version: 2, id: "native", ok: true, segments: [], views: {}, plan, observers: [output], observerErrors: [],
     files: [{ name: "android-1.hierarchy.xml", href: hierarchy, contentType: "application/xml", scope: { runId: "run", executionId: "execution", profileId: "touch", operationId: "checked" } }],
     result: { ok: true, runId: "run", plan: { id: "plan" }, errors: [], assessments: [{ kind: "applicable", profile: { id: "touch" } }], executions: [{ executionId: "execution", profileId: "touch", outcome: { kind: "passed" } }],
       evidence: { executions: [{ executionId: "execution", profileId: "touch", operations: [{ operationId: "checked", operationKind: "state", outcome: { kind: "passed" } }] }] } } };

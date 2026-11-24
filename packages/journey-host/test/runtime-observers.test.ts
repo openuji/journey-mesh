@@ -15,8 +15,8 @@ async function fixture(failService = false, failObserver = false) {
   const config = { kind: "suite", model: { use: plugin("model") }, profiles: { default: { use: plugin("profile") } },
     runtimeObservers: [{ use: plugin("runtime-observer"), options: { fail: failObserver } }],
     services: { fixture: { use: plugin("observable-service"), options: { fail: failService } } },
-    adapters: { web: { use: plugin("adapter"), options: { name: "web", log: "events.jsonl" } } },
-    tests: { task: { services: ["fixture"], journeys: [{ id: "task", source: "model.json", select: "task", adapter: "web" }],
+    executors: { web: { use: plugin("executor"), options: { name: "web", log: "events.jsonl" } } },
+    tests: { task: { services: ["fixture"], journeys: [{ id: "task", source: "model.json", select: "task", executor: "web" }],
       profiles: [{ id: "default", journeys: { task: "default" } }] } } };
   await writeFile(path, stringify(config));
   return { path, directory, config };

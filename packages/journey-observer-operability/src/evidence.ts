@@ -20,7 +20,7 @@ export type OperabilityDecisionRecord = Readonly<{
   inputModalityProfileId: string;
   modalityId: string;
   modalityLabel?: string;
-  /** Absent for producer text entry without focus moves, or for adapters with direct commands. */
+  /** Absent for producer text entry without focus moves, or for executors with direct commands. */
   materializationId?: string;
 }>;
 
@@ -28,7 +28,7 @@ export type OperabilityEvidence = Readonly<{
   format: typeof operabilityEvidenceFormat;
   version: 1;
   decisions: readonly OperabilityDecisionRecord[];
-  /** One entry per adapter command, with its final status, in the order the commands were attempted. */
+  /** One entry per executor command, with its final status, in the order the commands were attempted. */
   actions: readonly JourneyInputAction[];
 }>;
 

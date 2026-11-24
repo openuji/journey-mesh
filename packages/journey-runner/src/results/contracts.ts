@@ -23,7 +23,7 @@ export type JourneyOperationEvidence = Readonly<{
   operationId: string;
   operationKind: JourneyPlanOperationKind;
   source?: JourneyOperationSource;
-  adapter?: JourneyComponentDescriptor;
+  executor?: JourneyComponentDescriptor;
   outcome: JourneyOutcome;
 }>;
 

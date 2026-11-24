@@ -3,7 +3,7 @@ import type {
   ResolvedEffect,
   TransitionPlanOperation
 } from "@openuji/journey-execution-model";
-import type { JourneyExecutionContext } from "../adapters/contracts.js";
+import type { JourneyExecutionContext } from "../executors/contracts.js";
 
 export type JourneyEnvironmentTeardownInput = {
   readonly context: JourneyExecutionContext;

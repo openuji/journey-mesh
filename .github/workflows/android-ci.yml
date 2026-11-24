@@ -46,8 +46,8 @@ jobs:
       - name: Build and prepare tooling
         run: |
           pnpm build
-          pnpm --filter @openuji/journey-adapter-playwright exec playwright install --with-deps chromium
-          pnpm --filter @openuji/journey-adapter-appium exec journey-adapter-appium appium ensure-driver
+          pnpm --filter @openuji/journey-executor-playwright exec playwright install --with-deps chromium
+          pnpm --filter @openuji/journey-executor-appium exec journey-executor-appium appium ensure-driver
       - name: Configure native stack host
         run: |
           stack_host=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')

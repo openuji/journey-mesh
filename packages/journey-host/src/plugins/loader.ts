@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
-  AdapterDependencies, AdapterDiscoveryInput, AdapterPlugin, ServicePlugin, ServiceDependencies, JourneyMeshPlugin, JourneyPluginContext, JourneyPluginKind, PluginOfKind
+  ExecutorDependencies, ExecutorDiscoveryInput, ExecutorPlugin, ServicePlugin, ServiceDependencies, JourneyMeshPlugin, JourneyPluginContext, JourneyPluginKind, PluginOfKind
 } from "@openuji/journey-plugin";
 import { configContext } from "./context.js";
 import { interpolate, type Environment } from "../config/load.js";
@@ -13,27 +13,29 @@ import type { ComponentConfig } from "../config/schema.js";
 export type ComponentOf<K extends JourneyPluginKind> = Awaited<ReturnType<PluginOfKind<K>["create"]>>;
 export type LoadedPlugin<K extends JourneyPluginKind> = Readonly<{
   plugin: PluginOfKind<K>;
-  validate(driver?: unknown): void;
-  create(dependencies?: AdapterDependencies | ServiceDependencies, runtimeContext?: JourneyPluginContext): Promise<ComponentOf<K>>;
-  /** An adapter's discovery mode, for `journey-mesh discover` only; fails for any other plugin. */
-  createDiscovery(dependencies: AdapterDependencies, discovery: AdapterDiscoveryInput, runtimeContext?: JourneyPluginContext): Promise<ComponentOf<K>>;
+  validate(client?: unknown): void;
+  create(dependencies?: ExecutorDependencies | ServiceDependencies, runtimeContext?: JourneyPluginContext): Promise<ComponentOf<K>>;
+  /** An executor's discovery mode, for `journey-mesh discover` only; fails for any other plugin. */
+  createDiscovery(dependencies: ExecutorDependencies, discovery: ExecutorDiscoveryInput, runtimeContext?: JourneyPluginContext): Promise<ComponentOf<K>>;
   stopConfigured(context?: JourneyPluginContext): Promise<void>;
 }>;
 export type PluginLoader = <K extends JourneyPluginKind>(
   kind: K, component: ComponentConfig, label: string, context: JourneyPluginContext,
-  /** Checked before options are parsed, e.g. driver and observer compatibility with an adapter. */
+  /** Checked before options are parsed, e.g. client and observer compatibility with an executor. */
   compatible?: (plugin: PluginOfKind<K>) => void, inputNames?: readonly string[], management?: boolean
 ) => Promise<LoadedPlugin<K>>;
 
-const kinds: readonly JourneyPluginKind[] = ["model", "adapter", "driver", "observer", "runtime-observer", "profile", "environment", "service"];
+const kinds: readonly JourneyPluginKind[] = ["model", "executor", "client", "executor-observer", "runtime-observer", "profile", "environment", "service"];
+/** Plugin kinds renamed by the client/executor terminology; configurations and plugins are not migrated silently. */
+const renamedKinds: Readonly<Record<string, JourneyPluginKind>> = { driver: "client", adapter: "executor", observer: "executor-observer" };
 const fn = (value: unknown, key: string) => typeof (value as Record<string, unknown> | null)?.[key] === "function";
 
 /** Runtime shape checks at the dynamic-import boundary, so the rest of the host can rely on the types. */
 const shapes: Record<JourneyPluginKind, (value: unknown) => boolean> = {
   model: (value) => fn(value, "compile") && fn(value, "resolveOperation"),
-  adapter: (value) => fn(value, "createExecution"),
-  driver: (value) => value !== null && typeof value === "object",
-  observer: (value) => (value as { observer?: unknown } | null)?.observer !== undefined && fn(value, "output"),
+  executor: (value) => fn(value, "createSession"),
+  client: (value) => value !== null && typeof value === "object",
+  "executor-observer": (value) => (value as { observer?: unknown } | null)?.observer !== undefined && fn(value, "output"),
   "runtime-observer": (value) => fn(value, "start") && fn(value, "close"),
   profile: (value) => typeof (value as { id?: unknown } | null)?.id === "string" && !!(value as { id: string }).id,
   environment: (value) => value !== null && typeof value === "object",
@@ -54,6 +56,13 @@ export function pluginLoader(configPath: string, env: Environment): PluginLoader
     if (!pending) {
       pending = import(pathToFileURL(modulePath).href).then((module: { journeyMeshPlugin?: JourneyMeshPlugin }) => {
         const plugin = module.journeyMeshPlugin;
+        const kind = (plugin as { kind?: unknown } | undefined)?.kind;
+        if (typeof kind === "string" && Object.hasOwn(renamedKinds, kind)) {
+          throw new Error(`Plugin ${reference}: plugin kind \`${kind}\` was renamed to \`${renamedKinds[kind]}\``);
+        }
+        if (plugin && Object.hasOwn(plugin, "automation") && !Object.hasOwn(plugin, "observationContract")) {
+          throw new Error(`Plugin ${reference}: property \`automation\` was renamed to \`observationContract\``);
+        }
         if (!plugin || !kinds.includes(plugin.kind) || typeof plugin.parse !== "function" || typeof plugin.create !== "function") {
           throw new Error(`Plugin ${reference} must export journeyMeshPlugin with a known kind, parse and create`);
         }
@@ -76,23 +85,23 @@ export function pluginLoader(configPath: string, env: Environment): PluginLoader
     catch (error) { throw new Error(`${label}: ${error instanceof Error ? error.message : "invalid options"}`); }
     return Object.freeze({
       plugin: typed,
-      validate(driver?: unknown) {
-        if (typed.kind === "adapter") (typed as AdapterPlugin).validateOperations?.(settings, configContext(context), { driver });
+      validate(client?: unknown) {
+        if (typed.kind === "executor") (typed as ExecutorPlugin).validateOperations?.(settings, configContext(context), { client });
       },
       async stopConfigured(runtimeContext = context) {
         if (typed.kind === "service") await (typed as ServicePlugin).stopConfigured?.(runtimeContext);
       },
-      async create(dependencies: AdapterDependencies | ServiceDependencies = { observers: [], inputs: Object.freeze({}) }, runtimeContext = context): Promise<ComponentOf<K>> {
-        const created: unknown = plugin.kind === "adapter"
-          ? await plugin.create(settings, runtimeContext, dependencies as AdapterDependencies)
+      async create(dependencies: ExecutorDependencies | ServiceDependencies = { observers: [], inputs: Object.freeze({}) }, runtimeContext = context): Promise<ComponentOf<K>> {
+        const created: unknown = plugin.kind === "executor"
+          ? await plugin.create(settings, runtimeContext, dependencies as ExecutorDependencies)
           : plugin.kind === "service"
             ? await plugin.create(settings, runtimeContext, dependencies as ServiceDependencies)
             : await plugin.create(settings, runtimeContext);
         if (!shapes[kind](created)) throw new Error(`${label} must create a ${kind}`);
         return created as ComponentOf<K>;
       },
-      async createDiscovery(dependencies: AdapterDependencies, discovery: AdapterDiscoveryInput, runtimeContext = context): Promise<ComponentOf<K>> {
-        const mode = typed.kind === "adapter" ? (typed as AdapterPlugin).discovery : undefined;
+      async createDiscovery(dependencies: ExecutorDependencies, discovery: ExecutorDiscoveryInput, runtimeContext = context): Promise<ComponentOf<K>> {
+        const mode = typed.kind === "executor" ? (typed as ExecutorPlugin).discovery : undefined;
         if (!mode) throw new Error(`${label} has no discovery mode`);
         const created: unknown = await mode.create(settings, runtimeContext, dependencies, discovery);
         if (!shapes[kind](created)) throw new Error(`${label} discovery mode must create a ${kind}`);

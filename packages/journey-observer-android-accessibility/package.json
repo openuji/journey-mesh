@@ -12,7 +12,7 @@
   "types": "./src/index.ts",
   "dependencies": {
     "@openuji/journey-runner": "workspace:*",
-    "@openuji/journey-adapter-appium": "workspace:*",
+    "@openuji/journey-executor-appium": "workspace:*",
     "fast-xml-parser": "5.3.0",
     "@openuji/journey-core": "workspace:*",
     "@openuji/journey-plugin": "workspace:*"

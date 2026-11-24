@@ -27,10 +27,10 @@ function savedTest(side: string, id: string, index: number, failAt?: number): Te
   const outcome = (sequence: number) => failAt === undefined || sequence < failAt ? { kind: "passed" as const } : { kind: "failed" as const, error: { name: "Error", message: "Share permissions did not open" } };
   const emptySummary = { violations: 0, incomplete: 0, passes: 0, inapplicable: 0 };
   return {
-    format: testRecordFormat, version: 1, ok: failAt === undefined, id, plan: { id: "plan", operations }, observerErrors: [],
+    format: testRecordFormat, version: 2, ok: failAt === undefined, id, plan: { id: "plan", operations }, observerErrors: [],
     segments: [
-      { id: "login", journeyId: "urn:journey:alice-web-setup", adapter: "web", view: "setup" },
-      { id: "alice", journeyId: "urn:journey:alice-federated-sharing", adapter: "web", view: "nc34" }
+      { id: "login", journeyId: "urn:journey:alice-web-setup", executor: "web", view: "setup" },
+      { id: "alice", journeyId: "urn:journey:alice-federated-sharing", executor: "web", view: "nc34" }
     ],
     views: { setup: { format: "journey-map", document: setupMap }, nc34: { format: "journey-map", document: journeyMap } },
     result: {

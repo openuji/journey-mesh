@@ -50,11 +50,11 @@ async function recordedRun(directory: string, profiles: readonly string[], state
     }
   }
   const output: AxeObserverOutput = { id: "axe-path", kind: "axe", measurements: [], errors: [], evidence: { reportId: "axe-path", createdAt: "now", wcagTags: ["wcag2a"], journal } };
-  const test: TestRecord = { format: testRecordFormat, version: 1, id: "axe", ok: true, segments: [], views: {}, plan, observers: [output], observerErrors: [], files,
+  const test: TestRecord = { format: testRecordFormat, version: 2, id: "axe", ok: true, segments: [], views: {}, plan, observers: [output], observerErrors: [], files,
     result: { ok: true, runId: "run", plan: { id: "plan" }, errors: [], assessments: profiles.map((id) => ({ kind: "applicable", profile: { id } })),
       executions: profiles.map((id) => ({ executionId: id, profileId: id, outcome: { kind: "passed" } })),
       evidence: { executions: profiles.map((id) => ({ executionId: id, profileId: id, operations: operations.map((operation, index) => ({ operationId: operation.id, operationKind: "state",
-        ...(index < states - 1 ? { adapter: { name: "@openuji/journey-adapter-playwright" } } : {}), outcome: { kind: "passed" } })) })) } } };
+        ...(index < states - 1 ? { executor: { name: "@openuji/journey-executor-playwright" } } : {}), outcome: { kind: "passed" } })) })) } } };
   const run: SuiteRun = { ok: true, startedAt: "now", finishedAt: "now", errors: [], provenance: {}, files: [], tests: [test] };
   await writeRunRecord(directory, run);
   return run;

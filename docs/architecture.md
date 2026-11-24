@@ -76,7 +76,7 @@ stack can read the same JSON (see [report model](report-model.md)).
 
 | You want to | Write | Where |
 | --- | --- | --- |
-| Capture new evidence | an observer plugin (`defineObserverPlugin`) with a types-only `./evidence` entry | execution |
+| Capture new evidence | an observer plugin (`defineExecutorObserverPlugin`) with a types-only `./evidence` entry | execution |
 | Capture infrastructure diagnostics | a runtime observer plugin (`defineRuntimeObserverPlugin`) subscribing to typed lifecycle topics | execution |
 | Turn that evidence into report data | an interpreter module exporting `journeyMeshInterpreter` (`defineInterpreter`) | reporting |
 | Show it | a view keyed by the data's `format` in `apps/report-renderer/src/providers`, or your own template | rendering |

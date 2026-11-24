@@ -6,8 +6,8 @@ import type { JourneyPlan, JourneyPlanOperation } from "@openuji/journey-runner"
 import { interpolate, type Environment } from "./config/load.js";
 import type { TestConfig } from "./config/schema.js";
 
-/** One configured journey item inside a test plan, and the adapter that executes it. */
-export type Segment = Readonly<{ id: string; adapter: string; journeyId: string; source: string }>;
+/** One configured journey item inside a test plan, and the executor that executes it. */
+export type Segment = Readonly<{ id: string; executor: string; journeyId: string; source: string }>;
 export type CompiledTest = Readonly<{
   plan: JourneyPlan;
   segments: ReadonlyMap<string, Segment>;
@@ -45,7 +45,7 @@ export async function compileTest(test: TestConfig, compiler: JourneyModelCompil
       if (!child.operations.includes(operation)) throw new Error("Model selector returned an operation outside its plan");
       aliases.set(`${item.id}.${name}`, prefix + operation.id);
     }
-    segments.set(item.id, Object.freeze({ id: item.id, adapter: item.adapter, journeyId: item.select, source: sourceRef }));
+    segments.set(item.id, Object.freeze({ id: item.id, executor: item.executor, journeyId: item.select, source: sourceRef }));
     if (!views.has(sourceRef)) {
       const view = await compiler.view?.(source);
       if (view) views.set(sourceRef, view);

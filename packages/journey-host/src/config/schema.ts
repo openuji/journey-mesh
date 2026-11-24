@@ -5,9 +5,9 @@ import { JourneyConfigError } from "./errors.js";
 export type ComponentConfig = Readonly<{ use: string; options: Readonly<Record<string, unknown>> }>;
 /** Infrastructure managed by `journey-mesh services up|down` or started for the tests that list it. */
 export type ServiceOutputRef = Readonly<{ service: string; output: string }>;
-/** `inputs` bind service outputs; a test using the adapter also starts those services. */
-export type AdapterConfig = ComponentConfig & Readonly<{
-  driver?: ComponentConfig; observers: readonly ComponentConfig[]; inputs: Readonly<Record<string, ServiceOutputRef>>;
+/** `inputs` bind service outputs; a test using the executor also starts those services. */
+export type ExecutorConfig = ComponentConfig & Readonly<{
+  client?: ComponentConfig; observers: readonly ComponentConfig[]; inputs: Readonly<Record<string, ServiceOutputRef>>;
 }>;
 export type ServiceConfig = ComponentConfig & Readonly<{ dependsOn: readonly string[]; inputs: Readonly<Record<string, ServiceOutputRef>> }>;
 function outputRef(value: unknown, label: string): ServiceOutputRef {
@@ -17,7 +17,7 @@ function outputRef(value: unknown, label: string): ServiceOutputRef {
 }
 export type EnvFileConfig = Readonly<{ path?: string; env?: string; optional?: boolean }>;
 export type JourneyItemConfig = Readonly<{
-  id: string; source: string; select: string; adapter: string;
+  id: string; source: string; select: string; executor: string;
   /** Stable names for model operations, e.g. `goal: urn:transition:…`, referenced as `<id>.<name>`. */
   operations: Readonly<Record<string, string>>;
 }>;
@@ -39,7 +39,7 @@ export type SuiteConfig = Readonly<{
   outputDir?: string;
   envFiles: readonly EnvFileConfig[];
   model: ComponentConfig;
-  adapters: Readonly<Record<string, AdapterConfig>>;
+  executors: Readonly<Record<string, ExecutorConfig>>;
   profiles: Readonly<Record<string, ComponentConfig>>;
   services: Readonly<Record<string, ServiceConfig>>;
   runtimeObservers: readonly ComponentConfig[];
@@ -59,6 +59,12 @@ export const defaultRuntimeObserverTimeoutMs = 30_000;
 const known = (value: Record<string, unknown>, keys: readonly string[], label: string) => {
   for (const key of Object.keys(value)) if (!keys.includes(key)) throw new Error(`Unknown setting ${label}.${key}`);
 };
+/** Keys renamed by the client/executor terminology. Old configurations fail and name the replacement; they are never migrated silently. */
+const renamed = (value: Record<string, unknown>, keys: Readonly<Record<string, string>>, label: string) => {
+  for (const [from, to] of Object.entries(keys)) {
+    if (Object.hasOwn(value, from)) throw new Error(`${label ? `${label}.` : ""}\`${from}:\` was renamed to \`${to}:\``);
+  }
+};
 const list = (value: unknown, label: string): unknown[] => {
   if (value === undefined) return [];
   if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
@@ -73,18 +79,19 @@ function component(value: unknown, label: string, extra: readonly string[] = [])
   return { ...raw, use: requiredString(raw.use, `${label}.use`), options: optionsObject(raw.options ?? {}, `${label}.options`) };
 }
 
-function test(id: string, value: unknown, suite: Pick<SuiteConfig, "adapters" | "profiles" | "services">): TestConfig {
+function test(id: string, value: unknown, suite: Pick<SuiteConfig, "executors" | "profiles" | "services">): TestConfig {
   const raw = optionsObject(value, `tests.${id}`);
   known(raw, ["journeys", "profiles", "environment", "timeoutMs", "services", reportingSection], `tests.${id}`);
   const journeys = list(raw.journeys, `tests.${id}.journeys`).map((item, index): JourneyItemConfig => {
     const label = `tests.${id}.journeys[${index}]`;
     const journey = optionsObject(item, label);
-    known(journey, ["id", "source", "select", "adapter", "operations"], label);
-    const adapter = requiredString(journey.adapter, `${label}.adapter`);
+    renamed(journey, { adapter: "executor" }, label);
+    known(journey, ["id", "source", "select", "executor", "operations"], label);
+    const executor = requiredString(journey.executor, `${label}.executor`);
     const itemId = requiredString(journey.id, `${label}.id`);
-    if (!Object.hasOwn(suite.adapters, adapter)) throw new Error(`Unknown adapter ${adapter} for journey ${itemId}`);
+    if (!Object.hasOwn(suite.executors, executor)) throw new Error(`Unknown executor ${executor} for journey ${itemId}`);
     return {
-      id: itemId, adapter, source: requiredString(journey.source, `${label}.source`), select: requiredString(journey.select, `${label}.select`),
+      id: itemId, executor, source: requiredString(journey.source, `${label}.source`), select: requiredString(journey.select, `${label}.select`),
       operations: record(journey.operations, `${label}.operations`, (selector, name) => requiredString(selector, `${label}.operations.${name}`))
     };
   });
@@ -126,15 +133,17 @@ function test(id: string, value: unknown, suite: Pick<SuiteConfig, "adapters" | 
 
 /** The only place raw YAML becomes typed configuration; every unknown key is rejected. */
 export function parseSuiteConfig(raw: Record<string, unknown>, testOrder: readonly string[]): SuiteConfig {
-  known(raw, ["kind", "label", "outputDir", "envFiles", "model", "adapters", "profiles", "services", "runtimeObservers", "runtimeObserverTimeoutMs", "tests", "target", reportingSection], "configuration");
+  renamed(raw, { adapters: "executors" }, "");
+  known(raw, ["kind", "label", "outputDir", "envFiles", "model", "executors", "profiles", "services", "runtimeObservers", "runtimeObserverTimeoutMs", "tests", "target", reportingSection], "configuration");
   if (raw.kind !== "suite") throw new Error("Configuration kind must be suite");
-  const adapters = record(raw.adapters, "adapters", (value, name): AdapterConfig => {
-    const adapter = component(value, `adapters.${name}`, ["driver", "observers", "inputs"]);
+  const executors = record(raw.executors, "executors", (value, name): ExecutorConfig => {
+    renamed(optionsObject(value, `executors.${name}`), { driver: "client" }, `executors.${name}`);
+    const executor = component(value, `executors.${name}`, ["client", "observers", "inputs"]);
     return {
-      use: adapter.use, options: adapter.options,
-      inputs: record(adapter.inputs, `adapters.${name}.inputs`, (ref, key) => outputRef(ref, `adapters.${name}.inputs.${key}`)),
-      ...(adapter.driver !== undefined ? { driver: component(adapter.driver, `adapters.${name}.driver`) } : {}),
-      observers: list(adapter.observers, `adapters.${name}.observers`).map((item, index) => component(item, `adapters.${name}.observers[${index}]`))
+      use: executor.use, options: executor.options,
+      inputs: record(executor.inputs, `executors.${name}.inputs`, (ref, key) => outputRef(ref, `executors.${name}.inputs.${key}`)),
+      ...(executor.client !== undefined ? { client: component(executor.client, `executors.${name}.client`) } : {}),
+      observers: list(executor.observers, `executors.${name}.observers`).map((item, index) => component(item, `executors.${name}.observers[${index}]`))
     };
   });
   const profiles = record(raw.profiles, "profiles", (value, name) => component(value, `profiles.${name}`));
@@ -149,8 +158,8 @@ export function parseSuiteConfig(raw: Record<string, unknown>, testOrder: readon
   for (const [name, service] of Object.entries(services)) {
     for (const dependency of service.dependsOn) if (!Object.hasOwn(services, dependency)) throw new Error(`services.${name}.dependsOn references unknown service ${dependency}`);
   }
-  for (const [name, adapter] of Object.entries(adapters)) {
-    for (const [key, ref] of Object.entries(adapter.inputs)) if (!Object.hasOwn(services, ref.service)) throw new Error(`adapters.${name}.inputs.${key} references unknown service ${ref.service}`);
+  for (const [name, executor] of Object.entries(executors)) {
+    for (const [key, ref] of Object.entries(executor.inputs)) if (!Object.hasOwn(services, ref.service)) throw new Error(`executors.${name}.inputs.${key} references unknown service ${ref.service}`);
   }
   const target = raw.target === undefined ? undefined : outputRef(raw.target, "target");
   if (target && !Object.hasOwn(services, target.service)) throw new Error(`Unknown target service ${target.service}`);
@@ -167,14 +176,14 @@ export function parseSuiteConfig(raw: Record<string, unknown>, testOrder: readon
   try { runtimeObserverTimeoutMs = positiveNumber(raw.runtimeObserverTimeoutMs, defaultRuntimeObserverTimeoutMs); }
   catch { throw new Error("runtimeObserverTimeoutMs must be a positive integer"); }
   if (!Number.isSafeInteger(runtimeObserverTimeoutMs)) throw new Error("runtimeObserverTimeoutMs must be a positive integer");
-  const suite = { adapters, profiles, services };
+  const suite = { executors, profiles, services };
   const tests = testOrder.map((id) => {
     try { return test(id, (raw.tests as Record<string, unknown>)[id], suite); }
     // A structural error is not fixed by selecting another test, so no alternatives are offered.
     catch (error) { throw new JourneyConfigError(error instanceof Error ? error.message : "Invalid test", { testId: id }); }
   });
   return Object.freeze({
-    kind: "suite", ...(target ? { target } : {}), envFiles, model: component(raw.model, "model"), adapters, profiles, services, tests,
+    kind: "suite", ...(target ? { target } : {}), envFiles, model: component(raw.model, "model"), executors, profiles, services, tests,
     runtimeObservers: list(raw.runtimeObservers, "runtimeObservers").map((entry, index) => component(entry, `runtimeObservers[${index}]`)),
     runtimeObserverTimeoutMs,
     ...(raw.label !== undefined ? { label: requiredString(raw.label, "label") } : {}),

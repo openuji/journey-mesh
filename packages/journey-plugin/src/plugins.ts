@@ -1,13 +1,13 @@
 import type { JourneyObserverOutput } from "@openuji/journey-core";
 import type { JourneyPlan, JourneyPlanOperation } from "@openuji/journey-execution-model";
-import type { JourneyAdapter, JourneyEnvironment, JourneyProfile, RunResult } from "@openuji/journey-runner";
+import type { JourneyExecutor, JourneyEnvironment, JourneyProfile, RunResult } from "@openuji/journey-runner";
 import type { JourneyArtifactStore } from "./artifacts.js";
-import type { AdapterDiscoveryInput, DeclaredMaterializations, DiscoveredMaterialization, JourneyRunMode } from "./discovery.js";
+import type { ExecutorDiscoveryInput, DeclaredMaterializations, DiscoveredMaterialization, JourneyRunMode } from "./discovery.js";
 import type { ObservationPublisher, RuntimeObserver } from "./runtime-observations.js";
 
 /**
  * A named compatibility contract between plugins. The host only compares `id`s;
- * the type parameter types what crosses the contract, so adapters receive typed drivers and observers.
+ * the type parameter types what crosses the contract, so executors receive typed clients and observers.
  */
 export type Contract<T> = Readonly<{ id: string; readonly __type?: T }>;
 export function contract<T>(id: string): Contract<T> {
@@ -22,7 +22,7 @@ export type JourneyConfigContext = {
   readonly env: Readonly<Record<string, string | undefined>>;
   /**
    * `discovery` in a run of `journey-mesh discover`, where transitions may lack declared steps
-   * because the adapter finds them. Absent or `test` everywhere else.
+   * because the executor finds them. Absent or `test` everywhere else.
    */
   readonly mode?: JourneyRunMode;
   resolvePath(path: string): string;
@@ -78,7 +78,7 @@ export type JourneyObserverComponent<O = unknown> = {
   output(input: { result: RunResult }): JourneyObserverOutput | Promise<JourneyObserverOutput>;
 };
 
-export type AdapterDependencies<D = unknown, O = unknown, I = ResolvedInputs> = Readonly<{ driver?: D; observers: readonly O[]; inputs: I }>;
+export type ExecutorDependencies<C = unknown, O = unknown, I = ResolvedInputs> = Readonly<{ client?: C; observers: readonly O[]; inputs: I }>;
 
 /**
  * `parse` validates raw options into settings; `create` builds the component from them.
@@ -91,25 +91,26 @@ type Plugin<K extends string, S, T, D = undefined> = {
 };
 
 /**
- * An adapter's discovery mode, built only in a run of `journey-mesh discover` and never in a test run.
- * It takes the adapter's own settings, so a suite's adapter options apply unchanged; executor observers
- * are not attached. Only adapters that can find paths declare one: today the Playwright (Web) adapter.
+ * An executor's discovery mode, built only in a run of `journey-mesh discover` and never in a test run.
+ * It takes the executor's own settings, so a suite's executor options apply unchanged; executor observers
+ * are not attached. Only executors that can find paths declare one: today the Playwright (Web) executor.
  */
-export type AdapterDiscovery<S = unknown, D = unknown, O = unknown, I = ResolvedInputs> = Readonly<{
-  create(settings: S, context: JourneyPluginContext, dependencies: AdapterDependencies<D, O, I>, discovery: AdapterDiscoveryInput): JourneyAdapter | Promise<JourneyAdapter>;
+export type ExecutorDiscovery<S = unknown, C = unknown, O = unknown, I = ResolvedInputs> = Readonly<{
+  create(settings: S, context: JourneyPluginContext, dependencies: ExecutorDependencies<C, O, I>, discovery: ExecutorDiscoveryInput): JourneyExecutor | Promise<JourneyExecutor>;
 }>;
 
-export type AdapterPlugin<S = unknown, D = unknown, O = unknown, I = ResolvedInputs> = Plugin<"adapter", S, JourneyAdapter, AdapterDependencies<D, O, I>> & InputDeclarations & {
-  /** Observers must declare the same automation. */
-  readonly automation: Contract<O>;
-  validateOperations?(settings: S, context: JourneyConfigContext, dependencies: Readonly<{ driver?: D }>): void;
-  /** Drivers must declare the same contract; omitted when the adapter needs no driver. */
-  readonly driverContract?: Contract<D>;
-  /** Omitted by adapters that cannot find paths; `journey-mesh discover` rejects tests that use them. */
-  readonly discovery?: AdapterDiscovery<S, D, O, I>;
+export type ExecutorPlugin<S = unknown, C = unknown, O = unknown, I = ResolvedInputs> = Plugin<"executor", S, JourneyExecutor, ExecutorDependencies<C, O, I>> & InputDeclarations & {
+  /** The observation contract this executor publishes; its executor observers must declare the same one. */
+  readonly observationContract: Contract<O>;
+  validateOperations?(settings: S, context: JourneyConfigContext, dependencies: Readonly<{ client?: C }>): void;
+  /** Clients must declare the same contract; omitted when the executor needs no client. */
+  readonly clientContract?: Contract<C>;
+  /** Omitted by executors that cannot find paths; `journey-mesh discover` rejects tests that use them. */
+  readonly discovery?: ExecutorDiscovery<S, C, O, I>;
 };
-export type DriverPlugin<S = unknown, D = unknown> = Plugin<"driver", S, D> & { readonly driverContract: Contract<D> };
-export type ObserverPlugin<S = unknown, O = unknown> = Plugin<"observer", S, JourneyObserverComponent<O>> & { readonly automation: Contract<O> };
+export type ClientPlugin<S = unknown, C = unknown> = Plugin<"client", S, C> & { readonly clientContract: Contract<C> };
+/** Attached to an executor; implements the observation contract that executor publishes. */
+export type ExecutorObserverPlugin<S = unknown, O = unknown> = Plugin<"executor-observer", S, JourneyObserverComponent<O>> & { readonly observationContract: Contract<O> };
 export type RuntimeObserverPlugin<S = unknown> = Plugin<"runtime-observer", S, RuntimeObserver>;
 export type ModelPlugin<S = unknown> = Plugin<"model", S, JourneyModelCompiler>;
 export type ProfilePlugin<S = unknown> = Plugin<"profile", S, JourneyProfile>;
@@ -121,17 +122,17 @@ export type ServicePlugin<S = unknown, I = ResolvedInputs> = Plugin<"service", S
 };
 
 /** What a module exports as `journeyMeshPlugin`. */
-export type JourneyMeshPlugin = AdapterPlugin | DriverPlugin | ObserverPlugin | RuntimeObserverPlugin | ModelPlugin | ProfilePlugin | EnvironmentPlugin | ServicePlugin;
+export type JourneyMeshPlugin = ExecutorPlugin | ClientPlugin | ExecutorObserverPlugin | RuntimeObserverPlugin | ModelPlugin | ProfilePlugin | EnvironmentPlugin | ServicePlugin;
 export type JourneyPluginKind = JourneyMeshPlugin["kind"];
 export type PluginOfKind<K extends JourneyPluginKind> = Extract<JourneyMeshPlugin, { kind: K }>;
 
 type Contracts = Record<string, Contract<unknown>>;
 type DeclaredInputs<R extends Contracts, O extends Contracts> = { readonly inputs?: R; readonly optionalInputs?: O };
-export const defineAdapterPlugin = <S, D = unknown, Observer = unknown, R extends Contracts = {}, O extends Contracts = {}>(
-  plugin: Omit<AdapterPlugin<S, D, Observer, ResolvedInputs<R, O>>, "inputs" | "optionalInputs"> & DeclaredInputs<R, O>
+export const defineExecutorPlugin = <S, C = unknown, Observer = unknown, R extends Contracts = {}, O extends Contracts = {}>(
+  plugin: Omit<ExecutorPlugin<S, C, Observer, ResolvedInputs<R, O>>, "inputs" | "optionalInputs"> & DeclaredInputs<R, O>
 ) => plugin;
-export const defineDriverPlugin = <S, D>(plugin: DriverPlugin<S, D>) => plugin;
-export const defineObserverPlugin = <S, O>(plugin: ObserverPlugin<S, O>) => plugin;
+export const defineClientPlugin = <S, C>(plugin: ClientPlugin<S, C>) => plugin;
+export const defineExecutorObserverPlugin = <S, O>(plugin: ExecutorObserverPlugin<S, O>) => plugin;
 export const defineRuntimeObserverPlugin = <S>(plugin: RuntimeObserverPlugin<S>) => plugin;
 export const defineModelPlugin = <S>(plugin: ModelPlugin<S>) => plugin;
 export const defineProfilePlugin = <S>(plugin: ProfilePlugin<S>) => plugin;

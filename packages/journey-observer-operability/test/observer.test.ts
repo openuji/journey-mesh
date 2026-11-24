@@ -4,7 +4,7 @@ import type { JourneyInputAction } from "@openuji/journey-core";
 import { isOperabilityOutput, operabilityObserver } from "../src/index.js";
 import { journeyMeshPlugin } from "../src/plugin.js";
 
-const execution = (runId: string) => ({ runId, executionId: `${runId}/keyboard`, profile: { id: "keyboard-only" }, adapter: { name: "playwright" } });
+const execution = (runId: string) => ({ runId, executionId: `${runId}/keyboard`, profile: { id: "keyboard-only" }, executor: { name: "playwright" } });
 const keyboard = { id: "observability:keyboard" };
 const decision = {
   profileId: "keyboard-only", inputModalityProfile: { id: "urn:input-profile:keyboard", modalities: [keyboard] }, modality: keyboard,

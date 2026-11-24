@@ -1,9 +1,9 @@
-import { playwrightAutomation } from "@openuji/journey-adapter-playwright";
-import { defineObserverPlugin, knownOptions, requiredString } from "@openuji/journey-plugin";
+import { playwrightObservationContract } from "@openuji/journey-executor-playwright";
+import { defineExecutorObserverPlugin, knownOptions, requiredString } from "@openuji/journey-plugin";
 import { operabilityObserver } from "./index.js";
 
-export const journeyMeshPlugin = defineObserverPlugin({
-  kind: "observer", automation: playwrightAutomation,
+export const journeyMeshPlugin = defineExecutorObserverPlugin({
+  kind: "executor-observer", observationContract: playwrightObservationContract,
   parse(options) {
     knownOptions(options, ["id"]);
     return { id: requiredString(options.id, "id") };

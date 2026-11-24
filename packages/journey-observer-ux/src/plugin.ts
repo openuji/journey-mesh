@@ -1,5 +1,5 @@
-import { playwrightAutomation } from "@openuji/journey-adapter-playwright";
-import { defineObserverPlugin, knownOptions, optionsObject, requiredString, type JourneyPluginContext } from "@openuji/journey-plugin";
+import { playwrightObservationContract } from "@openuji/journey-executor-playwright";
+import { defineExecutorObserverPlugin, knownOptions, optionsObject, requiredString, type JourneyPluginContext } from "@openuji/journey-plugin";
 import { validateUXConfiguration, type UXConfiguration, type UXCounter, type UXCheckpoint, type UXProbe } from "./index.js";
 import { uxObserver } from "./playwright.js";
 
@@ -28,8 +28,8 @@ function settings(options: Record<string, unknown>, context: JourneyPluginContex
   validateUXConfiguration(config);
   return config;
 }
-export const journeyMeshPlugin = defineObserverPlugin({
-  kind: "observer", automation: playwrightAutomation,
+export const journeyMeshPlugin = defineExecutorObserverPlugin({
+  kind: "executor-observer", observationContract: playwrightObservationContract,
   parse: settings,
   create(configuration) {
     const observer = uxObserver(configuration);

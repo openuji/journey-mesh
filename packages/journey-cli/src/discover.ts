@@ -7,8 +7,8 @@ import { consoleJourneyProgress } from "@openuji/journey-runner/console";
 
 /**
  * `journey-mesh discover`: an authoring aid that finds the keyboard and pointer steps a model does not
- * declare yet. Web only: it runs a test with the discovery mode of its adapters, and only the
- * Playwright adapter has one. A test with any journey on another adapter, such as Appium on Android,
+ * declare yet. Web only: it runs a test with the discovery mode of its executors, and only the
+ * Playwright executor has one. A test with any journey on another executor, such as Appium on Android,
  * is rejected before anything starts. Profiles accept transitions without steps, and observers are
  * left out. It reports each path found, and with --apply declares the paths through the suite's model
  * plugin. A test run then performs exactly what was declared.

@@ -8,7 +8,7 @@ const example = new URL("../", import.meta.url);
 
 test("example delegates Nextcloud mechanics and retains only scenario configuration", async () => {
   const config = await readFile(new URL("mesh.yaml", example), "utf8");
-  assert.match(config, /@openuji\/journey-driver-nextcloud\/federated-sharing\/plugin/);
+  assert.match(config, /@openuji\/journey-vendor-nextcloud\/federated-sharing\/plugin/);
   assert.match(config, /shareCreated: urn:effect:alice-confirm-share/);
   assert.match(config, /shareAccepted: urn:effect:bob-accept-share/);
   assert.ok(!(await readdir(example)).includes("environment.ts"));
@@ -19,7 +19,7 @@ test("example pins its Nextcloud deployment image to a versioned digest", async 
   const compose = await readFile(new URL("deployment/compose.yaml", example), "utf8");
   const image = "nextcloud:34.0.2-apache@sha256:e93ccfc952c95f18175f3d297fb2f60c35070c05ca976050c250a9ddab793e75";
   for (const key of ["web-stack", "android-stack"]) {
-    assert.equal(config.services[key].use, "@openuji/journey-driver-nextcloud/stack/service");
+    assert.equal(config.services[key].use, "@openuji/journey-vendor-nextcloud/stack/service");
     assert.equal(config.services[key].options.image, image);
     assert.equal(config.services[key].options.expectedVersion, "34.0.2");
   }
@@ -96,17 +96,17 @@ test("native selection requires a host and shares overridden URLs and accounts a
   assert.equal(environment.sharerTouchpoint.baseURL, stack.services.alice.baseURL);
   assert.equal(environment.recipientTouchpoint.baseURL, stack.services.bob.baseURL);
   for (const name of ["web-native", "android"]) {
-    const driver = interpolate(config.adapters[name].driver!.options, env, name) as {
+    const client = interpolate(config.executors[name].client!.options, env, name) as {
       touchpoints: Record<string, { baseURL: string }>; users: Record<string, { username: string; password: string }>;
       entries: Record<string, unknown>;
       transitionValues: Record<string, unknown>;
     };
-    assert.equal(driver.touchpoints["urn:touchpoint:nextcloud-a"].baseURL, environment.sharerTouchpoint.baseURL);
-    assert.equal(driver.touchpoints["urn:touchpoint:nextcloud-b"].baseURL, environment.recipientTouchpoint.baseURL);
-    assert.equal(driver.users["urn:user:bob"].username, stack.services.bob.username);
-    assert.equal(driver.users["urn:user:bob"].password, stack.services.bob.password);
-    if (name === "web-native") assert.equal(driver.transitionValues["urn:transition:alice-enters-remote-bob"], "custom-bob@http://192.0.2.40:19084");
-    if (name === "android") assert.deepEqual(driver.entries["nextcloud.android.files"], {
+    assert.equal(client.touchpoints["urn:touchpoint:nextcloud-a"].baseURL, environment.sharerTouchpoint.baseURL);
+    assert.equal(client.touchpoints["urn:touchpoint:nextcloud-b"].baseURL, environment.recipientTouchpoint.baseURL);
+    assert.equal(client.users["urn:user:bob"].username, stack.services.bob.username);
+    assert.equal(client.users["urn:user:bob"].password, stack.services.bob.password);
+    if (name === "web-native") assert.equal(client.transitionValues["urn:transition:alice-enters-remote-bob"], "custom-bob@http://192.0.2.40:19084");
+    if (name === "android") assert.deepEqual(client.entries["nextcloud.android.files"], {
       kind: "deep-link", route: "https://192.0.2.40:19084/app/openFiles"
     });
   }
@@ -116,10 +116,10 @@ test("example delegates Android/Appium infrastructure lifecycle to the owning pa
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   const allDependencies = { ...packageJson.dependencies, ...packageJson.devDependencies };
   assert.ok(!("appium" in allDependencies));
-  assert.ok(!("appium-uiautomator2-driver" in allDependencies));
+  assert.ok(!("appium-uiautomator2-client" in allDependencies));
   assert.ok(!("playwright" in allDependencies));
-  assert.ok("@openuji/journey-driver-android" in packageJson.dependencies);
-  assert.ok("@openuji/journey-adapter-appium" in packageJson.dependencies);
+  assert.ok("@openuji/journey-platform-android" in packageJson.dependencies);
+  assert.ok("@openuji/journey-executor-appium" in packageJson.dependencies);
   assert.equal(packageJson.scripts["android:apk"], undefined);
   // Every lifecycle script that used to live here moved into the packages
   // that own it; nothing android-specific is left in the example itself.
@@ -134,10 +134,10 @@ test("Android device pins and the Nextcloud application config live in mesh.yaml
   assert.equal(androidRuntime?.api, 35);
   assert.equal(androidRuntime?.profile, "pixel_6");
   assert.ok(Array.isArray(androidRuntime?.requiredPackages));
-  const androidAdapterOptions = loaded.config.adapters.android?.options as Record<string, unknown> | undefined;
-  assert.ok(androidAdapterOptions?.application);
-  assert.equal((androidAdapterOptions?.application as Record<string, unknown>).package, "com.nextcloud.client");
-  assert.equal(androidAdapterOptions?.runtimeManifest, undefined);
+  const androidExecutorOptions = loaded.config.executors.android?.options as Record<string, unknown> | undefined;
+  assert.ok(androidExecutorOptions?.application);
+  assert.equal((androidExecutorOptions?.application as Record<string, unknown>).package, "com.nextcloud.client");
+  assert.equal(androidExecutorOptions?.runtimeManifest, undefined);
 });
 
 test("every journey a mesh runs is drawn on the report's journey map from its JSON-LD source", async () => {

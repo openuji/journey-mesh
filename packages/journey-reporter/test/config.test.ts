@@ -22,7 +22,7 @@ test("unknown or invalid report settings are rejected; execution settings are ig
   assert.throws(() => parseReportConfig({ report: { maxFileSizeMiB: 5 } }), /Unknown setting report.maxFileSizeMiB/);
   assert.throws(() => parseReportConfig({ tests: { sharing: { report: { maxFileSizeMiB: 10 } } } }), /Unknown setting tests.sharing.report.maxFileSizeMiB/);
   assert.throws(() => parseReportConfig({ report: { interpreters: [{ options: {} }] } }), /report.interpreters\[0\].use/);
-  assert.doesNotThrow(() => parseReportConfig({ kind: "suite", adapters: { anything: {} }, tests: { a: { journeys: [] } } }));
+  assert.doesNotThrow(() => parseReportConfig({ kind: "suite", executors: { anything: {} }, tests: { a: { journeys: [] } } }));
 });
 
 test("interpreters load relative to the configuration and validate their exports", async () => {

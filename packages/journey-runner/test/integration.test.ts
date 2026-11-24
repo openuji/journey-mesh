@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  routedAdapter,
+  routedExecutor,
   runJourney,
-  type JourneyAdapter,
+  type JourneyExecutor,
   type JourneyPlan,
   type JourneyPlanOperation,
   type StatePlanOperation,
@@ -60,9 +60,9 @@ function plan(...operations: JourneyPlanOperation[]): JourneyPlan {
 
 test("runner owns operation order, effects, immutable evidence, and cleanup", async () => {
   const calls: string[] = [];
-  const adapter: JourneyAdapter = {
-    name: "test-adapter",
-    createExecution() {
+  const executor: JourneyExecutor = {
+    name: "test-executor",
+    createSession() {
       return {
         start() { calls.push("start"); },
         openEntry() { calls.push("entry"); },
@@ -77,23 +77,23 @@ test("runner owns operation order, effects, immutable evidence, and cleanup", as
     runId: "run",
     plan: plan(state, transition),
     profiles: [{ id: "profile", selectInputModality: () => ({ profileId: "profile", inputModalityProfile: modalityProfile, modality }) }],
-    adapter,
+    executor,
     environment: { verifyEffect: ({ effect }) => { calls.push(`effect:${effect.id}`); } }
   });
   assert.equal(result.ok, true);
   assert.deepEqual(calls, ["start", "entry", "state", `transition:${modality.id}`, "effect:urn:test:effect", "close:false"]);
   assert.ok(Object.isFrozen(result.evidence.executions));
   assert.ok(Object.isFrozen(result.evidence.executions[0]!.operations));
-  assert.equal(result.evidence.executions[0]!.operations[1]!.adapter?.name, "test-adapter");
+  assert.equal(result.evidence.executions[0]!.operations[1]!.executor?.name, "test-executor");
 });
 
 test("runner preserves operation and cleanup failures without mutable flags", async () => {
   const result = await runJourney({
     plan: plan(state),
     profiles: [{ id: "profile" }],
-    adapter: {
+    executor: {
       name: "failing",
-      createExecution: () => ({
+      createSession: () => ({
         start() {}, openEntry() {}, assertState() { throw new Error("operation failed"); },
         performTransition() {}, recordControlFlow() {}, close() { throw new Error("cleanup failed"); }
       })
@@ -104,11 +104,11 @@ test("runner preserves operation and cleanup failures without mutable flags", as
   assert.equal(result.executions[0]!.outcome.kind, "failed");
 });
 
-test("routed adapters allocate only used children and close them in reverse order", async () => {
+test("routed executors allocate only used children and close them in reverse order", async () => {
   const calls: string[] = [];
-  const child = (name: string): JourneyAdapter => ({
+  const child = (name: string): JourneyExecutor => ({
     name,
-    createExecution: () => ({
+    createSession: () => ({
       start() { calls.push(`start:${name}`); }, openEntry() {}, assertState() { calls.push(`state:${name}`); },
       performTransition() {}, recordControlFlow() {}, close() { calls.push(`close:${name}`); }
     })
@@ -116,8 +116,8 @@ test("routed adapters allocate only used children and close them in reverse orde
   const first = child("first"), second = child("second"), unused = child("unused");
   const firstState = { ...state, id: "first", touchpointId: "first" };
   const secondState = { ...state, id: "second", touchpointId: "second", sequence: 1 };
-  const adapter = routedAdapter((operation) => operation.touchpointId === "first" ? first : operation.touchpointId === "second" ? second : unused);
-  const result = await runJourney({ plan: plan(firstState, secondState), profiles: [{ id: "profile" }], adapter });
+  const executor = routedExecutor((operation) => operation.touchpointId === "first" ? first : operation.touchpointId === "second" ? second : unused);
+  const result = await runJourney({ plan: plan(firstState, secondState), profiles: [{ id: "profile" }], executor });
   assert.equal(result.ok, true);
   assert.deepEqual(calls, ["start:first", "start:second", "state:first", "state:second", "close:second", "close:first"]);
 });

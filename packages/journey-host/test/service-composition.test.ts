@@ -12,11 +12,11 @@ async function setup() {
   await writeFile(join(directory, "model.json"), JSON.stringify({ journeys: ["task"] }));
   const config = { kind: "suite", target: { service: "install", output: "identity" },
     model: { use: plugin("model") }, profiles: { default: { use: plugin("profile") } },
-    adapters: { web: { use: plugin("adapter"), options: { name: "web", log: "events.jsonl" } } },
+    executors: { web: { use: plugin("executor"), options: { name: "web", log: "events.jsonl" } } },
     services: {
       install: { use: plugin("install-service"), inputs: { source: { service: "source", output: "source" } }, options: { fail: false } },
       source: { use: plugin("source-service"), options: { headFile: "head" } }
-    }, tests: { task: { services: ["install"], journeys: [{ id: "task", source: "model.json", select: "task", adapter: "web" }],
+    }, tests: { task: { services: ["install"], journeys: [{ id: "task", source: "model.json", select: "task", executor: "web" }],
       profiles: [{ id: "default", journeys: { task: "default" } }] } } };
   await writeFile(join(directory, "head"), "a".repeat(40));
   const path = join(directory, "mesh.yaml");
@@ -59,14 +59,14 @@ test("failed installation cleans up attempted services in reverse order", async 
 
 async function inputSetup() {
   const s = await setup();
-  const adapters = s.config.adapters as Record<string, unknown>;
-  adapters.native = { use: plugin("input-adapter"), inputs: { installed: { service: "install", output: "identity" } } };
-  // The adapter input alone selects the installation and its source.
-  Object.assign(s.config.tests.task, { services: [], journeys: [{ id: "task", source: "model.json", select: "task", adapter: "native" }] });
+  const executors = s.config.executors as Record<string, unknown>;
+  executors.native = { use: plugin("input-executor"), inputs: { installed: { service: "install", output: "identity" } } };
+  // The executor input alone selects the installation and its source.
+  Object.assign(s.config.tests.task, { services: [], journeys: [{ id: "task", source: "model.json", select: "task", executor: "native" }] });
   await s.save();
   return s;
 }
-test("adapter inputs start their services and are readable once an execution starts", async () => {
+test("executor inputs start their services and are readable once an execution starts", async () => {
   const s = await inputSetup();
   const result = await runSuite(s.path);
   assert.equal(result.ok, true, JSON.stringify(result.errors));
@@ -77,15 +77,15 @@ test("adapter inputs start their services and are readable once an execution sta
     "install-down", "source-down"
   ]);
 });
-test("adapter inputs with an incompatible contract or undeclared name fail preflight", async () => {
+test("executor inputs with an incompatible contract or undeclared name fail preflight", async () => {
   const s = await inputSetup();
   Object.assign(s.config, { target: undefined });
-  const adapters = s.config.adapters as unknown as Record<string, { inputs: Record<string, unknown> }>;
-  adapters.native.inputs.installed = { service: "source", output: "source" }; await s.save();
-  await assert.rejects(validateSuite(s.path), /incompatible adapter input adapters\.native\.inputs\.installed/);
-  adapters.native.inputs = { other: { service: "install", output: "identity" } }; await s.save();
-  await assert.rejects(validateSuite(s.path), /adapters\.native\.inputs\.other is not an input of this plugin/);
-  adapters.native.inputs = { installed: { service: "missing", output: "identity" } }; await s.save();
+  const executors = s.config.executors as unknown as Record<string, { inputs: Record<string, unknown> }>;
+  executors.native.inputs.installed = { service: "source", output: "source" }; await s.save();
+  await assert.rejects(validateSuite(s.path), /incompatible executor input executors\.native\.inputs\.installed/);
+  executors.native.inputs = { other: { service: "install", output: "identity" } }; await s.save();
+  await assert.rejects(validateSuite(s.path), /executors\.native\.inputs\.other is not an input of this plugin/);
+  executors.native.inputs = { installed: { service: "missing", output: "identity" } }; await s.save();
   await assert.rejects(validateSuite(s.path), /references unknown service missing/);
   await assert.rejects(access(join(s.directory, "events")));
 });
@@ -132,8 +132,8 @@ test("a returned service lease is registered before declared outputs are validat
 
 test("all runtime tests are constructed before the first fixture or execution", async () => {
   const s = await inputSetup();
-  Object.assign(s.config.adapters, { broken: { use: plugin("input-adapter"), options: { failConstruction: true } } });
-  Object.assign(s.config.tests, { later: { ...s.config.tests.task, journeys: [{ id: "later", source: "model.json", select: "task", adapter: "broken" }], profiles: [{ id: "default", journeys: { later: "default" } }] } });
+  Object.assign(s.config.executors, { broken: { use: plugin("input-executor"), options: { failConstruction: true } } });
+  Object.assign(s.config.tests, { later: { ...s.config.tests.task, journeys: [{ id: "later", source: "model.json", select: "task", executor: "broken" }], profiles: [{ id: "default", journeys: { later: "default" } }] } });
   await s.save();
   const result = await runSuite(s.path);
   assert.equal(result.ok, false); assert.equal(result.tests.length, 0);

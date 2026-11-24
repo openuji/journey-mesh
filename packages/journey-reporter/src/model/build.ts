@@ -86,14 +86,14 @@ export function buildTestModel(input: Readonly<{
 }>): TestModel {
   const { test, interpreted } = input;
   const selection = selectJourneyMaps(test, input.excludedPhaseIds);
-  const adapters = new Map(test.segments.map((segment) => [segment.id, segment.adapter]));
+  const executors = new Map(test.segments.map((segment) => [segment.id, segment.executor]));
   const maps = selection.maps.map((map): JourneyMapModel => {
     const segments = map.segments.map((segment) => segment.id);
     const touchpoints: Record<string, string[]> = {};
     for (const operation of test.plan.operations) {
-      const adapter = adapters.get(operation.segment ?? "");
-      if (!adapter || !segments.includes(operation.segment ?? "")) continue;
-      touchpoints[operation.touchpointId] = [...new Set([...(touchpoints[operation.touchpointId] ?? []), adapter])];
+      const executor = executors.get(operation.segment ?? "");
+      if (!executor || !segments.includes(operation.segment ?? "")) continue;
+      touchpoints[operation.touchpointId] = [...new Set([...(touchpoints[operation.touchpointId] ?? []), executor])];
     }
     return { view: map.view, segments, rootStartIds: map.rootStartIds, touchpoints };
   });
@@ -107,7 +107,7 @@ export function buildTestModel(input: Readonly<{
     ],
     excludedPhaseIds: [...input.excludedPhaseIds],
     views: input.views,
-    journeys: test.segments.map((segment) => ({ segmentId: segment.id, journeyId: segment.journeyId, adapter: segment.adapter, ...(segment.view ? { view: segment.view } : {}) })),
+    journeys: test.segments.map((segment) => ({ segmentId: segment.id, journeyId: segment.journeyId, executor: segment.executor, ...(segment.view ? { view: segment.view } : {}) })),
     maps, mapErrors: selection.errors,
     data: interpreted.flatMap((item) => item.data),
     files: test.files.filter((file) => !file.scope).map(fileRef),

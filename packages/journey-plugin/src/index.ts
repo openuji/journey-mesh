@@ -5,12 +5,12 @@
  */
 export type * from "./artifacts.js";
 export type {
-  AdapterDependencies, AdapterDiscovery, AdapterPlugin, Contract, DriverPlugin, EnvironmentPlugin, InputDeclarations, InputMetadata, ResolvedInputs, ServiceDependencies, StartedService, JourneyConfigContext, JourneyMeshPlugin, JourneyModelCompiler, JourneyModelView,
-  JourneyObserverComponent, JourneyPluginContext, JourneyPluginKind, JourneyService, ModelPlugin, ObserverPlugin,
+  ExecutorDependencies, ExecutorDiscovery, ExecutorPlugin, Contract, ClientPlugin, EnvironmentPlugin, InputDeclarations, InputMetadata, ResolvedInputs, ServiceDependencies, StartedService, JourneyConfigContext, JourneyMeshPlugin, JourneyModelCompiler, JourneyModelView,
+  JourneyObserverComponent, JourneyPluginContext, JourneyPluginKind, JourneyService, ModelPlugin, ExecutorObserverPlugin,
   PluginOfKind, ProfilePlugin, ServicePlugin, RuntimeObserverPlugin
 } from "./plugins.js";
 export {
-  contract, defineAdapterPlugin, defineDriverPlugin, defineEnvironmentPlugin, defineModelPlugin, defineObserverPlugin,
+  contract, defineExecutorPlugin, defineClientPlugin, defineEnvironmentPlugin, defineModelPlugin, defineExecutorObserverPlugin,
   defineProfilePlugin, defineServicePlugin, defineRuntimeObserverPlugin
 } from "./plugins.js";
 export { startedService } from "./started-service.js";
@@ -22,6 +22,6 @@ export { sourceCheckoutContract, sourceIdentityContract, sourceIdentity } from "
 export type { SourceIdentity, SourceCheckout } from "./services.js";
 export type { ObservationPublisher, RuntimeObservation, RuntimeObservationSource, RuntimeObserver } from "./runtime-observations.js";
 export type {
-  AdapterDiscoveryInput, DeclaredMaterializations, DiscoveredMaterialization, DiscoveredMaterializationStep, DiscoveryFinding, DiscoveryFindings,
+  ExecutorDiscoveryInput, DeclaredMaterializations, DiscoveredMaterialization, DiscoveredMaterializationStep, DiscoveryFinding, DiscoveryFindings,
   JourneyRunMode, MaterializationWrite
 } from "./discovery.js";

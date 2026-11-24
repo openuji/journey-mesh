@@ -8,7 +8,7 @@ import { fileEvidenceStore, readRunRecord, runReader, writeRunRecord } from "../
 
 const temporary = () => mkdtemp(join(tmpdir(), "run-record-"));
 function record(id: string, overrides: Partial<TestRecord> = {}): TestRecord {
-  return { format: testRecordFormat, version: 1, id, ok: true, segments: [], views: {}, plan: { id: "plan", operations: [] }, observers: [], observerErrors: [], files: [],
+  return { format: testRecordFormat, version: 2, id, ok: true, segments: [], views: {}, plan: { id: "plan", operations: [] }, observers: [], observerErrors: [], files: [],
     result: { ok: true, runId: "run", plan: { id: "plan" }, errors: [], assessments: [], executions: [], evidence: { executions: [] } }, ...overrides };
 }
 const run = (tests: readonly TestRecord[]): SuiteRun => ({ ok: true, startedAt: "2026-11-19T10:00:00.000Z", finishedAt: "2026-11-19T10:01:00.000Z", errors: [], provenance: { stack: { version: "1" } }, files: [], tests });

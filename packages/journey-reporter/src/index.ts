@@ -1,6 +1,6 @@
 /**
  * The reporting layer: derive aggregated report data from run records. It reads `run.json` and evidence
- * files only, loads no journey, adapter, or observer runtime, and never changes a test verdict. What to do
+ * files only, loads no journey, executor, or observer runtime, and never changes a test verdict. What to do
  * with the data (viewers, sites, Markdown, templates) is up to the apps that consume the model (`./model`).
  */
 export { buildReport } from "./report.js";

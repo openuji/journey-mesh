@@ -2,7 +2,7 @@
  * What the axe observer records, for consumers of run records (reports, dashboards, comparisons).
  * Types and pure helpers only: importing this entry loads no browser runtime.
  */
-export { axeAdapterName, axeAuditFormat, axeObserverKind, wcag22Tags } from "./constants.js";
+export { axeExecutorName, axeAuditFormat, axeObserverKind, wcag22Tags } from "./constants.js";
 export { isAxeOutput } from "./output.js";
 export type { AxeObserverOutput, AxeRecordedEvidence, LinkedAxeFact } from "./output.js";
 export type { AxeEvidence, AxeEvidenceRef, AxeOperationEvidence, AxeAuditEvidence, AxeScreenshotEvidence } from "./observer/evidence.js";

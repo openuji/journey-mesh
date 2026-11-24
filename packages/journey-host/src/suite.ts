@@ -25,7 +25,7 @@ export type RunSuiteOptions = {
 
 /**
  * Preflight compiles selected tests, parses immutable settings and checks operations.
- * Runtime adapters, observers, services and their evidence stores are constructed per run.
+ * Runtime executors, observers, services and their evidence stores are constructed per run.
  */
 export async function prepareSuite(path: string, options: RunSuiteOptions = {}): Promise<PreparedSuite> {
   const loaded = await loadSuiteConfig(path, options.env);
@@ -58,10 +58,10 @@ export async function prepareSuite(path: string, options: RunSuiteOptions = {}):
     const runtimeObservers = await Promise.all(config.runtimeObservers.map((observer, index) =>
       load("runtime-observer", observer, `runtimeObservers[${index}]`, suiteContext("suite"))));
     const contracts = Object.fromEntries(services.map((entry) => [entry.key, entry.component.plugin.outputs ?? {}]));
-    for (const test of tests) for (const name of new Set(test.config.journeys.map((item) => item.adapter))) {
-      const definition = config.adapters[name];
-      const component = await load("adapter", definition, `adapters.${name}`, suiteContext(test.id), undefined, Object.keys(definition.inputs));
-      validateInputs(component.plugin, definition.inputs, contracts, `adapters.${name}`);
+    for (const test of tests) for (const name of new Set(test.config.journeys.map((item) => item.executor))) {
+      const definition = config.executors[name];
+      const component = await load("executor", definition, `executors.${name}`, suiteContext(test.id), undefined, Object.keys(definition.inputs));
+      validateInputs(component.plugin, definition.inputs, contracts, `executors.${name}`);
     }
     return Object.freeze({ ...(config.target ? { target: config.target } : {}), ...(config.label ? { label: config.label } : {}), outputDir, tests: Object.freeze(tests), services: Object.freeze(services), runtimeObservers: Object.freeze(runtimeObservers), loaded,
       ...(options.discovery ? { discovery: options.discovery } : {}) });

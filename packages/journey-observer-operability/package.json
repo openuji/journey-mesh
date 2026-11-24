@@ -11,7 +11,7 @@
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@openuji/journey-adapter-playwright": "workspace:*",
+    "@openuji/journey-executor-playwright": "workspace:*",
     "@openuji/journey-core": "workspace:*",
     "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-plugin": "workspace:*",

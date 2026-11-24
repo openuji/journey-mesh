@@ -25,7 +25,7 @@ function TouchpointChip({ label, platforms }: { label: string; platforms: readon
   </span>;
 }
 
-const platformLabel = (adapter: string) => adapter.charAt(0).toUpperCase() + adapter.slice(1);
+const platformLabel = (executor: string) => executor.charAt(0).toUpperCase() + executor.slice(1);
 
 /** `block` is injected by `ResponsiveJourneyPath` below its breakpoint. */
 function JourneyDocument({ registry, map, states, touchpointLabels, report, label, profile, block = false }: {

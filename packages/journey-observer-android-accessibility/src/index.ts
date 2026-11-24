@@ -1,5 +1,5 @@
 import { immutableSnapshot, type JourneyMeasurement } from "@openuji/journey-core";
-import type { AppiumExecutionObserver, AppiumOperationObservation } from "@openuji/journey-adapter-appium";
+import type { AppiumExecutionObserver, AppiumOperationObservation } from "@openuji/journey-executor-appium";
 import { errorToJourneyRunError, type RunResult } from "@openuji/journey-runner";
 import type { AndroidAccessibilityEvidence, AndroidArtifactWriter, AndroidCapture, AndroidOperationEvidence } from "./evidence.js";
 import { checkAndroidHierarchy, parseAndroidHierarchy, redactAndroidHierarchy } from "./hierarchy.js";

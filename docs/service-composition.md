@@ -17,7 +17,7 @@ services:
       pullRequest: 2945
       directory: .tmp/source
   app-build:
-    use: "@openuji/journey-driver-nextcloud/app-build/service"
+    use: "@openuji/journey-vendor-nextcloud/app-build/service"
     inputs:
       source: { service: source, output: source }
     options:
@@ -26,7 +26,7 @@ services:
       nodeImage: ${NODE_BUILD_IMAGE}
       composerImage: ${COMPOSER_BUILD_IMAGE}
   app-install:
-    use: "@openuji/journey-driver-nextcloud/app-install/service"
+    use: "@openuji/journey-vendor-nextcloud/app-install/service"
     inputs:
       app: { service: app-build, output: app }
       stack: { service: stack, output: stack }
@@ -59,14 +59,14 @@ on temporary copies and may reuse Docker's cache.
 | Plugin | Inputs | Outputs |
 | --- | --- | --- |
 | `journey-service-git/plugin` | none | `source`, `identity` |
-| `journey-driver-nextcloud/app-build/service` | `source` | `app` |
-| `journey-driver-nextcloud/server-build/service` | `source` | `image` |
-| `journey-driver-nextcloud/stack/service` | none | `stack` |
-| `journey-driver-nextcloud/stack-built/service` | `image` | `stack`, `identity` |
-| `journey-driver-nextcloud/app-install/service` | `app`, `stack` | `identity` |
-| `journey-driver-android/apk-build/service` | `source`, optional `sibling` | `apk`, `identity` |
-| `journey-driver-android/service` | none | `devices` |
-| `journey-adapter-appium/service` | optional `devices` | `server` |
+| `journey-vendor-nextcloud/app-build/service` | `source` | `app` |
+| `journey-vendor-nextcloud/server-build/service` | `source` | `image` |
+| `journey-vendor-nextcloud/stack/service` | none | `stack` |
+| `journey-vendor-nextcloud/stack-built/service` | `image` | `stack`, `identity` |
+| `journey-vendor-nextcloud/app-install/service` | `app`, `stack` | `identity` |
+| `journey-platform-android/apk-build/service` | `source`, optional `sibling` | `apk`, `identity` |
+| `journey-platform-android/service` | none | `devices` |
+| `journey-executor-appium/service` | optional `devices` | `server` |
 
 All package names in the table have the `@openuji/` prefix. App builds use the
 app's `appinfo/info.xml` ID/version and its Node/Composer build conventions. The
@@ -117,9 +117,9 @@ and devices. The Appium service checks its `devices` input and outputs its
 inputs replace the pinned APK download, the endpoint and per-touchpoint UDIDs:
 
 ```yaml
-adapters:
+executors:
   android:
-    use: "@openuji/journey-adapter-appium/plugin"
+    use: "@openuji/journey-executor-appium/plugin"
     inputs:
       application: { service: app-build, output: apk }
       server: { service: appium, output: server }

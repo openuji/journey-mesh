@@ -1,0 +1,18 @@
+{
+  "format": "journey-mesh/run",
+  "version": 1,
+  "label": "legacy fixture",
+  "ok": true,
+  "startedAt": "2026-11-20T10:00:00.000Z",
+  "finishedAt": "2026-11-20T10:01:00.000Z",
+  "errors": [],
+  "provenance": {},
+  "files": [],
+  "tests": [
+    {
+      "id": "mixed",
+      "ok": true,
+      "href": "tests/mixed/run.json"
+    }
+  ]
+}

@@ -222,7 +222,7 @@
             },
             "type": "array"
           },
-          "description": "Touchpoint ID → adapters that executed operations at it.",
+          "description": "Touchpoint ID → executors that executed operations at it.",
           "type": "object"
         },
         "view": {
@@ -825,7 +825,7 @@
           "items": {
             "additionalProperties": false,
             "properties": {
-              "adapter": {
+              "executor": {
                 "type": "string"
               },
               "journeyId": {
@@ -841,7 +841,7 @@
             "required": [
               "segmentId",
               "journeyId",
-              "adapter"
+              "executor"
             ],
             "type": "object"
           },

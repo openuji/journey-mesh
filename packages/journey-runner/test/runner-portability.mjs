@@ -87,9 +87,9 @@ async function exercise(failTransition) {
       },
       teardown({ executionFailed }) { calls.push(`teardown:${executionFailed}`); }
     },
-    adapter: {
-      name: "portable-adapter",
-      createExecution() {
+    executor: {
+      name: "portable-executor",
+      createSession() {
         return {
           start() { calls.push("start"); },
           openEntry() { calls.push("entry"); },
@@ -117,7 +117,7 @@ assert.equal(passed.result.ok, true, JSON.stringify(passed.result.errors));
 assert.deepEqual(passed.calls, ["setup", "start", "entry", "state", "select", "input", "effect", "automatic", "control", "close:false", "teardown:false"]);
 assert.equal(passed.progress.filter((event) => event === "operation-completed").length, 4);
 assert.equal(passed.result.evidence.executions[0].operations.length, 4);
-assert.equal(passed.result.evidence.executions[0].operations[1].adapter.name, "portable-adapter");
+assert.equal(passed.result.evidence.executions[0].operations[1].executor.name, "portable-executor");
 assert.ok(Object.isFrozen(passed.result.evidence.executions[0].operations));
 
 const failed = await exercise(true);

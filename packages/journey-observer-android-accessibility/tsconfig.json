@@ -14,7 +14,7 @@
       "path": "../journey-runner/tsconfig.json"
     },
     {
-      "path": "../journey-adapter-appium/tsconfig.json"
+      "path": "../journey-executor-appium/tsconfig.json"
     },
     {
       "path": "../journey-core/tsconfig.json"
