@@ -68,7 +68,7 @@ jobs:
           } >> "$GITHUB_ENV"
           mkdir -p "$RESULT_DIR"
           jq -n --arg subject "$SUBJECT" --arg ref "$ref" --arg sha "$sha" --arg asset "$asset" \
-            '{subject:$subject, ref:$ref, sourceSha:$sha, asset:$asset, status:"not-run"}' > "$RESULT_DIR/subject.json"
+            '{subject:$subject, ref:$ref, sourceSha:$sha, asset:$asset, status:"not-run"}' > "$RUNNER_TEMP/subject-input.json"
 
       - uses: actions/setup-node@v4
         with:
@@ -96,12 +96,21 @@ jobs:
               status=regression-reproduced
             fi
           fi
-          jq --arg status "$status" --argjson exitCode "$rc" '. + {status:$status, exitCode:$exitCode}' "$RESULT_DIR/subject.json" > "$RUNNER_TEMP/subject.json"
-          mv "$RUNNER_TEMP/subject.json" "$RESULT_DIR/subject.json"
-          cat "$RESULT_DIR/subject.json"
+          jq --arg status "$status" --argjson exitCode "$rc" '. + {status:$status, exitCode:$exitCode}' "$RUNNER_TEMP/subject-input.json" > "$RUNNER_TEMP/subject.json"
+          cat "$RUNNER_TEMP/subject.json"
           # Known application defects are findings, not infrastructure failures.
           # A build, login, fixture, or other unexpected failure is not reproduction evidence.
           [[ "$status" != inconclusive ]]
+      - name: Preserve subject metadata
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p "$RESULT_DIR"
+          if [[ -s "$RUNNER_TEMP/subject.json" ]]; then
+            cp "$RUNNER_TEMP/subject.json" "$RESULT_DIR/subject.json"
+          elif [[ -s "$RUNNER_TEMP/subject-input.json" ]]; then
+            cp "$RUNNER_TEMP/subject-input.json" "$RESULT_DIR/subject.json"
+          fi
       - name: Publish evidence
         if: always()
         uses: actions/upload-artifact@v4
