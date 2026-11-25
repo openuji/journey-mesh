@@ -22,10 +22,19 @@
       "path": "packages/journey-platform-android/tsconfig.json"
     },
     {
+      "path": "packages/journey-platform-ios/tsconfig.json"
+    },
+    {
       "path": "packages/journey-toolkit-android/tsconfig.json"
     },
     {
+      "path": "packages/journey-toolkit-ios/tsconfig.json"
+    },
+    {
       "path": "packages/journey-service-android/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-service-ios/tsconfig.json"
     },
     {
       "path": "packages/journey-runner/tsconfig.json"
@@ -52,6 +61,9 @@
       "path": "packages/journey-observer-android-accessibility/tsconfig.json"
     },
     {
+      "path": "packages/journey-observer-ios-accessibility/tsconfig.json"
+    },
+    {
       "path": "packages/journey-run-record/tsconfig.json"
     },
     {
@@ -74,6 +86,9 @@
     },
     {
       "path": "packages/journey-report-android/tsconfig.json"
+    },
+    {
+      "path": "packages/journey-report-ios/tsconfig.json"
     },
     { "path": "packages/journey-observer-operability" },
     { "path": "packages/journey-report-operability" }

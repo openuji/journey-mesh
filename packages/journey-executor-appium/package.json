@@ -6,31 +6,37 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./ios": "./src/ios.ts",
     "./observation": "./src/observation.ts",
     "./plugin": "./src/plugin.ts",
-    "./service": "./src/runtime/plugin.ts"
+    "./ios/plugin": "./src/ios-plugin.ts",
+    "./service": "./src/runtime/plugin.ts",
+    "./ios/service": "./src/runtime/ios-plugin.ts"
   },
   "types": "./src/index.ts",
   "bin": {
     "journey-executor-appium": "./bin/journey-executor-appium.mjs"
   },
   "dependencies": {
+    "@openuji/journey-core": "workspace:*",
     "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-platform-android": "workspace:*",
+    "@openuji/journey-platform-ios": "workspace:*",
+    "@openuji/journey-plugin": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
+    "@openuji/journey-toolkit-android": "workspace:*",
+    "@openuji/journey-toolkit-ios": "workspace:*",
     "appium": "3.9.0",
     "appium-uiautomator2-driver": "8.7.3",
-    "webdriverio": "9.20.0",
-    "@openuji/journey-core": "workspace:*",
-    "@openuji/journey-plugin": "workspace:*",
-    "@openuji/journey-toolkit-android": "workspace:*"
+    "appium-xcuitest-driver": "12.22.8",
+    "webdriverio": "9.20.0"
   },
   "devDependencies": {
+    "@openuji/journey-run-record": "workspace:*",
     "@xmldom/xmldom": "0.9.12",
     "tsx": "^4.20.3",
     "xpath": "0.0.34",
-    "yaml": "2.9.1",
-    "@openuji/journey-run-record": "workspace:*"
+    "yaml": "2.9.1"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

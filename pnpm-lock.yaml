@@ -38,9 +38,15 @@ importers:
       '@openuji/journey-observer-axe':
         specifier: workspace:*
         version: link:packages/journey-observer-axe
+      '@openuji/journey-observer-ios-accessibility':
+        specifier: workspace:*
+        version: link:packages/journey-observer-ios-accessibility
       '@openuji/journey-platform-android':
         specifier: workspace:*
         version: link:packages/journey-platform-android
+      '@openuji/journey-platform-ios':
+        specifier: workspace:*
+        version: link:packages/journey-platform-ios
       '@openuji/journey-platform-web':
         specifier: workspace:*
         version: link:packages/journey-platform-web
@@ -56,6 +62,9 @@ importers:
       '@openuji/journey-report-axe':
         specifier: workspace:*
         version: link:packages/journey-report-axe
+      '@openuji/journey-report-ios':
+        specifier: workspace:*
+        version: link:packages/journey-report-ios
       '@openuji/journey-reporter':
         specifier: workspace:*
         version: link:packages/journey-reporter
@@ -71,9 +80,15 @@ importers:
       '@openuji/journey-service-git':
         specifier: workspace:*
         version: link:packages/journey-service-git
+      '@openuji/journey-service-ios':
+        specifier: workspace:*
+        version: link:packages/journey-service-ios
       '@openuji/journey-toolkit-android':
         specifier: workspace:*
         version: link:packages/journey-toolkit-android
+      '@openuji/journey-toolkit-ios':
+        specifier: workspace:*
+        version: link:packages/journey-toolkit-ios
       '@openuji/journey-vendor-nextcloud':
         specifier: workspace:*
         version: link:packages/journey-vendor-nextcloud
@@ -132,6 +147,9 @@ importers:
       '@openuji/journey-observer-axe':
         specifier: workspace:*
         version: link:../../packages/journey-observer-axe
+      '@openuji/journey-observer-ios-accessibility':
+        specifier: workspace:*
+        version: link:../../packages/journey-observer-ios-accessibility
       '@openuji/journey-observer-operability':
         specifier: workspace:*
         version: link:../../packages/journey-observer-operability
@@ -144,6 +162,9 @@ importers:
       '@openuji/journey-report-axe':
         specifier: workspace:*
         version: link:../../packages/journey-report-axe
+      '@openuji/journey-report-ios':
+        specifier: workspace:*
+        version: link:../../packages/journey-report-ios
       '@openuji/journey-report-operability':
         specifier: workspace:*
         version: link:../../packages/journey-report-operability
@@ -198,12 +219,18 @@ importers:
       '@openuji/journey-observer-docker':
         specifier: workspace:*
         version: link:../../packages/journey-observer-docker
+      '@openuji/journey-observer-ios-accessibility':
+        specifier: workspace:*
+        version: link:../../packages/journey-observer-ios-accessibility
       '@openuji/journey-observer-operability':
         specifier: workspace:*
         version: link:../../packages/journey-observer-operability
       '@openuji/journey-observer-ux':
         specifier: workspace:*
         version: link:../../packages/journey-observer-ux
+      '@openuji/journey-platform-ios':
+        specifier: workspace:*
+        version: link:../../packages/journey-platform-ios
       '@openuji/journey-platform-web':
         specifier: workspace:*
         version: link:../../packages/journey-platform-web
@@ -216,6 +243,9 @@ importers:
       '@openuji/journey-report-axe':
         specifier: workspace:*
         version: link:../../packages/journey-report-axe
+      '@openuji/journey-report-ios':
+        specifier: workspace:*
+        version: link:../../packages/journey-report-ios
       '@openuji/journey-report-operability':
         specifier: workspace:*
         version: link:../../packages/journey-report-operability
@@ -225,6 +255,12 @@ importers:
       '@openuji/journey-service-android':
         specifier: workspace:*
         version: link:../../packages/journey-service-android
+      '@openuji/journey-service-git':
+        specifier: workspace:*
+        version: link:../../packages/journey-service-git
+      '@openuji/journey-service-ios':
+        specifier: workspace:*
+        version: link:../../packages/journey-service-ios
       '@openuji/journey-vendor-nextcloud':
         specifier: workspace:*
         version: link:../../packages/journey-vendor-nextcloud
@@ -292,6 +328,9 @@ importers:
       '@openuji/journey-platform-android':
         specifier: workspace:*
         version: link:../journey-platform-android
+      '@openuji/journey-platform-ios':
+        specifier: workspace:*
+        version: link:../journey-platform-ios
       '@openuji/journey-plugin':
         specifier: workspace:*
         version: link:../journey-plugin
@@ -301,12 +340,18 @@ importers:
       '@openuji/journey-toolkit-android':
         specifier: workspace:*
         version: link:../journey-toolkit-android
+      '@openuji/journey-toolkit-ios':
+        specifier: workspace:*
+        version: link:../journey-toolkit-ios
       appium:
         specifier: 3.9.0
         version: 3.9.0(@types/node@22.20.1)
       appium-uiautomator2-driver:
         specifier: 8.7.3
         version: 8.7.3(@types/node@22.20.1)(appium@3.9.0(@types/node@22.20.1))
+      appium-xcuitest-driver:
+        specifier: 12.22.8
+        version: 12.22.8(@types/node@22.20.1)(appium@3.9.0(@types/node@22.20.1))
       webdriverio:
         specifier: 9.20.0
         version: 9.20.0
@@ -459,6 +504,31 @@ importers:
         specifier: ^4.20.3
         version: 4.23.1
 
+  packages/journey-observer-ios-accessibility:
+    dependencies:
+      '@openuji/journey-core':
+        specifier: workspace:*
+        version: link:../journey-core
+      '@openuji/journey-executor-appium':
+        specifier: workspace:*
+        version: link:../journey-executor-appium
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
+      '@openuji/journey-runner':
+        specifier: workspace:*
+        version: link:../journey-runner
+      fast-xml-parser:
+        specifier: 5.3.0
+        version: 5.3.0
+    devDependencies:
+      '@openuji/journey-run-record':
+        specifier: workspace:*
+        version: link:../journey-run-record
+      tsx:
+        specifier: ^4.20.3
+        version: 4.23.1
+
   packages/journey-observer-operability:
     dependencies:
       '@openuji/journey-core':
@@ -504,6 +574,19 @@ importers:
         version: 4.23.1
 
   packages/journey-platform-android:
+    dependencies:
+      '@openuji/journey-execution-model':
+        specifier: workspace:*
+        version: link:../journey-execution-model
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
+    devDependencies:
+      tsx:
+        specifier: ^4.20.3
+        version: 4.23.1
+
+  packages/journey-platform-ios:
     dependencies:
       '@openuji/journey-execution-model':
         specifier: workspace:*
@@ -594,6 +677,31 @@ importers:
       '@openuji/journey-observer-axe':
         specifier: workspace:*
         version: link:../journey-observer-axe
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
+      '@openuji/journey-reporter':
+        specifier: workspace:*
+        version: link:../journey-reporter
+      '@openuji/journey-run-record':
+        specifier: workspace:*
+        version: link:../journey-run-record
+      '@openuji/journey-runner':
+        specifier: workspace:*
+        version: link:../journey-runner
+    devDependencies:
+      tsx:
+        specifier: ^4.20.3
+        version: 4.23.1
+
+  packages/journey-report-ios:
+    dependencies:
+      '@openuji/journey-core':
+        specifier: workspace:*
+        version: link:../journey-core
+      '@openuji/journey-observer-ios-accessibility':
+        specifier: workspace:*
+        version: link:../journey-observer-ios-accessibility
       '@openuji/journey-plugin':
         specifier: workspace:*
         version: link:../journey-plugin
@@ -753,11 +861,43 @@ importers:
         specifier: ^5.8.3
         version: 5.9.3
 
+  packages/journey-service-ios:
+    dependencies:
+      '@openuji/journey-host':
+        specifier: workspace:*
+        version: link:../journey-host
+      '@openuji/journey-platform-ios':
+        specifier: workspace:*
+        version: link:../journey-platform-ios
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
+      '@openuji/journey-toolkit-ios':
+        specifier: workspace:*
+        version: link:../journey-toolkit-ios
+    devDependencies:
+      tsx:
+        specifier: ^4.20.3
+        version: 4.23.1
+
   packages/journey-toolkit-android:
     dependencies:
       '@openuji/journey-platform-android':
         specifier: workspace:*
         version: link:../journey-platform-android
+      '@openuji/journey-plugin':
+        specifier: workspace:*
+        version: link:../journey-plugin
+    devDependencies:
+      tsx:
+        specifier: ^4.20.3
+        version: 4.23.1
+
+  packages/journey-toolkit-ios:
+    dependencies:
+      '@openuji/journey-platform-ios':
+        specifier: workspace:*
+        version: link:../journey-platform-ios
       '@openuji/journey-plugin':
         specifier: workspace:*
         version: link:../journey-plugin
@@ -774,6 +914,9 @@ importers:
       '@openuji/journey-platform-android':
         specifier: workspace:*
         version: link:../journey-platform-android
+      '@openuji/journey-platform-ios':
+        specifier: workspace:*
+        version: link:../journey-platform-ios
       '@openuji/journey-platform-web':
         specifier: workspace:*
         version: link:../journey-platform-web
@@ -1466,6 +1609,35 @@ packages:
       - io.appium.settings
       - portscanner
       - teen_process
+
+  appium-xcuitest-driver@12.22.8:
+    resolution: {integrity: sha512-aLZLEAXQe8HXiP197tmg/WvVPZ2T8DFnOQaq1wJi6NejMLdtS6FK2+LrmMJADNp0mXxxeCgYMntBIqQnwLuTqw==}
+    engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0, npm: '>=10'}
+    peerDependencies:
+      appium: ^3.0.0-rc.2
+    bundledDependencies:
+      - '@appium/css-locator-to-native'
+      - '@appium/strongbox'
+      - '@colors/colors'
+      - appium-ios-device
+      - appium-ios-simulator
+      - appium-remote-debugger
+      - appium-webdriveragent
+      - appium-xcode
+      - async-lock
+      - asyncbox
+      - axios
+      - commander
+      - dayjs
+      - js2xmlparser2
+      - lru-cache
+      - node-devicectl
+      - portscanner
+      - semver
+      - teen_process
+      - winston
+      - ws
+      - appium-ios-remotexpc
 
   appium@3.9.0:
     resolution: {integrity: sha512-OGOk9PURzjLoaP76Vm7gbZ4xK6MSskX64xHwMNs+g8gMbW+EHPoN2uFJRLGWW0ChaanhJklwux01BTg1gz4RqA==}
@@ -3779,6 +3951,14 @@ snapshots:
   anynum@1.0.1: {}
 
   appium-uiautomator2-driver@8.7.3(@types/node@22.20.1)(appium@3.9.0(@types/node@22.20.1)):
+    dependencies:
+      appium: 3.9.0(@types/node@22.20.1)
+    optionalDependencies:
+      sharp: 0.35.5(@types/node@22.20.1)
+    transitivePeerDependencies:
+      - '@types/node'
+
+  appium-xcuitest-driver@12.22.8(@types/node@22.20.1)(appium@3.9.0(@types/node@22.20.1)):
     dependencies:
       appium: 3.9.0(@types/node@22.20.1)
     optionalDependencies:

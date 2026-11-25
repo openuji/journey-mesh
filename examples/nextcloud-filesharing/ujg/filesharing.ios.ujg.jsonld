@@ -1,0 +1,1486 @@
+{
+  "@context": [
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/core.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/graph.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/surface.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/phase.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/l10n.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/observability.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/entry-binding.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/effect.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/artifact.context.jsonld"
+  ],
+  "@id": "urn:ujg:document:nextcloud-federated-sharing-ios",
+  "@type": "UJGDocument",
+  "nodes": [
+    {
+      "@type": "JourneyEntryIndex",
+      "@id": "urn:index:nextcloud-federated-sharing",
+      "label": "Federated sharing local journey entries",
+      "entryRefs": [
+        "urn:entry:alice-federated-sharing",
+        "urn:entry:bob-remote-share"
+      ]
+    },
+    {
+      "@type": "EntryBinding",
+      "@id": "urn:entry-binding:alice-files",
+      "label": "Alice files entry boot",
+      "entryRef": "urn:entry:alice-federated-sharing",
+      "value": "nextcloud.files"
+    },
+    {
+      "@type": "EntryBinding",
+      "@id": "urn:entry-binding:bob-remote-share",
+      "label": "Bob remote-share entry boot",
+      "entryRef": "urn:entry:bob-remote-share",
+      "value": "nextcloud.ios.files"
+    },
+    {
+      "@type": "EntryBinding",
+      "@id": "urn:entry-binding:bob-remote-share-offer",
+      "label": "Bob remote-share offer entry boot",
+      "entryRef": "urn:entry:bob-remote-share-offer",
+      "value": "nextcloud.ios.files"
+    },
+    {
+      "@type": "CompositeState",
+      "@id": "urn:composite:alice-federated-sharing",
+      "label": "Alice federated sharing entry",
+      "subjourneyRefs": [
+        "urn:journey:alice-federated-sharing"
+      ]
+    },
+    {
+      "@type": "Journey",
+      "@id": "urn:journey:alice-federated-sharing",
+      "label": "Alice shares a file with a remote recipient",
+      "defaultEntryRef": "urn:entry:alice-federated-sharing",
+      "entryRefs": [
+        "urn:entry:alice-federated-sharing"
+      ],
+      "stateRefs": [
+        "urn:state:alice-files-ready",
+        "urn:state:alice-share-panel-open",
+        "urn:state:alice-remote-recipient-entered",
+        "urn:state:alice-share-permissions-open",
+        "urn:state:alice-share-confirmed"
+      ],
+      "transitionRefs": [
+        "urn:transition:alice-opens-file-menu",
+        "urn:transition:alice-enters-remote-bob",
+        "urn:transition:alice-selects-remote-recipient",
+        "urn:transition:alice-confirms-share"
+      ]
+    },
+    {
+      "@type": "JourneyEntry",
+      "@id": "urn:entry:alice-federated-sharing",
+      "label": "Alice files entry",
+      "stateRef": "urn:state:alice-files-ready"
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:alice-files-ready",
+      "label": "Alice files app is ready"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:alice-files-ready",
+      "label": "Alice files list with target file",
+      "graphNodeRef": "urn:state:alice-files-ready"
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:alice-share-panel-open",
+      "label": "Alice sharing panel is open"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:alice-share-panel-open",
+      "label": "Alice share panel for target file",
+      "graphNodeRef": "urn:state:alice-share-panel-open"
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:alice-remote-recipient-entered",
+      "label": "Alice entered Bob as a remote recipient"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:alice-remote-recipient-entered",
+      "label": "Alice remote recipient entry",
+      "graphNodeRef": "urn:state:alice-remote-recipient-entered"
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:alice-share-permissions-open",
+      "label": "Alice share permissions are open"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:alice-share-permissions-open",
+      "label": "Alice share permissions form",
+      "graphNodeRef": "urn:state:alice-share-permissions-open"
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:alice-share-confirmed",
+      "label": "Alice confirmed the remote share"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:alice-share-confirmed",
+      "label": "Alice outgoing remote share is confirmed",
+      "graphNodeRef": "urn:state:alice-share-confirmed"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:alice-opens-file-menu",
+      "label": "Alice opens the sharing panel",
+      "from": "urn:state:alice-files-ready",
+      "to": "urn:state:alice-share-panel-open",
+      "commandRef": "urn:transition:alice-opens-file-menu:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:alice-opens-file-menu",
+      "label": "Alice file share action",
+      "graphNodeRef": "urn:transition:alice-opens-file-menu:command"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:alice-enters-remote-bob",
+      "label": "Alice enters Bob's federated address",
+      "from": "urn:state:alice-share-panel-open",
+      "to": "urn:state:alice-remote-recipient-entered",
+      "commandRef": "urn:transition:alice-enters-remote-bob:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:alice-enters-remote-bob",
+      "label": "Alice remote recipient input",
+      "graphNodeRef": "urn:transition:alice-enters-remote-bob:command"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:alice-selects-remote-recipient",
+      "label": "Alice selects Bob as the remote recipient",
+      "from": "urn:state:alice-remote-recipient-entered",
+      "to": "urn:state:alice-share-permissions-open",
+      "commandRef": "urn:transition:alice-selects-remote-recipient:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:alice-selects-remote-recipient",
+      "label": "Alice remote recipient option",
+      "graphNodeRef": "urn:transition:alice-selects-remote-recipient:command"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:alice-confirms-share",
+      "label": "Alice confirms the share",
+      "from": "urn:state:alice-share-permissions-open",
+      "to": "urn:state:alice-share-confirmed",
+      "effectRef": "urn:effect:alice-confirm-share",
+      "commandRef": "urn:transition:alice-confirms-share:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:alice-confirms-share",
+      "label": "Alice confirm-share action",
+      "graphNodeRef": "urn:transition:alice-confirms-share:command"
+    },
+    {
+      "@type": "CompositeState",
+      "@id": "urn:composite:bob-remote-share",
+      "label": "Bob remote-share entry",
+      "subjourneyRefs": [
+        "urn:journey:bob-remote-share"
+      ]
+    },
+    {
+      "@type": "Journey",
+      "@id": "urn:journey:bob-remote-share",
+      "label": "Bob handles an incoming remote share",
+      "defaultEntryRef": "urn:entry:bob-remote-share",
+      "entryRefs": [
+        "urn:entry:bob-remote-share"
+      ],
+      "stateRefs": [
+        "urn:composite:bob-remote-share-offer",
+        "urn:composite:bob-pending-share-offer-cleared"
+      ],
+      "transitionRefs": [
+        "urn:transition:bob-continues-after-share-offer-cleared"
+      ]
+    },
+    {
+      "@type": "JourneyEntry",
+      "@id": "urn:entry:bob-remote-share",
+      "label": "Bob incoming remote share entry",
+      "stateRef": "urn:composite:bob-remote-share-offer"
+    },
+    {
+      "@type": "CompositeState",
+      "@id": "urn:composite:bob-remote-share-offer",
+      "label": "Bob remote-share offer",
+      "subjourneyRefs": [
+        "urn:journey:bob-remote-share-offer"
+      ]
+    },
+    {
+      "@type": "Journey",
+      "@id": "urn:journey:bob-remote-share-offer",
+      "label": "Bob resolves the incoming remote-share offer",
+      "defaultEntryRef": "urn:entry:bob-remote-share-offer",
+      "entryRefs": [
+        "urn:entry:bob-remote-share-offer"
+      ],
+      "stateRefs": [
+        "urn:state:bob-native-files-ready",
+        "urn:state:bob-incoming-share-visible"
+      ],
+      "transitionRefs": [
+        "urn:transition:bob-opens-native-notifications",
+        "urn:transition:bob-accepts-share"
+      ],
+      "exitRefs": [
+        "urn:exit:bob-share-offer-accepted"
+      ]
+    },
+    {
+      "@type": "JourneyEntry",
+      "@id": "urn:entry:bob-remote-share-offer",
+      "label": "Bob pending remote share entry",
+      "stateRef": "urn:state:bob-native-files-ready"
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:bob-native-files-ready",
+      "label": "Bob native iOS file screen is ready"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-native-files-ready",
+      "label": "Bob native iOS file screen",
+      "graphNodeRef": "urn:state:bob-native-files-ready"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:bob-opens-native-notifications",
+      "label": "Bob opens native notifications",
+      "from": "urn:state:bob-native-files-ready",
+      "to": "urn:state:bob-incoming-share-visible",
+      "commandRef": "urn:transition:bob-opens-native-notifications:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-opens-native-notifications",
+      "label": "Bob notification navigation action",
+      "graphNodeRef": "urn:transition:bob-opens-native-notifications:command"
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:bob-incoming-share-visible",
+      "label": "Bob sees the pending remote share"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-incoming-share-visible",
+      "label": "Bob incoming remote share row",
+      "graphNodeRef": "urn:state:bob-incoming-share-visible"
+    },
+    {
+      "@type": "JourneyExit",
+      "@id": "urn:exit:bob-share-offer-accepted",
+      "label": "Remote share accepted"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:bob-accepts-share",
+      "label": "Bob accepts the remote share",
+      "from": "urn:state:bob-incoming-share-visible",
+      "to": "urn:exit:bob-share-offer-accepted",
+      "effectRef": "urn:effect:bob-accept-share",
+      "commandRef": "urn:transition:bob-accepts-share:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-accepts-share",
+      "label": "Bob accept-share action",
+      "graphNodeRef": "urn:transition:bob-accepts-share:command"
+    },
+    {
+      "@type": "CompositeState",
+      "@id": "urn:composite:bob-pending-share-offer-cleared",
+      "label": "Bob pending share offer cleared",
+      "subjourneyRefs": [
+        "urn:journey:bob-pending-share-offer-cleared"
+      ]
+    },
+    {
+      "@type": "Journey",
+      "@id": "urn:journey:bob-pending-share-offer-cleared",
+      "label": "Bob verifies the pending remote-share offer is cleared",
+      "defaultEntryRef": "urn:entry:bob-pending-share-offer-cleared",
+      "entryRefs": [
+        "urn:entry:bob-pending-share-offer-cleared"
+      ],
+      "stateRefs": [
+        "urn:state:bob-pending-share-offer-cleared",
+        "urn:state:bob-files-navigation-ready",
+        "urn:state:bob-shares-navigation-open",
+        "urn:state:bob-files-refreshed",
+        "urn:state:bob-files-sort-menu-open",
+        "urn:state:bob-shared-report-visible"
+      ],
+      "transitionRefs": [
+        "urn:transition:bob-returns-to-files",
+        "urn:transition:bob-opens-shares-navigation",
+        "urn:transition:bob-opens-shares-overview",
+        "urn:transition:bob-opens-files-sort-menu",
+        "urn:transition:bob-sorts-files-descending"
+      ]
+    },
+    {
+      "@type": "JourneyEntry",
+      "@id": "urn:entry:bob-pending-share-offer-cleared",
+      "label": "Bob pending share offer cleared entry",
+      "stateRef": "urn:state:bob-pending-share-offer-cleared"
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:bob-pending-share-offer-cleared",
+      "label": "Bob pending remote-share offer is cleared"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-pending-share-offer-cleared",
+      "label": "Bob pending remote share row is removed",
+      "graphNodeRef": "urn:state:bob-pending-share-offer-cleared"
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:bob-shared-report-visible",
+      "label": "Bob sees file marked as shared"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-shared-report-visible",
+      "label": "Bob shared report row",
+      "graphNodeRef": "urn:state:bob-shared-report-visible"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:bob-opens-shares-overview",
+      "label": "Bob returns to the native iOS Files tab",
+      "from": "urn:state:bob-shares-navigation-open",
+      "to": "urn:state:bob-files-refreshed",
+      "commandRef": "urn:transition:bob-opens-shares-overview:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-opens-shares-overview",
+      "label": "Bob Shares overview link",
+      "graphNodeRef": "urn:transition:bob-opens-shares-overview:command"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:bob-continues-after-share-offer-cleared",
+      "label": "Bob accepted the remote share",
+      "from": "urn:composite:bob-remote-share-offer",
+      "fromExitRef": "urn:exit:bob-share-offer-accepted",
+      "to": "urn:composite:bob-pending-share-offer-cleared",
+      "toEntryRef": "urn:entry:bob-pending-share-offer-cleared"
+    },
+    {
+      "@type": "Touchpoint",
+      "@id": "urn:touchpoint:nextcloud-a",
+      "label": "Nextcloud A",
+      "journeyRefs": [
+        "urn:journey:alice-federated-sharing"
+      ]
+    },
+    {
+      "@type": "Touchpoint",
+      "@id": "urn:touchpoint:nextcloud-b",
+      "label": "Nextcloud B iOS",
+      "journeyRefs": [
+        "urn:journey:bob-remote-share"
+      ]
+    },
+    {
+      "@type": "Persona",
+      "@id": "urn:user:alice",
+      "label": "Alice",
+      "touchpointRefs": [
+        "urn:touchpoint:nextcloud-a"
+      ]
+    },
+    {
+      "@type": "Persona",
+      "@id": "urn:user:bob",
+      "label": "Bob",
+      "touchpointRefs": [
+        "urn:touchpoint:nextcloud-b"
+      ]
+    },
+    {
+      "@type": "Artifact",
+      "@id": "urn:artifact:federated-share",
+      "label": "Federated share for the test file",
+      "nameRef": "urn:message:report-pdf-file-name",
+      "sourceTouchpointRef": "urn:touchpoint:nextcloud-a",
+      "targetTouchpointRefs": [
+        "urn:touchpoint:nextcloud-b"
+      ]
+    },
+    {
+      "@type": "Effect",
+      "@id": "urn:effect:alice-confirm-share",
+      "label": "Alice confirms the remote share",
+      "producedRefs": [
+        "urn:artifact:federated-share"
+      ]
+    },
+    {
+      "@type": "Effect",
+      "@id": "urn:effect:bob-accept-share",
+      "label": "Bob accepts the remote share",
+      "consumedRefs": [
+        "urn:artifact:federated-share"
+      ]
+    },
+    {
+      "@type": "Locale",
+      "@id": "urn:locale:en",
+      "label": "English",
+      "localeCode": "en"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:sharing-panel",
+      "label": "Sharing panel label",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:remote-recipient-input",
+      "label": "Remote recipient input label",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:share-action",
+      "label": "Sharing options action",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:save-share-action",
+      "label": "Save share action",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:accept-action",
+      "label": "Accept action",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:report-pdf-file-name",
+      "label": "Report PDF file name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:report-file-basename",
+      "label": "Report file basename",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:report-pdf-shared-row",
+      "label": "Shared file row status",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:shares-overview",
+      "label": "Shares overview navigation",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:sharing-panel:en",
+      "messageMetaRef": "urn:message:sharing-panel",
+      "localeRef": "urn:locale:en",
+      "value": "Sharing"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:remote-recipient-input:en",
+      "messageMetaRef": "urn:message:remote-recipient-input",
+      "localeRef": "urn:locale:en",
+      "value": "Enter external recipients"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:share-action:en",
+      "messageMetaRef": "urn:message:share-action",
+      "localeRef": "urn:locale:en",
+      "value": "Sharing options"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:save-share-action:en",
+      "messageMetaRef": "urn:message:save-share-action",
+      "localeRef": "urn:locale:en",
+      "value": "Save share"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:accept-action:en",
+      "messageMetaRef": "urn:message:accept-action",
+      "localeRef": "urn:locale:en",
+      "value": "Accept share"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:report-pdf-file-name:en",
+      "messageMetaRef": "urn:message:report-pdf-file-name",
+      "localeRef": "urn:locale:en",
+      "value": "report.pdf"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:report-file-basename:en",
+      "messageMetaRef": "urn:message:report-file-basename",
+      "localeRef": "urn:locale:en",
+      "value": "report"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:report-pdf-shared-row:en",
+      "messageMetaRef": "urn:message:report-pdf-shared-row",
+      "localeRef": "urn:locale:en",
+      "value": "Shared"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:shares-overview:en",
+      "messageMetaRef": "urn:message:shares-overview",
+      "localeRef": "urn:locale:en",
+      "value": "Shares"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:feature:artifact-instance-key",
+      "label": "Artifact instance key",
+      "accessibleFeatureName": "file-id",
+      "accessibleFeatureValue": "*"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:feature:remote-recipient-instance-key",
+      "label": "Remote recipient instance key",
+      "accessibleFeatureName": "federated-cloud-id",
+      "accessibleFeatureValue": "*"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:sharing-panel",
+      "label": "Sharing panel",
+      "role": "complementary"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:alice-file-row",
+      "label": "Alice target file row",
+      "role": "row",
+      "accessibleNameRef": "urn:message:report-pdf-file-name"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:remote-recipient-entry",
+      "label": "Remote recipient result",
+      "role": "option",
+      "accessibleFeatureRefs": [
+        "urn:feature:remote-recipient-instance-key"
+      ]
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:alice-share-row",
+      "label": "Alice shared file row",
+      "role": "row",
+      "accessibleNameRef": "urn:message:report-pdf-shared-row"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:incoming-share-row",
+      "label": "Native iOS federated-share notification (@alice)",
+      "role": "text",
+      "accessibleNameRef": "urn:message:native-offer"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:bob-shared-report-file-row",
+      "label": "Native iOS mounted report filename",
+      "role": "text",
+      "accessibleNameRef": "urn:message:report-file-basename",
+      "contextLocatorRefs": [
+        "urn:locator:ios-accessible-file-row"
+      ]
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:bob-shared-report-status-row",
+      "label": "Bob shared report status row",
+      "role": "row",
+      "accessibleNameRef": "urn:message:report-pdf-shared-row"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:shares-overview-link",
+      "label": "Native iOS Shares navigation",
+      "role": "button",
+      "accessibleNameRef": "urn:message:shares-overview"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:file-share-action",
+      "label": "File share action",
+      "role": "button",
+      "accessibleNameRef": "urn:message:share-action",
+      "contextLocatorRefs": [
+        "urn:locator:alice-file-row"
+      ]
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:remote-recipient-input",
+      "label": "Remote recipient input",
+      "role": "combobox",
+      "accessibleNameRef": "urn:message:remote-recipient-input",
+      "contextLocatorRefs": [
+        "urn:locator:sharing-panel"
+      ]
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:save-share-button",
+      "label": "Save share button",
+      "role": "button",
+      "accessibleNameRef": "urn:message:save-share-action",
+      "contextLocatorRefs": [
+        "urn:locator:sharing-panel"
+      ]
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:bob-accept-share-button",
+      "label": "Native iOS Accept action",
+      "role": "button",
+      "accessibleNameRef": "urn:message:native-accept"
+    },
+    {
+      "@type": "SurfaceInstanceResolver",
+      "@id": "urn:resolver:artifact-instance",
+      "label": "Resolve repeated artifact surface instances",
+      "instanceKeyFeatureRef": "urn:feature:artifact-instance-key"
+    },
+    {
+      "@type": "InputModality",
+      "@id": "urn:openuji:input-modality:keyboard-text-entry",
+      "label": "Keyboard text entry"
+    },
+    {
+      "@type": "InputModalityProfile",
+      "@id": "urn:input-modality-profile:keyboard-text-entry",
+      "label": "Keyboard text entry",
+      "inputModalityRefs": [
+        "urn:openuji:input-modality:keyboard-text-entry"
+      ]
+    },
+    {
+      "@type": "InputModalityProfile",
+      "@id": "urn:input-modality-profile:keyboard",
+      "label": "Keyboard interaction",
+      "inputModalityRefs": [
+        "observability:keyboard"
+      ]
+    },
+    {
+      "@type": "InputModalityProfile",
+      "@id": "urn:input-modality-profile:pointer",
+      "label": "Pointer interaction",
+      "inputModalityRefs": [
+        "observability:pointer"
+      ]
+    },
+    {
+      "@type": "ObservationEvent",
+      "@id": "urn:observation-event:button-activation",
+      "label": "Button activation",
+      "requiredInputModalityProfileRefs": [
+        "urn:input-modality-profile:keyboard",
+        "urn:input-modality-profile:pointer"
+      ]
+    },
+    {
+      "@type": "ObservationEvent",
+      "@id": "urn:observation-event:option-activation",
+      "label": "Option activation",
+      "requiredInputModalityProfileRefs": [
+        "urn:input-modality-profile:keyboard",
+        "urn:input-modality-profile:pointer"
+      ]
+    },
+    {
+      "@type": "ObservationEvent",
+      "@id": "urn:observation-event:link-activation",
+      "label": "Link activation",
+      "requiredInputModalityProfileRefs": [
+        "urn:input-modality-profile:keyboard",
+        "urn:input-modality-profile:pointer"
+      ]
+    },
+    {
+      "@type": "ObservationEvent",
+      "@id": "urn:observation-event:text-entry-activation",
+      "label": "Text entry activation",
+      "requiredInputModalityProfileRefs": [
+        "urn:input-modality-profile:keyboard-text-entry"
+      ]
+    },
+    {
+      "@type": "ObservationEvent",
+      "@id": "urn:observation-event:presence",
+      "label": "Presence"
+    },
+    {
+      "@type": "ObservationEvent",
+      "@id": "urn:observation-event:absence",
+      "label": "Absence"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:alice-files-ready-presence",
+      "label": "Observe Alice files ready",
+      "observeSurfaceRef": "urn:surface:alice-files-ready",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:alice-file-row"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:alice-share-panel-open-presence",
+      "label": "Observe Alice share panel open",
+      "observeSurfaceRef": "urn:surface:alice-share-panel-open",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:sharing-panel"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:alice-remote-recipient-entered-presence",
+      "label": "Observe Alice remote recipient entered",
+      "observeSurfaceRef": "urn:surface:alice-remote-recipient-entered",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:remote-recipient-entry"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:alice-share-permissions-open-presence",
+      "label": "Observe Alice share permissions open",
+      "observeSurfaceRef": "urn:surface:alice-share-permissions-open",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:save-share-button"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:alice-share-confirmed-presence",
+      "label": "Observe Alice share confirmed",
+      "observeSurfaceRef": "urn:surface:alice-share-confirmed",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:alice-share-row"
+      ],
+      "surfaceInstanceResolverRef": "urn:resolver:artifact-instance"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-native-files-ready-presence",
+      "label": "Observe Bob native iOS files screen",
+      "observeSurfaceRef": "urn:surface:bob-native-files-ready",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:ios-account-switcher"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-opens-native-notifications-activation",
+      "label": "Open Bob native iOS notifications",
+      "observeSurfaceRef": "urn:surface:bob-opens-native-notifications",
+      "observationEventRef": "urn:observation-event:touch-activation",
+      "locatorRefs": [
+        "urn:locator:ios-notification-entry"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-incoming-share-visible-presence",
+      "label": "Observe Bob incoming share",
+      "observeSurfaceRef": "urn:surface:bob-incoming-share-visible",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:bob-accept-share-button"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-pending-share-offer-cleared-absence",
+      "label": "Observe Bob pending share removed",
+      "observeSurfaceRef": "urn:surface:bob-pending-share-offer-cleared",
+      "observationEventRef": "urn:observation-event:absence",
+      "expectedMatchCount": 0,
+      "locatorRefs": [
+        "urn:locator:bob-accept-share-button"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-shared-report-visible-presence",
+      "label": "Observe Bob shared report row",
+      "observeSurfaceRef": "urn:surface:bob-shared-report-visible",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:bob-shared-report-file-row"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:alice-opens-file-menu-activation",
+      "label": "Activate Alice share action",
+      "observeSurfaceRef": "urn:surface:alice-opens-file-menu",
+      "observationEventRef": "urn:observation-event:button-activation",
+      "locatorRefs": [
+        "urn:locator:file-share-action"
+      ],
+      "surfaceInstanceResolverRef": "urn:resolver:artifact-instance"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:alice-enters-remote-bob-activation",
+      "label": "Activate Alice remote recipient entry",
+      "observeSurfaceRef": "urn:surface:alice-enters-remote-bob",
+      "observationEventRef": "urn:observation-event:text-entry-activation",
+      "locatorRefs": [
+        "urn:locator:remote-recipient-input"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:alice-selects-remote-recipient-activation",
+      "label": "Activate Alice remote recipient option",
+      "observeSurfaceRef": "urn:surface:alice-selects-remote-recipient",
+      "observationEventRef": "urn:observation-event:option-activation",
+      "locatorRefs": [
+        "urn:locator:remote-recipient-entry"
+      ],
+      "surfaceInstanceResolverRef": "urn:resolver:artifact-instance"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:alice-confirms-share-activation",
+      "label": "Activate Alice share confirmation",
+      "observeSurfaceRef": "urn:surface:alice-confirms-share",
+      "observationEventRef": "urn:observation-event:button-activation",
+      "locatorRefs": [
+        "urn:locator:save-share-button"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-accepts-share-activation",
+      "label": "Activate Bob share acceptance",
+      "observeSurfaceRef": "urn:surface:bob-accepts-share",
+      "observationEventRef": "urn:observation-event:touch-activation",
+      "locatorRefs": [
+        "urn:locator:bob-accept-share-button"
+      ]
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-opens-shares-overview-activation",
+      "label": "Activate Bob Files tab refresh",
+      "observeSurfaceRef": "urn:surface:bob-opens-shares-overview",
+      "observationEventRef": "urn:observation-event:touch-activation",
+      "locatorRefs": [
+        "urn:locator:ios-files-tab"
+      ]
+    },
+    {
+      "@type": "Phase",
+      "@id": "urn:phase:remote-share-offered",
+      "label": "Remote share offered",
+      "order": 1
+    },
+    {
+      "@type": "Phase",
+      "@id": "urn:phase:pending-share-offer-cleared",
+      "label": "Remote share accepted",
+      "order": 2
+    },
+    {
+      "@type": "Step",
+      "@id": "urn:step:alice-federated-sharing",
+      "label": "Alice offers the remote share",
+      "order": 1,
+      "compositeStateRef": "urn:composite:alice-federated-sharing",
+      "phaseRef": "urn:phase:remote-share-offered"
+    },
+    {
+      "@type": "Step",
+      "@id": "urn:step:bob-remote-share-offer",
+      "label": "Bob receives the remote-share offer",
+      "order": 2,
+      "compositeStateRef": "urn:composite:bob-remote-share-offer",
+      "phaseRef": "urn:phase:remote-share-offered"
+    },
+    {
+      "@type": "Step",
+      "@id": "urn:step:bob-pending-share-offer-cleared",
+      "label": "Bob verifies accepted remote-share access",
+      "compositeStateRef": "urn:composite:bob-pending-share-offer-cleared",
+      "phaseRef": "urn:phase:pending-share-offer-cleared"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:native-offer",
+      "label": "native-offer",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:native-offer:en",
+      "messageMetaRef": "urn:message:native-offer",
+      "localeRef": "urn:locale:en",
+      "value": "You received report.pdf as a remote share from @alice"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:native-accept",
+      "label": "native-accept",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:native-accept:en",
+      "messageMetaRef": "urn:message:native-accept",
+      "localeRef": "urn:locale:en",
+      "value": "Accept"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:native-navigate-back",
+      "label": "native-navigate-back",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:native-navigate-back:en",
+      "messageMetaRef": "urn:message:native-navigate-back",
+      "localeRef": "urn:locale:en",
+      "value": "Close"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:feature:ios-account-switcher",
+      "label": "account-switcher",
+      "accessibleFeatureName": "name",
+      "accessibleFeatureValue": "accountSwitcher"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:feature:ios-filename",
+      "label": "filename",
+      "accessibleFeatureName": "name",
+      "accessibleFeatureValue": "Cell/report.pdf"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:ios-notification-entry",
+      "label": "Open native iOS notifications",
+      "role": "button",
+      "accessibleNameRef": "urn:message:native-notifications"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:ios-account-switcher",
+      "label": "Native iOS account switcher",
+      "role": "button",
+      "accessibleFeatureRefs": [
+        "urn:feature:ios-account-switcher"
+      ]
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:ios-navigate-back",
+      "label": "Close Notifications",
+      "role": "button",
+      "accessibleNameRef": "urn:message:native-navigate-back"
+    },
+    {
+      "@type": "InputModality",
+      "@id": "urn:openuji:input:touch-tap",
+      "label": "Touch tap"
+    },
+    {
+      "@type": "InputModalityProfile",
+      "@id": "urn:input-modality-profile:touch-tap",
+      "label": "Touch tap",
+      "inputModalityRefs": [
+        "urn:openuji:input:touch-tap"
+      ]
+    },
+    {
+      "@type": "ObservationEvent",
+      "@id": "urn:observation-event:touch-activation",
+      "label": "Touch activation",
+      "requiredInputModalityProfileRefs": [
+        "urn:input-modality-profile:touch-tap"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:bob-files-navigation-ready",
+      "label": "Bob returns to the native iOS file screen"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-files-navigation-ready",
+      "label": "Bob returns to the native iOS file screen",
+      "graphNodeRef": "urn:state:bob-files-navigation-ready"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-files-navigation-ready-presence",
+      "label": "Bob returns to the native iOS file screen",
+      "observeSurfaceRef": "urn:surface:bob-files-navigation-ready",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:ios-favorites-tab"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:bob-shares-navigation-open",
+      "label": "Bob Favorites tab is open"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-shares-navigation-open",
+      "label": "Bob sees native iOS Shares navigation",
+      "graphNodeRef": "urn:state:bob-shares-navigation-open"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-shares-navigation-open-presence",
+      "label": "Bob Favorites tab is open",
+      "observeSurfaceRef": "urn:surface:bob-shares-navigation-open",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:ios-favorites-navbar"
+      ]
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:bob-returns-to-files",
+      "label": "Bob closes Notifications",
+      "from": "urn:state:bob-pending-share-offer-cleared",
+      "to": "urn:state:bob-files-navigation-ready",
+      "commandRef": "urn:transition:bob-returns-to-files:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-returns-to-files",
+      "label": "Bob closes Notifications",
+      "graphNodeRef": "urn:transition:bob-returns-to-files:command"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-returns-to-files-activation",
+      "label": "Bob closes Notifications",
+      "observeSurfaceRef": "urn:surface:bob-returns-to-files",
+      "observationEventRef": "urn:observation-event:touch-activation",
+      "locatorRefs": [
+        "urn:locator:ios-navigate-back"
+      ]
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:bob-opens-shares-navigation",
+      "label": "Bob switches away from Files to Favorites",
+      "from": "urn:state:bob-files-navigation-ready",
+      "to": "urn:state:bob-shares-navigation-open",
+      "commandRef": "urn:transition:bob-opens-shares-navigation:command"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-opens-shares-navigation",
+      "label": "Bob opens the native iOS More tab",
+      "graphNodeRef": "urn:transition:bob-opens-shares-navigation:command"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-opens-shares-navigation-activation",
+      "label": "Bob switches away from Files to Favorites",
+      "observeSurfaceRef": "urn:surface:bob-opens-shares-navigation",
+      "observationEventRef": "urn:observation-event:touch-activation",
+      "locatorRefs": [
+        "urn:locator:ios-favorites-tab"
+      ]
+    },
+    {
+      "@id": "urn:transition:alice-opens-file-menu:command",
+      "@type": "Command",
+      "label": "Alice opens the sharing panel"
+    },
+    {
+      "@id": "urn:transition:alice-enters-remote-bob:command",
+      "@type": "Command",
+      "label": "Alice enters Bob's federated address"
+    },
+    {
+      "@id": "urn:transition:alice-selects-remote-recipient:command",
+      "@type": "Command",
+      "label": "Alice selects Bob as the remote recipient"
+    },
+    {
+      "@id": "urn:transition:alice-confirms-share:command",
+      "@type": "Command",
+      "label": "Alice confirms the share"
+    },
+    {
+      "@id": "urn:transition:bob-opens-native-notifications:command",
+      "@type": "Command",
+      "label": "Bob opens native notifications"
+    },
+    {
+      "@id": "urn:transition:bob-accepts-share:command",
+      "@type": "Command",
+      "label": "Bob accepts the remote share"
+    },
+    {
+      "@id": "urn:transition:bob-opens-shares-overview:command",
+      "@type": "Command",
+      "label": "Bob returns to the native iOS Files tab"
+    },
+    {
+      "@id": "urn:transition:bob-returns-to-files:command",
+      "@type": "Command",
+      "label": "Bob closes Notifications"
+    },
+    {
+      "@id": "urn:transition:bob-opens-shares-navigation:command",
+      "@type": "Command",
+      "label": "Bob switches away from Files to Favorites"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:native-notifications",
+      "label": "native-notifications",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:native-notifications:en",
+      "messageMetaRef": "urn:message:native-notifications",
+      "localeRef": "urn:locale:en",
+      "value": "Notifications"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:native-more",
+      "label": "native-more",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:native-more:en",
+      "messageMetaRef": "urn:message:native-more",
+      "localeRef": "urn:locale:en",
+      "value": "More"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:ios-more-tab",
+      "label": "Open native iOS More tab",
+      "role": "button",
+      "accessibleNameRef": "urn:message:native-more"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:native-files",
+      "label": "native-files",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:native-files:en",
+      "messageMetaRef": "urn:message:native-files",
+      "localeRef": "urn:locale:en",
+      "value": "Files"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:ios-files-tab",
+      "label": "Native iOS Files tab",
+      "role": "button",
+      "accessibleNameRef": "urn:message:native-files",
+      "contextLocatorRefs": [
+        "urn:locator:ios-tab-bar"
+      ]
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:feature:ios-tab-bar-name",
+      "label": "tab-bar-name",
+      "accessibleFeatureName": "name",
+      "accessibleFeatureValue": "Tab Bar"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:ios-tab-bar",
+      "label": "Native iOS Tab Bar",
+      "role": "navigation",
+      "accessibleFeatureRefs": [
+        "urn:feature:ios-tab-bar-name"
+      ]
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:feature:ios-nextcloud-navbar-name",
+      "label": "nextcloud-navbar-name",
+      "accessibleFeatureName": "name",
+      "accessibleFeatureValue": "Nextcloud"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:ios-nextcloud-navbar",
+      "label": "Native iOS Nextcloud Navigation Bar",
+      "role": "navigation",
+      "accessibleFeatureRefs": [
+        "urn:feature:ios-nextcloud-navbar-name"
+      ]
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:feature:ios-favorites-navbar-name",
+      "label": "favorites-navbar-name",
+      "accessibleFeatureName": "name",
+      "accessibleFeatureValue": "Favorites"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:ios-favorites-navbar",
+      "label": "Native iOS Favorites Navigation Bar",
+      "role": "navigation",
+      "accessibleFeatureRefs": [
+        "urn:feature:ios-favorites-navbar-name"
+      ]
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:native-favorites",
+      "label": "native-favorites",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:native-favorites:en",
+      "messageMetaRef": "urn:message:native-favorites",
+      "localeRef": "urn:locale:en",
+      "value": "Favorites"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:ios-favorites-tab",
+      "label": "Native iOS Favorites tab",
+      "role": "button",
+      "accessibleNameRef": "urn:message:native-favorites",
+      "contextLocatorRefs": [
+        "urn:locator:ios-tab-bar"
+      ]
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:ios-navbar-more-button",
+      "label": "Native iOS Files view options button",
+      "role": "button",
+      "accessibleNameRef": "urn:message:native-more",
+      "contextLocatorRefs": [
+        "urn:locator:ios-nextcloud-navbar"
+      ]
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:native-sort-name",
+      "label": "native-sort-name",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:native-sort-name:en",
+      "messageMetaRef": "urn:message:native-sort-name",
+      "localeRef": "urn:locale:en",
+      "value": "Name"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:ios-sort-name-action",
+      "label": "Native iOS Sort by Name action",
+      "role": "button",
+      "accessibleNameRef": "urn:message:native-sort-name"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:feature:ios-accessible-true",
+      "label": "accessible-true",
+      "accessibleFeatureName": "accessible",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:ios-accessible-file-row",
+      "label": "Native iOS All files row container",
+      "role": "row",
+      "accessibleFeatureRefs": [
+        "urn:feature:ios-accessible-true"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:bob-files-refreshed",
+      "label": "Bob refreshed native iOS Files list"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-files-refreshed",
+      "label": "Bob refreshed native iOS Files list",
+      "graphNodeRef": "urn:state:bob-files-refreshed"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-files-refreshed-presence",
+      "label": "Bob refreshed native iOS Files list",
+      "observeSurfaceRef": "urn:surface:bob-files-refreshed",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:ios-navbar-more-button"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:bob-files-sort-menu-open",
+      "label": "Bob Files options menu is open"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-files-sort-menu-open",
+      "label": "Bob Files options menu is open",
+      "graphNodeRef": "urn:state:bob-files-sort-menu-open"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-files-sort-menu-open-presence",
+      "label": "Bob Files options menu is open",
+      "observeSurfaceRef": "urn:surface:bob-files-sort-menu-open",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:ios-sort-name-action"
+      ]
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:bob-opens-files-sort-menu",
+      "label": "Bob opens Files view options",
+      "from": "urn:state:bob-files-refreshed",
+      "to": "urn:state:bob-files-sort-menu-open",
+      "commandRef": "urn:transition:bob-opens-files-sort-menu:command"
+    },
+    {
+      "@id": "urn:transition:bob-opens-files-sort-menu:command",
+      "@type": "Command",
+      "label": "Bob opens Files view options"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-opens-files-sort-menu",
+      "label": "Bob opens Files view options",
+      "graphNodeRef": "urn:transition:bob-opens-files-sort-menu:command"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-opens-files-sort-menu-activation",
+      "label": "Bob opens Files view options",
+      "observeSurfaceRef": "urn:surface:bob-opens-files-sort-menu",
+      "observationEventRef": "urn:observation-event:touch-activation",
+      "locatorRefs": [
+        "urn:locator:ios-navbar-more-button"
+      ]
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:bob-sorts-files-descending",
+      "label": "Bob reverses Files sort order",
+      "from": "urn:state:bob-files-sort-menu-open",
+      "to": "urn:state:bob-shared-report-visible",
+      "commandRef": "urn:transition:bob-sorts-files-descending:command"
+    },
+    {
+      "@id": "urn:transition:bob-sorts-files-descending:command",
+      "@type": "Command",
+      "label": "Bob reverses Files sort order"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:bob-sorts-files-descending",
+      "label": "Bob reverses Files sort order",
+      "graphNodeRef": "urn:transition:bob-sorts-files-descending:command"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:bob-sorts-files-descending-activation",
+      "label": "Bob reverses Files sort order",
+      "observeSurfaceRef": "urn:surface:bob-sorts-files-descending",
+      "observationEventRef": "urn:observation-event:touch-activation",
+      "locatorRefs": [
+        "urn:locator:ios-sort-name-action"
+      ]
+    }
+  ]
+}

@@ -1,17 +1,18 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
-import { ensureUiAutomator2Driver, ownAutomationVersions, resolveAppiumEntry } from "./appium-server.js";
+import {
+  ensureUiAutomator2Driver, ensureXcuitestDriver,
+  ownAutomationVersions, ownXcuitestAutomationVersions, resolveAppiumEntry
+} from "./appium-server.js";
 import { defaultCapture, defaultForeground } from "./process.js";
 
 const help = `Usage:
   journey-executor-appium appium serve [--address <addr>] [--port <port>] [--log <path>]
-  journey-executor-appium appium ensure-driver
+  journey-executor-appium appium ensure-driver [--driver <uiautomator2|xcuitest>]
 
 serve runs the Appium server in the foreground (for a caller that owns its own
-process lifecycle, e.g. CI). ensure-driver installs the pinned UiAutomator2
-driver into APPIUM_HOME (or a version-keyed default under .tmp/) if missing.
-Neither command manages the long-running appium:up/appium:down state file;
-use "journey-mesh runtime up|down <config.yaml> --runtime appium" for that.`;
+process lifecycle, e.g. CI). ensure-driver installs the pinned UiAutomator2 or
+XCUITest driver into APPIUM_HOME (or a version-keyed default under .tmp/) if missing.`;
 
 function parseFlags(args: readonly string[]): Record<string, string> {
   const options: Record<string, string> = {};
@@ -32,11 +33,6 @@ async function serve(flags: Record<string, string>): Promise<void> {
   const args = [appium, "--address", address, "--port", port, "--log-level", flags.log ? "warn:debug" : "warn", ...(flags.log ? ["--log", flags.log] : [])];
   await new Promise<void>((done, reject) => {
     const child = spawn(process.execPath, args, { stdio: "inherit", env: process.env });
-    // This wrapper is itself a spawned Node process (via tsx), not the
-    // appium server directly — a caller like run-ci.sh signals *this*
-    // process (its `$!`), which by default would exit without the deeper
-    // appium process ever seeing the signal. Forward it explicitly, and
-    // treat an exit we requested as success regardless of its code/signal.
     let stopping = false;
     const forward = (signal: NodeJS.Signals) => { stopping = true; child.kill(signal); };
     process.once("SIGTERM", () => forward("SIGTERM"));
@@ -46,17 +42,23 @@ async function serve(flags: Record<string, string>): Promise<void> {
   });
 }
 
-async function ensureDriver(): Promise<void> {
-  const appiumHome = process.env.APPIUM_HOME ?? await defaultAppiumHome();
+async function ensureDriver(flags: Record<string, string>): Promise<void> {
+  const driver = flags.driver ?? "uiautomator2";
+  if (driver !== "uiautomator2" && driver !== "xcuitest") {
+    throw new Error(`Unsupported Appium driver ${driver}; expected uiautomator2 or xcuitest`);
+  }
+  const appiumHome = process.env.APPIUM_HOME ?? await defaultAppiumHome(driver);
   const env = { ...process.env, APPIUM_HOME: appiumHome };
-  await ensureUiAutomator2Driver({
-    appiumHome,
-    capture: defaultCapture(env, process.cwd()),
-    foreground: defaultForeground(env, process.cwd())
-  });
+  const ports = { appiumHome, capture: defaultCapture(env, process.cwd()), foreground: defaultForeground(env, process.cwd()) };
+  if (driver === "xcuitest") await ensureXcuitestDriver(ports);
+  else await ensureUiAutomator2Driver(ports);
 }
 
-async function defaultAppiumHome(): Promise<string> {
+async function defaultAppiumHome(driver: "uiautomator2" | "xcuitest"): Promise<string> {
+  if (driver === "xcuitest") {
+    const { appium, xcuitest } = await ownXcuitestAutomationVersions();
+    return resolve(process.cwd(), `.tmp/appium-${appium}-xcuitest-${xcuitest}`);
+  }
   const { appium, uiautomator2 } = await ownAutomationVersions();
   return resolve(process.cwd(), `.tmp/appium-${appium}-${uiautomator2}`);
 }
@@ -66,8 +68,9 @@ export async function main(args: readonly string[]): Promise<number> {
   const [group, action, ...flags] = args;
   try {
     if (group !== "appium" || !["serve", "ensure-driver"].includes(action ?? "")) throw new Error(help);
-    if (action === "serve") await serve(parseFlags(flags));
-    else await ensureDriver();
+    const parsed = parseFlags(flags);
+    if (action === "serve") await serve(parsed);
+    else await ensureDriver(parsed);
     return 0;
   } catch (error) {
     console.error(error instanceof Error ? error.message : "journey-executor-appium failed");
