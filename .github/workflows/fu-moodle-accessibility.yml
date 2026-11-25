@@ -1,0 +1,140 @@
+name: FU Moodle accessibility — version matrix
+
+# Start manually while the FU deployment version and cross-version fixture are being verified.
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_sha:
+        description: 'Optional exact official Moodle commit matching FU; defaults to provisional 5.0.12'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  user-tour-viewport:
+    name: 'MDL-90255 / ${{ matrix.subject }}'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        subject: [fu-proxy, lts-release, lts-next, upstream-main]
+    env:
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: http.version
+      GIT_CONFIG_VALUE_0: HTTP/1.1
+      MOODLE_SOURCE_REPOSITORY: https://github.com/moodle/moodle.git
+      SUBJECT: ${{ matrix.subject }}
+      BASELINE_SHA: ${{ inputs.baseline_sha }}
+      RESULT_DIR: examples/moodle-usertour-viewport/test-results
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve source to an exact commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$SUBJECT" in
+            fu-proxy)
+              ref="v5.0.12 (provisional FU proxy)"
+              sha="${BASELINE_SHA:-2d62d8b15891ee5c491e89713e079d96e47c918f}"
+              if [[ -n "$BASELINE_SHA" ]]; then ref="operator-supplied official source SHA"; fi
+              ;;
+            lts-release)
+              tag=$(git ls-remote --tags --refs "$MOODLE_SOURCE_REPOSITORY" 'refs/tags/v5.3.*' | cut -f2 | grep -E '^refs/tags/v5\.3\.[0-9]+$' | sort -V | tail -1)
+              ref="$tag"
+              sha=$(git ls-remote "$MOODLE_SOURCE_REPOSITORY" "$tag^{}" | cut -f1)
+              if [[ -z "$sha" ]]; then sha=$(git ls-remote "$MOODLE_SOURCE_REPOSITORY" "$tag" | cut -f1); fi
+              ;;
+            lts-next|upstream-main)
+              ref=refs/heads/main
+              if [[ "$SUBJECT" == lts-next ]]; then ref=refs/heads/MOODLE_503_STABLE; fi
+              sha=$(git ls-remote "$MOODLE_SOURCE_REPOSITORY" "$ref" | cut -f1)
+              ;;
+          esac
+          [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          # Moodle 5.1 moved the document root to public/. Check the actual source layout.
+          asset=public/admin/tool/usertours/amd/build/tour.min.js
+          raw="https://raw.githubusercontent.com/moodle/moodle/$sha"
+          if ! curl -fsSL --retry 2 "$raw/$asset" -o /dev/null; then
+            asset=admin/tool/usertours/amd/build/tour.min.js
+            curl -fsSL --retry 2 "$raw/$asset" -o /dev/null
+          fi
+          {
+            echo "MOODLE_SOURCE_SHA=$sha"
+            echo "MOODLE_TOUR_ASSET=$asset"
+            echo "MOODLE_SOURCE_REF=$ref"
+          } >> "$GITHUB_ENV"
+          mkdir -p "$RESULT_DIR"
+          jq -n --arg subject "$SUBJECT" --arg ref "$ref" --arg sha "$sha" --arg asset "$asset" \
+            '{subject:$subject, ref:$ref, sourceSha:$sha, asset:$asset, status:"not-run"}' > "$RESULT_DIR/subject.json"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter @openuji/journey-executor-playwright exec playwright install --with-deps chromium
+      - name: Execute and classify the viewport regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          rc=0
+          pnpm --filter @openuji/example-moodle-usertour-viewport e2e || rc=$?
+          record="$RESULT_DIR/tests/orphaned-step-viewport/run.json"
+          status=inconclusive
+          if [[ -s "$record" ]]; then
+            if [[ "$rc" == 0 ]] && jq -e '.observers | type == "array"' "$record" >/dev/null; then
+              status=pass
+            elif [[ "$rc" != 0 ]] && jq -e '[.observers[] | select(.kind == "ux") | .errors[]] | length == 1 and (.[0].message | test("^Probe orphaned-step .*expected inViewport"))' "$record" >/dev/null; then
+              status=regression-reproduced
+            fi
+          fi
+          jq --arg status "$status" --argjson exitCode "$rc" '. + {status:$status, exitCode:$exitCode}' "$RESULT_DIR/subject.json" > "$RUNNER_TEMP/subject.json"
+          mv "$RUNNER_TEMP/subject.json" "$RESULT_DIR/subject.json"
+          cat "$RESULT_DIR/subject.json"
+          # Known application defects are findings, not infrastructure failures.
+          # A build, login, fixture, or other unexpected failure is not reproduction evidence.
+          [[ "$status" != inconclusive ]]
+      - name: Publish evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: moodle-a11y-${{ matrix.subject }}
+          path: examples/moodle-usertour-viewport/test-results
+          if-no-files-found: warn
+          retention-days: 30
+
+  summarize:
+    if: always()
+    needs: user-tour-viewport
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: moodle-a11y-*
+          path: evidence
+      - name: Summarize the version comparison
+        shell: bash
+        run: |
+          {
+            echo '## MDL-90255 — viewport regression'
+            echo 'The FU proxy is not a verified FU deployment. Pass applies only to this scenario.'
+            echo ''
+            echo '| Subject | Ref | Exact source SHA | Result |'
+            echo '|---|---|---|---|'
+            for subject in fu-proxy lts-release lts-next upstream-main; do
+              file="evidence/moodle-a11y-$subject/subject.json"
+              if [[ -s "$file" ]]; then
+                jq -r '"| " + .subject + " | " + .ref + " | " + .sourceSha + " | " + .status + " |"' "$file"
+              else
+                echo "| $subject | — | — | unavailable |"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
