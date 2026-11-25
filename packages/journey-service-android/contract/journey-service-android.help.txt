@@ -1,0 +1,16 @@
+Usage:
+  journey-service-android android check <config.yaml> [--service <key>] [--require-locale <locale>] [--github-output]
+
+Commands:
+  android check  Check that the Android target in services.<key>.options has an API level
+                 and system image that agree. Prints a confirmation line.
+                 --require-locale also requires the target's locale pin to equal <locale>,
+                 for a caller whose models depend on it; no locale is assumed without it.
+                 --github-output writes api-level, target, arch and profile to
+                 GITHUB_OUTPUT, for a step that configures android-emulator-runner.
+                 Defaults: --service android.
+
+Exit codes:
+  0  Success.
+  1  The configuration failed the check.
+  2  Invalid arguments.

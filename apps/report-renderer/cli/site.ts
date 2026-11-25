@@ -2,7 +2,8 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { publishAtomically } from "@openuji/journey-run-record/node";
-import { fromInvocation, parseArgs, runScript } from "./args.js";
+import { CliUsageError } from "@openuji/journey-plugin/cli";
+import { fromInvocation, reportDirectory, runScript } from "./args.js";
 import { defaultMaxFileBytes, ReportFileSizeError, reportFileLimit, writeJsonDocument } from "./json-document.js";
 
 export const viewerDirectory = fileURLToPath(new URL("../dist/", import.meta.url));
@@ -60,12 +61,12 @@ export async function publishSite(source: string, outputDir: string, options: Pu
   });
 }
 
-const usage = "Usage: pnpm --filter @openuji/report-renderer site <run-directory> --out <directory> [--max-file-size-mib <number>]";
-runScript(import.meta.url, async (args) => {
-  const { positionals: [directory], flags } = parseArgs(args, usage);
-  if (!flags["--out"]) throw new Error(usage);
-  const maxFileBytes = flags["--max-file-size-mib"] === undefined ? defaultMaxFileBytes : reportFileLimit(Number(flags["--max-file-size-mib"]));
-  const output = fromInvocation(flags["--out"]);
-  await publishSite(fromInvocation(directory), output, { files: await viewerFiles(), maxFileBytes });
+runScript(import.meta.url, "site", async ({ positionals: [directory], options }) => {
+  const maxFileBytes = (() => {
+    try { return reportFileLimit(Number(options["--max-file-size-mib"])); }
+    catch (error) { throw new CliUsageError(error instanceof Error ? error.message : String(error)); }
+  })();
+  const output = fromInvocation(options["--out"]);
+  await publishSite(await reportDirectory(directory), output, { files: await viewerFiles(), maxFileBytes });
   console.log(`Site: ${resolve(output, "index.html")}`);
 });

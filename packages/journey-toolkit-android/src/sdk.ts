@@ -6,7 +6,7 @@ import { arch, homedir, platform } from "node:os";
 import { delimiter, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
-/** The device pins a caller supplies — directly, as YAML `runtimes.<key>.options`, not a separate file. */
+/** The device pins a caller supplies — directly, as YAML `services.<key>.options`, not a separate file. */
 export type AndroidRuntimeTarget = {
   api: number;
   avd: string;
