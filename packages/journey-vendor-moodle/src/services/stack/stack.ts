@@ -71,7 +71,9 @@ export function moodleStackRuntime(options: MoodleStackOptions, image: MoodleIma
           if (!started) throw new Error(`${service}: the image's entrypoint script did not finish`);
           const php = (...args: string[]) => compose("exec", "-T", "-u", "www-data", "-w", sourceRoot, service, "php", ...args);
           const { admin, database, site } = options;
-          await php("admin/cli/install.php", "--non-interactive", "--agree-license", "--lang=en", `--wwwroot=${options.baseURL}`, "--dataroot=/var/www/moodledata",
+          // The site is disposable and usually built from a development branch, whose maturity the installer
+          // otherwise refuses; on a stable release the flag changes nothing.
+          await php("admin/cli/install.php", "--non-interactive", "--agree-license", "--allow-unstable", "--lang=en", `--wwwroot=${options.baseURL}`, "--dataroot=/var/www/moodledata",
             "--dbtype=pgsql", `--dbhost=${database.host}`, `--dbname=${database.name}`, `--dbuser=${database.user}`, `--dbpass=${database.password}`,
             `--fullname=${site.fullname}`, `--shortname=${site.shortname}`, `--adminuser=${admin.username}`, `--adminpass=${admin.password}`, `--adminemail=${admin.email}`);
           for (const [name, value] of Object.entries(options.config)) await php("admin/cli/cfg.php", `--name=${name}`, `--set=${value}`);

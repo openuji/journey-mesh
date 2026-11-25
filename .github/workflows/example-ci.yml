@@ -1,4 +1,4 @@
-name: Nextcloud Filesharing CI
+name: Examples CI
 
 on:
   pull_request:
@@ -71,3 +71,68 @@ jobs:
             examples/nextcloud-filesharing/test-results
             examples/nextcloud-filesharing/.tmp/diagnostics
             .tmp/ci-logs
+
+  moodle-usertour-viewport:
+    name: Moodle User Tour Viewport Example
+    runs-on: ubuntu-latest
+    env:
+      # Moodle's history is large; over HTTP/2 its clone can reset mid-transfer.
+      GIT_CONFIG_COUNT: 1
+      GIT_CONFIG_KEY_0: http.version
+      GIT_CONFIG_VALUE_0: HTTP/1.1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Configure pnpm cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @openuji/journey-executor-playwright exec playwright install --with-deps chromium
+
+      - name: Run the fix (must pass)
+        run: pnpm --filter @openuji/example-moodle-usertour-viewport e2e:fix
+
+      - name: Run the baseline (must reproduce MDL-90255)
+        run: |
+          if pnpm --filter @openuji/example-moodle-usertour-viewport e2e:baseline; then
+            echo "::error::The baseline passed, so MDL-90255 was not reproduced"
+            exit 1
+          fi
+          # A failed build, install or login proves nothing: the only UX error must be the orphaned step's viewport containment.
+          jq -e '[.observers[] | select(.kind == "ux") | .errors[]] | length == 1 and (.[0].message | test("^Probe orphaned-step .*expected inViewport"))' \
+            examples/moodle-usertour-viewport/test-results/baseline/tests/orphaned-step-viewport/run.json \
+            || { echo "::error::The baseline failed, but not on the orphaned step's viewport containment"; exit 1; }
+
+      - name: Compare baseline and fix
+        run: |
+          # compare exits nonzero because its baseline fails; check the comparison itself instead.
+          pnpm --filter @openuji/example-moodle-usertour-viewport compare || true
+          jq -e '.comparison.subjects.baseline.ok == false and .comparison.subjects.candidate.ok == true' \
+            examples/moodle-usertour-viewport/test-results/comparison/report/report.json
+
+      - name: Upload Journey Mesh artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: moodle-usertour-viewport-journeys
+          if-no-files-found: ignore
+          path: examples/moodle-usertour-viewport/test-results
