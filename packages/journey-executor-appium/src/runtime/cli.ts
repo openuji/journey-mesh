@@ -11,7 +11,7 @@ serve runs the Appium server in the foreground (for a caller that owns its own
 process lifecycle, e.g. CI). ensure-driver installs the pinned UiAutomator2
 driver into APPIUM_HOME (or a version-keyed default under .tmp/) if missing.
 Neither command manages the long-running appium:up/appium:down state file;
-use "journey-mesh runtime up|down <config.yaml> --runtime appium" for that.`;
+use "journey-mesh services up|down <config.yaml> --service appium" for that.`;
 
 function parseFlags(args: readonly string[]): Record<string, string> {
   const options: Record<string, string> = {};
