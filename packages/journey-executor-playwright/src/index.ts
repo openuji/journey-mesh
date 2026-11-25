@@ -12,7 +12,7 @@ import {
   type Page
 } from "playwright";
 import { type WebJourneyClient } from "@openuji/journey-platform-web";
-import { keyboardTextEntryInputModalityId } from "@openuji/journey-execution-model";
+import { isCanonical, keyboardTextEntryInputModalityId } from "@openuji/journey-execution-model";
 import {
   executionDescriptor,
   type InputModalityDecision,
@@ -87,6 +87,7 @@ export type {
 } from "./lifecycle.js";
 export type {
   PlaywrightExecutionObserver,
+  PlaywrightFailureObservation,
   PlaywrightJourneyObserver,
   PlaywrightObserverExecutionStartedInput,
   PlaywrightOperationObservation
@@ -175,6 +176,12 @@ function freezeConfigValue<T>(value: T): T {
 
 class PlaywrightExecutorSession implements JourneyExecutorSession {
   private actionSequence = 0;
+  /** The step that failed in the transition being performed, for its failure observation. */
+  private failedAction: JourneyInputAction | undefined;
+  /** How many inputs this session has sent to a page. */
+  private inputsSent = 0;
+  /** Discovery only: the transition whose canonical materialization failed after sending input. */
+  private changedOperationId: string | undefined;
   private readonly pointers = new WeakMap<Page, PlaywrightPointerState>();
   private state: PlaywrightLifecycleState = initialPlaywrightLifecycleState();
   private readonly context: JourneyExecutionContext;
@@ -223,20 +230,25 @@ class PlaywrightExecutorSession implements JourneyExecutorSession {
 
   async assertState(operation: StatePlanOperation): Promise<void> {
     const page = (await this.sessionForOperation(operation)).page;
-    const locator = await toPlaywrightObservationLocator(page, operation.target.bindings);
-    await assertPlaywrightLocator(locator, operation.target.expectedMatchCount, {
-      timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs,
-      signal: this.context.signal
-    });
-    this.context.signal?.throwIfAborted();
-    await this.observers.observe({
-      execution: this.execution,
-      expectedMatchCount: operation.target.expectedMatchCount,
-      locator,
-      operation,
-      page,
-      stage: "state-asserted"
-    });
+    try {
+      const locator = await toPlaywrightObservationLocator(page, operation.target.bindings);
+      await assertPlaywrightLocator(locator, operation.target.expectedMatchCount, {
+        timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs,
+        signal: this.context.signal
+      });
+      this.context.signal?.throwIfAborted();
+      await this.observers.observe({
+        execution: this.execution,
+        expectedMatchCount: operation.target.expectedMatchCount,
+        locator,
+        operation,
+        page,
+        stage: "state-asserted"
+      });
+    } catch (error) {
+      await this.observeFailure(operation, page, error);
+      throw error;
+    }
   }
 
   /**
@@ -264,12 +276,36 @@ class PlaywrightExecutorSession implements JourneyExecutorSession {
       throw new Error(`Transition ${operation.transition.id}: materialization ${materialization.id} is through ${materialization.modality.id}, not the selected ${modalityId}`);
     }
     const discovery = this.discovery;
-    // Rediscovery measures a new path where the model declares one; a test run never does.
-    const declared = discovery?.rediscover ? undefined : materialization;
+    // Rediscovery measures a new path where the model declares one; a test run never does. The canonical
+    // materialization is the expectation, so it is performed, and after it changed the page no path
+    // measured from there would stand for the one beside it.
+    const measure = discovery?.rediscover === true && !(materialization && isCanonical(materialization))
+      && this.changedOperationId !== operation.id;
+    const declared = measure ? undefined : materialization;
     if (!declared && !textEntry && !discovery) {
       throw new Error(`Transition ${operation.transition.id}: Playwright performs ${modalityId} only through a declared TransitionMaterialization, and the profile selected none`);
     }
     const page = (await this.sessionForOperation(operation)).page;
+    this.failedAction = undefined;
+    try {
+      await this.performAt({ page, operation, decision, modalityId, textEntry, materialization, declared, discovery });
+    } catch (error) {
+      await this.observeFailure(operation, page, error, this.failedAction);
+      throw error;
+    }
+  }
+
+  /** The part of `performTransition` that runs on the page, so a failure there is observed with it. */
+  private async performAt({ page, operation, decision, modalityId, textEntry, materialization, declared, discovery }: Readonly<{
+    page: Page;
+    operation: TransitionPlanOperation;
+    decision: InputModalityDecision;
+    modalityId: string;
+    textEntry: boolean;
+    materialization: InputModalityDecision["materialization"];
+    declared: InputModalityDecision["materialization"];
+    discovery: PlaywrightDiscovery | undefined;
+  }>): Promise<void> {
     const locator = await toPlaywrightObservationLocator(page, operation.activation.bindings);
     await assertPlaywrightLocator(locator, 1, {
       timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs,
@@ -298,24 +334,41 @@ class PlaywrightExecutorSession implements JourneyExecutorSession {
       signal: this.context.signal
     };
     const performer = new PlaywrightStepPerformer(performerOptions);
+    const discover = (found: PlaywrightDiscovery, replaces?: string) => discoverTransition({
+      operation, decision, target: locator, ...(text ? { text } : {}), discovery: found, performer,
+      finder: new PlaywrightPathFinder(performerOptions, found),
+      ...(replaces ? { replaces } : {})
+    });
     if (discovery && !declared) {
-      await discoverTransition({
-        operation, decision, target: locator, ...(text ? { text } : {}), discovery, performer,
-        finder: new PlaywrightPathFinder(performerOptions, discovery),
-        ...(materialization ? { replaces: materialization.id } : {})
-      });
+      await discover(discovery, materialization?.id);
       this.context.signal?.throwIfAborted();
       return;
     }
-    if (declared) await performer.perform(declared);
-    if (textEntry) await performer.typeAtFocus(locator, text!, `Transition ${operation.transition.id}`, declared?.id);
-    if (discovery) {
-      await discovery.record({
-        profileId: decision.profileId, operationId: operation.id, transitionId: operation.transition.id,
-        ...(operation.transition.label ? { transitionLabel: operation.transition.label } : {}),
-        modalityId, status: "declared"
-      });
+    const finding = discovery ? {
+      profileId: decision.profileId, operationId: operation.id, transitionId: operation.transition.id,
+      ...(operation.transition.label ? { transitionLabel: operation.transition.label } : {}),
+      modalityId
+    } : undefined;
+    const sentBefore = this.inputsSent;
+    try {
+      if (declared) await performer.perform(declared);
+      if (textEntry) await performer.typeAtFocus(locator, text!, `Transition ${operation.transition.id}`, declared?.id);
+    } catch (error) {
+      if (!discovery || !declared || !isCanonical(declared) || this.context.signal?.aborted) throw error;
+      const changed = this.inputsSent !== sentBefore;
+      if (changed) this.changedOperationId = operation.id;
+      // A declared materialization beside the canonical one is the runner's to perform.
+      if (decision.fallback) throw error;
+      if (changed) {
+        const message = error instanceof Error ? error.message : String(error);
+        await discovery.record({ ...finding!, status: "not-found", note: `the canonical materialization ${declared.id} failed after it sent input, so no path can be measured from here: ${message}` });
+        throw error;
+      }
+      await discover(discovery);
+      this.context.signal?.throwIfAborted();
+      return;
     }
+    if (discovery) await discovery.record({ ...finding!, status: "declared" });
     this.context.signal?.throwIfAborted();
   }
 
@@ -337,16 +390,34 @@ class PlaywrightExecutorSession implements JourneyExecutorSession {
     });
     await this.observers.action(action);
     try {
-      await work((value) => { gesture = value; });
+      // A step reports its gesture right before it sends it.
+      await work((value) => { gesture = value; this.inputsSent++; });
     } catch (error) {
-      await this.observers.action({
+      const failed: JourneyInputAction = Object.freeze({
         ...action, ...(gesture ? { gesture } : {}), status: "failed",
         error: { name: error instanceof Error ? error.name : "Error", message: error instanceof Error ? error.message : String(error) }
       });
+      this.failedAction = failed;
+      await this.observers.action(failed);
       throw error;
     }
     await this.observers.action({ ...action, ...(gesture ? { gesture } : {}), status: "completed" });
     this.context.signal?.throwIfAborted();
+  }
+
+  /** Lets observers see the page of a failed operation before the runner closes it. */
+  private async observeFailure(
+    operation: StatePlanOperation | TransitionPlanOperation,
+    page: Page,
+    error: unknown,
+    action?: JourneyInputAction
+  ): Promise<void> {
+    if (this.context.signal?.aborted || page.isClosed()) return;
+    await this.observers.failed({
+      stage: "operation-failed", execution: this.execution, operation, page,
+      error: Object.freeze({ name: error instanceof Error ? error.name : "Error", message: error instanceof Error ? error.message : String(error) }),
+      ...(action ? { action } : {})
+    }, error);
   }
 
   private pointerState(page: Page): PlaywrightPointerState {

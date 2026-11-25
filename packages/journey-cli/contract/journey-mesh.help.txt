@@ -23,7 +23,9 @@ Commands:
                  suite's output directory). Web only: a test with a journey on any other
                  executor, such as Android, is rejected. --apply declares the found paths
                  through the suite's model plugin, and --rediscover measures declared paths
-                 again. An authoring aid; test never discovers.
+                 again. A canonical materialization is performed as declared and never
+                 replaced; where it fails before sending input, the path beside it is found.
+                 An authoring aid; test never discovers.
   report         Rebuild <run-directory>/report/ from the run record; runs nothing. --config
                  selects the report: section to apply. Without it, no interpreters run, so
                  observer data such as axe results is left out. Prints Run record: <path>

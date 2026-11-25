@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test, { after, before } from "node:test";
 import { pathToFileURL } from "node:url";
 import { chromium, type Browser, type Page } from "playwright";
-import type { ResolvedAccessibleLocator, ResolvedTransitionMaterialization, TransitionPlanOperation } from "@openuji/journey-execution-model";
+import { canonicalMaterializationExtension, type ResolvedAccessibleLocator, type ResolvedTransitionMaterialization, type TransitionPlanOperation } from "@openuji/journey-execution-model";
 import type { DiscoveredMaterializationStep, DiscoveryFinding } from "@openuji/journey-plugin";
 import { runJourney, type JourneyPlan } from "@openuji/journey-runner";
 import { PlaywrightPathFinder, PlaywrightStepPerformer, defaultPlaywrightKeyboard, playwrightExecutor, playwrightDiscoveryExecutor, toPlaywrightLocator } from "../src/index.js";
@@ -215,4 +215,45 @@ test("in discovery mode the executor reaches an undeclared transition, takes it,
   assert.equal(rediscovered.ok, true, JSON.stringify(rediscovered.errors));
   assert.equal(again[0].replaces, "urn:material:stale");
   assert.deepEqual(again[0].steps, steps);
+
+  const canonical = (id: string, definition: ResolvedTransitionMaterialization["steps"]): ResolvedTransitionMaterialization =>
+    ({ id, transitionId: "urn:transition:select-drafts", modality: { id: keyboard }, steps: definition, extensions: { [canonicalMaterializationExtension]: {} } });
+  /** Runs one discovery with a canonical materialization, and its fallback when given. */
+  const beside = async (materialization: ResolvedTransitionMaterialization, { fallback, rediscover = false }: { fallback?: ResolvedTransitionMaterialization; rediscover?: boolean } = {}) => {
+    const records: DiscoveryFinding[] = [];
+    const run = await runJourney({
+      plan,
+      profiles: [{ id: "keyboard-only", selectInputModality: () => ({ profileId: "keyboard-only", inputModalityProfile: profiles[0]!, modality: { id: keyboard }, materialization, ...(fallback ? { fallback } : {}) }) }],
+      executor: playwrightDiscoveryExecutor({ client, browser, assertionTimeoutMs: 1_000 }, { settleMs: 10, rediscover, record(entry) { records.push(entry); } })
+    });
+    return { run, records };
+  };
+  // Nothing has focus, so a canonical path that only activates the tab fails before it sends any input.
+  const atTab = canonical("urn:material:expected", [{ id: "urn:step:expected", kind: "activation", locator: tab("Drafts") }]);
+  const around = await beside(atTab);
+  assert.equal(around.run.ok, true, JSON.stringify(around.run.errors));
+  assert.deepEqual(around.records.map((record) => [record.status, record.replaces, record.steps]), [["found", undefined, steps]]);
+
+  // A canonical path that moved focus before failing leaves the page changed: nothing is measured from there.
+  const moved = canonical("urn:material:moved", [{ id: "urn:step:moved", kind: "move", moveKind: { id: "operability:nextStop", type: "focus" }, locator: tab("Backlog") }]);
+  const changed = await beside(moved);
+  assert.equal(changed.run.ok, false);
+  assert.deepEqual(changed.records.map((record) => record.status), ["not-found"]);
+  assert.match(changed.records[0]!.note!, /urn:material:moved failed after it sent input/);
+
+  const stale: ResolvedTransitionMaterialization = { ...replay(["operability:nextStop"], tab("Home")), id: "urn:material:stale" };
+  // Rediscovery performs the canonical path as declared and measures the one beside it.
+  const measured = await beside(atTab, { fallback: stale, rediscover: true });
+  assert.equal(measured.run.ok, false, "the canonical path failed");
+  assert.deepEqual(measured.records.map((record) => [record.status, record.replaces, record.steps]), [["found", "urn:material:stale", steps]]);
+
+  // After a canonical path changed the page, the fallback is performed as declared, not measured.
+  const kept = await beside(moved, { fallback: stale, rediscover: true });
+  assert.deepEqual(kept.records.map((record) => [record.status, record.replaces, record.steps]), [["declared", undefined, undefined]], "the fallback was performed as declared, not measured");
+
+  // A canonical path that works is declared, never replaced, and nothing else is measured.
+  const working = canonical("urn:material:working", replay(["operability:nextStop", "operability:nextStop", "operability:nextItem"], tab("Drafts")).steps);
+  const passed = await beside(working, { fallback: stale, rediscover: true });
+  assert.equal(passed.run.ok, true, JSON.stringify(passed.run.errors));
+  assert.deepEqual(passed.records.map((record) => [record.status, record.replaces]), [["declared", undefined]]);
 });

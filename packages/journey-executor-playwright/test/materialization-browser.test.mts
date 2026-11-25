@@ -6,11 +6,12 @@ import test, { after, before } from "node:test";
 import { pathToFileURL } from "node:url";
 import { chromium, type Browser, type Page } from "playwright";
 import type { JourneyInputAction } from "@openuji/journey-core";
-import type {
-  ResolvedAccessibleLocator,
-  ResolvedMaterializationStep,
-  ResolvedTransitionMaterialization,
-  TransitionPlanOperation
+import {
+  canonicalMaterializationExtension,
+  type ResolvedAccessibleLocator,
+  type ResolvedMaterializationStep,
+  type ResolvedTransitionMaterialization,
+  type TransitionPlanOperation
 } from "@openuji/journey-execution-model";
 import { runJourney, type JourneyPlan } from "@openuji/journey-runner";
 import {
@@ -20,7 +21,9 @@ import {
   parsePlaywrightTransientUi,
   playwrightExecutor,
   toPlaywrightLocator,
+  type PlaywrightExecutionObserver,
   type PlaywrightKeyboard,
+  type PlaywrightFailureObservation,
   type PlaywrightRecordedCommand,
   type PlaywrightTransientUi
 } from "../src/index.js";
@@ -131,6 +134,21 @@ test("orientation comes from mesh configuration, never from the page", async () 
   await fixture(tabsPage({ vertical: true }), async (page, perform) => {
     await perform(path(), parsePlaywrightKeyboard({ moves: { "operability:nextItem": { tab: "ArrowDown" } } }));
     assert.equal(await shown(page), "Drafts");
+  });
+});
+
+test("a producer-defined FocusMoveKind moves focus because of its type, and is checked like any focus move", async () => {
+  // Not an operability: IRI: only the model's type (FocusMoveKind) makes it a focus move.
+  const nextTab = (target?: ResolvedAccessibleLocator): ResolvedMaterializationStep =>
+    ({ id: `urn:step:${stepSequence++}`, kind: "move", moveKind: { id: "urn:producer:nextTab", type: "focus" }, ...(target ? { locator: target } : {}) });
+  const keys = parsePlaywrightKeyboard({ moves: { "urn:producer:nextTab": "Tab" } });
+  await fixture(tabsPage(), async (page, perform) => {
+    const log = await perform(materialization(keyboard, [nextTab(), nextTab(tab("Home")), move("operability:nextItem", tab("Drafts")), activate(tab("Drafts"))]), keys);
+    assert.deepEqual(log.map((entry) => entry.gesture), ["Tab", "Tab", "ArrowRight", "Enter"]);
+    assert.equal(await shown(page), "Drafts");
+  });
+  await fixture(tabsPage(), async (_page, perform) => {
+    await assert.rejects(perform(materialization(keyboard, [nextTab(), nextTab(tab("Drafts"))]), keys), /MoveStep urn:producer:nextTab via Tab .*focus is at tab "Home", expected urn:locator:drafts-tab/);
   });
 });
 
@@ -372,4 +390,122 @@ test("the executor runs a selected materialization end to end and records each s
   ]);
   assert.deepEqual(completed.map((action) => action.stepId), [...keyboardMaterialization.steps, ...pointerMaterialization.steps].map((step) => step.id));
   assert.ok(completed.every((action) => action.materializationId === (action.modalityId === keyboard ? keyboardMaterialization.id : pointerMaterialization.id)));
+});
+
+/**
+ * Runs home → (transition) → `to` on the tabs page and returns the result with every failure observers saw.
+ * With `canonical`, those steps are the canonical materialization and `steps` its fallback.
+ */
+async function runTabsJourney({ steps, canonical, binding = tab("Drafts"), to = "drafts", roving = true, observers = [] }: {
+  steps: ResolvedMaterializationStep[]; canonical?: ResolvedMaterializationStep[]; binding?: ResolvedAccessibleLocator; to?: string; roving?: boolean;
+  observers?: PlaywrightExecutionObserver[];
+}) {
+  const directory = await mkdtemp(join(tmpdir(), "playwright-failures-"));
+  after(() => rm(directory, { recursive: true, force: true }));
+  const file = join(directory, "tabs.html");
+  await writeFile(file, tabsPage({ roving }));
+  const client = Object.freeze({ name: "client", resolveEntry: () => Object.freeze({ kind: "url" as const, url: pathToFileURL(file).href }), resolveTransitionValue: () => undefined });
+  const path = materialization(keyboard, steps);
+  const expected = canonical && { ...materialization(keyboard, canonical), extensions: { [canonicalMaterializationExtension]: {} } };
+  const profiles = [{ id: keyboard, modalities: [{ id: keyboard }] }];
+  const transition = {
+    ...state("home", 1), id: "select", kind: "transition", transition: { id: "urn:transition", from: "urn:state:home", to: `urn:state:${to}` },
+    from: { id: "urn:state:home", type: "State" }, to: { id: `urn:state:${to}`, type: "State" }, effects: [], surface: { id: "urn:surface:select" },
+    activation: { transitionId: "urn:transition", eventId: "urn:observation-event:select", from: { id: "urn:state:home", type: "State" }, to: { id: `urn:state:${to}`, type: "State" }, surfaceId: "urn:surface:select", requiredInputModalityProfiles: profiles,
+      bindings: [{ id: "urn:obs:select", surfaceId: "urn:surface:select", eventId: "urn:observation-event:select", requiredInputModalityProfiles: profiles, locators: [binding] }] },
+    materializations: expected ? [expected, path] : [path]
+  } as unknown as TransitionPlanOperation;
+  const plan = { id: "failures", operations: [state("home", 0), transition, state(to, 2)] } as unknown as JourneyPlan;
+  const failures: PlaywrightFailureObservation[] = [];
+  const recorder: PlaywrightExecutionObserver = {
+    name: "failures",
+    async observeFailure(failure) {
+      // The page is still open and usable when the failure is observed.
+      assert.ok(await failure.page.locator("#shown").textContent());
+      failures.push(failure);
+    }
+  };
+  const result = await runJourney({
+    plan,
+    profiles: [{ id: keyboard, selectInputModality: () => ({ profileId: keyboard, inputModalityProfile: profiles[0]!, modality: path.modality, ...(expected ? { materialization: expected, fallback: path } : { materialization: path }) }) }],
+    executor: playwrightExecutor({ client, browser, assertionTimeoutMs: 1_000, executionObservers: [recorder, ...observers] })
+  });
+  return { result, failures, path, expected };
+}
+
+const toDrafts = () => [move("operability:nextStop"), move("operability:nextStop", tab("Home")), move("operability:nextItem", tab("Drafts")), activate(tab("Drafts"))];
+
+test("a failed operation is observed with its page before the error propagates", async () => {
+  const failures = async (input: Parameters<typeof runTabsJourney>[0]) => {
+    const run = await runTabsJourney(input);
+    assert.equal(run.result.ok, false);
+    return run.failures;
+  };
+  const [state] = await failures({ steps: toDrafts(), to: "missing" });
+  assert.equal(state?.operation.kind, "state");
+  assert.match(state!.error.message, /Expected locator count 1/);
+  assert.equal(state!.action, undefined);
+
+  const [binding] = await failures({ steps: toDrafts(), binding: tab("Archive") });
+  assert.equal(binding?.operation.kind, "transition");
+  assert.equal(binding!.action, undefined);
+
+  const steps = [move("operability:nextStop"), move("operability:nextStop", tab("Home")), move("operability:nextStop", locator("urn:locator:after", "button", "After"))];
+  const [step] = await failures({ steps, roving: false });
+  assert.equal(step?.operation.kind, "transition");
+  assert.equal(step!.action?.status, "failed");
+  assert.equal(step!.action?.stepId, steps[2]!.id);
+  assert.match(step!.error.message, /focus is at tab "Drafts", expected urn:locator:after/);
+});
+
+test("a passing journey is never observed as a failure", async () => {
+  const { result, failures } = await runTabsJourney({ steps: toDrafts() });
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  assert.deepEqual(failures, []);
+});
+
+test("an observer that throws at a failure never replaces the operation's own error", async () => {
+  const throwing: PlaywrightExecutionObserver = { name: "throwing", observeFailure() { throw new Error("observer broke"); } };
+  const { result } = await runTabsJourney({ steps: toDrafts(), to: "missing", observers: [throwing] });
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.errors.map((error) => error.message), ["Expected locator count 1; last value: count:0"]);
+});
+
+test("an operation that an observer failed is not observed as an application failure", async () => {
+  for (const stage of ["state-asserted", "transition-ready"] as const) {
+    const throwing: PlaywrightExecutionObserver = { name: "strict", observeOperation(observation) { if (observation.stage === stage) throw new Error(`observer rejected ${stage}`); } };
+    const { result, failures } = await runTabsJourney({ steps: toDrafts(), observers: [throwing] });
+    assert.equal(result.ok, false, stage);
+    assert.deepEqual(result.errors.map((error) => error.message), [`observer rejected ${stage}`]);
+    assert.deepEqual(failures, [], `${stage}: the application did not fail`);
+  }
+});
+
+test("a canonical materialization that fails is observed, and its fallback takes the transition", async () => {
+  const actions: JourneyInputAction[] = [];
+  // The canonical path expects focus on the tab already; nothing has focus on the freshly opened page.
+  const { result, failures, expected, path } = await runTabsJourney({
+    canonical: [activate(tab("Drafts"))], steps: toDrafts(),
+    observers: [{ name: "actions", onAction(action) { actions.push(action); } }]
+  });
+  assert.equal(result.ok, false);
+  const outcomes = result.evidence.executions[0]!.operations.map((operation) => operation.outcome);
+  assert.deepEqual(outcomes.map((outcome) => outcome.kind), ["passed", "failed", "passed"], "the fallback reached the destination state");
+  assert.ok(outcomes[1]!.kind === "failed");
+  assert.match(outcomes[1]!.error.message, /the user must be at urn:locator:drafts-tab.*the transition was then taken through/);
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0]!.action?.stepId, expected!.steps[0]!.id);
+  assert.equal(failures[0]!.action?.gesture, undefined, "nothing was sent before the check failed");
+  assert.deepEqual(actions.filter((action) => action.status === "completed").map((action) => action.materializationId), path.steps.map(() => path.id));
+});
+
+test("a canonical materialization that works never runs its fallback", async () => {
+  const actions: JourneyInputAction[] = [];
+  const { result, failures, expected } = await runTabsJourney({
+    canonical: toDrafts(), steps: [activate(tab("Backlog"))],
+    observers: [{ name: "actions", onAction(action) { actions.push(action); } }]
+  });
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  assert.deepEqual(failures, []);
+  assert.ok(actions.every((action) => action.materializationId === expected!.id));
 });

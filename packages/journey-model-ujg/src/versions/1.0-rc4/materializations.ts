@@ -1,4 +1,4 @@
-import { keyboardInputModalityId, keyboardTextEntryInputModalityId, pointerInputModalityId } from "@openuji/journey-execution-model";
+import { canonicalMaterializationExtension, keyboardInputModalityId, keyboardTextEntryInputModalityId, pointerInputModalityId } from "@openuji/journey-execution-model";
 import type { DiscoveredMaterialization, DiscoveredMaterializationStep, MaterializationWrite } from "@openuji/journey-plugin";
 import type { UjgJsonDocument } from "../../document.js";
 
@@ -24,6 +24,7 @@ const labels: Readonly<Record<string, string>> = {
 
 const types = (node: Record<string, unknown>): unknown[] => Array.isArray(node["@type"]) ? node["@type"] : [node["@type"]];
 const slug = (value: string) => value.replace(/[^A-Za-z0-9._:-]+/g, "-");
+const canonical = (node: Record<string, unknown>) => (node.extensions as Record<string, unknown> | undefined)?.[canonicalMaterializationExtension] !== undefined;
 
 /** The IRI part that names a transition: `urn:transition:x:y` gives `x:y`. */
 function transitionName(transitionId: string): string {
@@ -33,8 +34,10 @@ function transitionName(transitionId: string): string {
 /**
  * Return a copy of `document` with each found path declared. A transition that already declares
  * a materialization through the modality keeps it, unless the path was rediscovered to replace
- * exactly that materialization (`replaces`). A rediscovered `at-target` entry removes the replaced
- * materialization: the field has focus already. Entries for transitions outside the document are ignored.
+ * exactly that materialization (`replaces`). A canonical materialization is the expectation: it is
+ * never replaced or removed, and a path found where only it is declared is added beside it. A
+ * rediscovered `at-target` entry removes the replaced materialization: the field has focus already.
+ * Entries for transitions outside the document are ignored.
  */
 export function declareRc4Materializations(document: unknown, found: readonly DiscoveredMaterialization[]): { document: UjgJsonDocument; writes: MaterializationWrite[] } {
   if (!document || typeof document !== "object" || !Array.isArray((document as UjgJsonDocument).nodes)) throw new Error("A UJG document with a nodes array is required");
@@ -49,6 +52,8 @@ export function declareRc4Materializations(document: unknown, found: readonly Di
     const keep = (note: string) => writes.push({ transitionId: entry.transitionId, modalityId: entry.modalityId, outcome: "kept", note });
     const declared = result.nodes.filter((node) => types(node).includes("TransitionMaterialization")
       && node.materializationTransitionRef === entry.transitionId && node.materializationModalityRef === entry.modalityId);
+    const others = declared.filter((node) => !canonical(node));
+    if (declared.some((node) => node["@id"] === entry.replaces && canonical(node))) { keep(`${entry.replaces} is canonical, so it is never replaced`); continue; }
     if (removal) {
       const replaced = declared.find((node) => node["@id"] === entry.replaces);
       if (!replaced) { keep(`${entry.replaces} is not declared here through ${entry.modalityId}`); continue; }
@@ -67,8 +72,8 @@ export function declareRc4Materializations(document: unknown, found: readonly Di
       stepBase = id.startsWith("urn:materialization:") ? `urn:step:${id.slice("urn:materialization:".length)}` : `${id}:step`;
       if (typeof replaced.label === "string") label = replaced.label;
       removeMaterialization(result, replaced);
-    } else if (declared.length) {
-      keep(`already declares ${declared.map((node) => node["@id"]).join(", ")}`);
+    } else if (others.length) {
+      keep(`already declares ${others.map((node) => node["@id"]).join(", ")}`);
       continue;
     }
     const steps = entry.steps ?? [];

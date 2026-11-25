@@ -56,3 +56,9 @@ jobs:
 
       - name: Test UX observer expectations in browser
         run: pnpm --filter @openuji/journey-observer-ux test:browser
+
+      - name: Test findings capture in browser
+        run: pnpm --filter @openuji/journey-observer-findings test:browser
+
+      - name: Test finding bundles in browser
+        run: pnpm --filter @openuji/finding-reporter test:browser

@@ -112,3 +112,24 @@ test("the model plugin returns a rewritten local document only when something ch
   assert.deepEqual(unchanged, { writes: [] });
   await assert.rejects(compiler.declareMaterializations!("https://example.org/journey.ujg.jsonld", [found()]), /only in a local UJG document/);
 });
+
+test("a canonical materialization is never replaced, and a found path is added beside it", async () => {
+  const doc = fixture();
+  const expected = doc.nodes.find((node) => node["@id"] === "urn:material")!;
+  expected.extensions = { "urn:openuji:journey-mesh:canonical": {} };
+
+  const added = declareDiscoveredMaterializations(doc, [found()]);
+  assert.deepEqual(added.writes, [{ transitionId: "urn:transition", modalityId: "observability:keyboard", outcome: "added", materializationId: "urn:materialization:transition:keyboard" }]);
+  const materializations = (await transition(added.document)).materializations!;
+  assert.deepEqual(materializations.map((item) => item.id).sort(), ["urn:material", "urn:materialization:transition:keyboard"]);
+
+  const again = declareDiscoveredMaterializations(added.document, [found()]);
+  assert.equal(again.writes[0].outcome, "kept");
+  assert.match(again.writes[0].note!, /already declares urn:materialization:transition:keyboard/);
+
+  for (const entry of [found({ replaces: "urn:material" }), found({ status: "at-target", steps: undefined, replaces: "urn:material" })]) {
+    const kept = declareDiscoveredMaterializations(doc, [entry]);
+    assert.deepEqual(kept.document, doc);
+    assert.match(kept.writes[0].note!, /urn:material is canonical, so it is never replaced/);
+  }
+});

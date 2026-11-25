@@ -1,0 +1,23 @@
+Usage:
+  pnpm --filter @openuji/finding-reporter bundle <run-directory> --out <directory> [--finding <id>] [--image-base-url <url>]
+
+Commands:
+  bundle  Write a GitHub-ready bundle for every finding of the run, in <out>/<id>/:
+          issue.md, annotated.png (the screenshots with the problem in red and the expected
+          state in green), the raw screenshots, and evidence.json. A finding is an operation
+          that failed against what the model declares, such as a focus move that did not
+          reach its object. <out>/index.md lists every finding. Runs nothing. Prints
+          Finding: <id> <issue.md> for each bundle, then Findings: <index.md>.
+          --finding writes the bundle of one finding. --image-base-url makes the image links
+          in issue.md absolute, for issues whose images are hosted elsewhere.
+
+<run-directory> resolves against the directory pnpm was started from. Its report must be
+built with @openuji/journey-report-findings in report.interpreters, from a run with
+@openuji/journey-observer-findings. Drawing needs Chromium (npx playwright install
+chromium).
+
+Exit codes:
+  0  Success, also when the run has no findings.
+  1  The command failed.
+  2  Invalid arguments, an unknown --finding, or a run directory without a report or without
+     findings data.

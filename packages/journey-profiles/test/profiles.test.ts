@@ -112,3 +112,36 @@ test("profiles snapshot preferences and publish frozen decisions", async () => {
   assert.ok(Object.isFrozen(composite));
   assert.ok(Object.isFrozen(decision));
 });
+
+const canonical = (id: string, modality: string) => ({ ...materialization(id, modality), extensions: { "urn:openuji:journey-mesh:canonical": {} } });
+
+test("a canonical materialization runs first, and the other one through its modality is its fallback", async () => {
+  const operation = withModalities(["observability:keyboard"], [materialization("urn:material:around", "observability:keyboard"), canonical("urn:material:expected", "observability:keyboard")]);
+  const select = (profile: ReturnType<typeof keyboardOnlyProfile>, value: unknown = operation) => profile.selectInputModality!(value as never, { profile } as never);
+  const decision = await select(keyboardOnlyProfile());
+  assert.equal(decision.materialization?.id, "urn:material:expected");
+  assert.equal(decision.fallback?.id, "urn:material:around");
+
+  // A preference for the other path never skips the canonical one.
+  const preferred = await select(keyboardOnlyProfile({ materializationPreference: ["urn:material:around"] }));
+  assert.deepEqual([preferred.materialization?.id, preferred.fallback?.id], ["urn:material:expected", "urn:material:around"]);
+
+  const alone = await select(keyboardOnlyProfile(), withModalities(["observability:keyboard"], [canonical("urn:material:expected", "observability:keyboard")]));
+  assert.equal(alone.materialization?.id, "urn:material:expected");
+  assert.equal("fallback" in alone, false);
+});
+
+test("beside a canonical materialization, a preference chooses among several others", async () => {
+  const operation = withModalities(["observability:keyboard"], [canonical("urn:material:expected", "observability:keyboard"), materialization("urn:material:tabs", "observability:keyboard"), materialization("urn:material:arrows", "observability:keyboard")]);
+  const select = (profile: ReturnType<typeof keyboardOnlyProfile>) => profile.selectInputModality!(operation as never, { profile } as never);
+  await assert.rejects(async () => select(keyboardOnlyProfile()), /declares 2 TransitionMaterializations through observability:keyboard \(urn:material:tabs, urn:material:arrows\)/);
+  assert.equal((await select(keyboardOnlyProfile({ materializationPreference: ["urn:material:arrows"] }))).fallback?.id, "urn:material:arrows");
+});
+
+test("one materialization per modality can be canonical", async () => {
+  const profile = keyboardOnlyProfile();
+  const two = withModalities(["observability:keyboard"], [canonical("urn:material:one", "observability:keyboard"), canonical("urn:material:two", "observability:keyboard")]);
+  await assert.rejects(async () => profile.selectInputModality!(two as never, { profile } as never), /declares 2 canonical TransitionMaterializations through observability:keyboard \(urn:material:one, urn:material:two\); only one can be canonical/);
+  const each = withModalities(["observability:pointer", "observability:keyboard"], [canonical("urn:material:point", "observability:pointer"), canonical("urn:material:type", "observability:keyboard")]);
+  assert.equal((await profile.selectInputModality!(each as never, { profile } as never)).materialization?.id, "urn:material:type");
+});

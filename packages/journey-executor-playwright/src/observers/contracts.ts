@@ -42,6 +42,21 @@ export type PlaywrightOperationObservation =
       readonly operation: ControlFlowPlanOperation;
     };
 
+/**
+ * An operation failed while its page was open, observed before the error propagates. The executor
+ * ignores observer errors here: the operation's own error is what fails. A failure that an observer
+ * caused (by throwing from `observeOperation`) is not observed as one.
+ */
+export type PlaywrightFailureObservation = {
+  readonly stage: "operation-failed";
+  readonly execution: JourneyExecutionDescriptor;
+  readonly operation: StatePlanOperation | TransitionPlanOperation;
+  readonly page: Page;
+  readonly error: Readonly<{ name: string; message: string }>;
+  /** The step that failed, when the failure was inside one. */
+  readonly action?: JourneyInputAction;
+};
+
 export type PlaywrightExecutionObserver = {
   readonly name: string;
   readonly version?: string;
@@ -50,6 +65,7 @@ export type PlaywrightExecutionObserver = {
   ): Promise<void> | void;
   onAction?(action: JourneyInputAction): Promise<void> | void;
   observeOperation?(observation: PlaywrightOperationObservation): Promise<void> | void;
+  observeFailure?(failure: PlaywrightFailureObservation): Promise<void> | void;
 };
 
 /**

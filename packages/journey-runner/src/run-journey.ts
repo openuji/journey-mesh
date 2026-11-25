@@ -52,7 +52,11 @@ type ExecutionBatch = Readonly<{
 
 type EntryMap = ReadonlyMap<string, string>;
 
-type OperationFold = ExecutionBatch & Readonly<{ entries: EntryMap }>;
+/** `recovered` fails the execution without stopping it: transitions performed through their fallback. */
+type OperationFold = ExecutionBatch & Readonly<{ entries: EntryMap; recovered: JourneyOutcome }>;
+
+/** `missed` is the failure that a transition's fallback materialization got past. */
+type OperationRun = Readonly<{ entries: EntryMap; missed?: Error }>;
 
 type ProfileExecutionInput = Readonly<{
   executor: JourneyExecutor;
@@ -243,14 +247,17 @@ async function runOperations(
     await progress.publish({ type: "operation-started", ...operationProgress });
     const startedAt = performance.now();
     try {
-      const entries = await abortable(() => executeOperation(input, session, previous.entries, operation), context.signal);
-      await progress.publish({
-        type: "operation-completed", ...operationProgress, durationMs: performance.now() - startedAt
-      });
+      const { entries, missed } = await abortable(() => executeOperation(input, session, previous.entries, operation), context.signal);
+      const durationMs = performance.now() - startedAt;
+      const outcome = missed ? failedOutcome(missed) : passedOutcome;
+      await progress.publish(missed
+        ? { type: "operation-failed", ...operationProgress, durationMs, error: errorToJourneyRunError(missed) }
+        : { type: "operation-completed", ...operationProgress, durationMs });
       return Object.freeze({
         entries,
         outcome: passedOutcome,
-        operations: Object.freeze([...previous.operations, operationEvidence(operation, executors.get(operation)!, passedOutcome)])
+        recovered: combineOutcomes(previous.recovered, outcome, "a later transition"),
+        operations: Object.freeze([...previous.operations, operationEvidence(operation, executors.get(operation)!, outcome)])
       });
     } catch (error) {
       const outcome = failedOutcome(error);
@@ -262,11 +269,12 @@ async function runOperations(
       return Object.freeze({
         entries: previous.entries,
         outcome,
+        recovered: previous.recovered,
         operations: Object.freeze([...previous.operations, operationEvidence(operation, executors.get(operation)!, outcome)])
       });
     }
-  }, Promise.resolve(Object.freeze({ ...emptyBatch(passedOutcome), entries: new Map<string, string>() })));
-  return Object.freeze({ outcome: completed.outcome, operations: completed.operations });
+  }, Promise.resolve(Object.freeze({ ...emptyBatch(passedOutcome), entries: new Map<string, string>(), recovered: passedOutcome })));
+  return Object.freeze({ outcome: combineOutcomes(completed.recovered, completed.outcome, "a later operation"), operations: completed.operations });
 }
 
 async function executeOperation(
@@ -274,7 +282,7 @@ async function executeOperation(
   session: JourneyExecutorSession,
   currentEntries: EntryMap,
   operation: JourneyPlanOperation
-): Promise<EntryMap> {
+): Promise<OperationRun> {
   input.context.signal?.throwIfAborted();
   const entries = await ensureEntryOpen(session, currentEntries, operation);
   input.context.signal?.throwIfAborted();
@@ -282,16 +290,41 @@ async function executeOperation(
     await session.assertState(operation);
   } else if (operation.kind === "transition") {
     const decision = await selectInputModality(operation, input.context);
-    await session.performTransition(operation, decision);
+    const { performed, missed } = await performTransition(session, operation, decision, input.context.signal);
     input.context.signal?.throwIfAborted();
     for (const effect of operation.effects) {
       input.context.signal?.throwIfAborted();
-      await input.environment?.verifyEffect?.({ context: input.context, operation, effect, decision });
+      await input.environment?.verifyEffect?.({ context: input.context, operation, effect, decision: performed });
     }
+    if (missed) return { entries, missed };
   } else {
     await session.recordControlFlow(operation);
   }
-  return entries;
+  return { entries };
+}
+
+/**
+ * Performs the transition as decided, and through the decision's fallback when that fails. Returns the
+ * decision that took the transition and, after a fallback, the failure it got past. A failing
+ * fallback fails the operation.
+ */
+async function performTransition(
+  session: JourneyExecutorSession,
+  operation: TransitionPlanOperation,
+  decision: InputModalityDecision | undefined,
+  signal: AbortSignal | undefined
+): Promise<Readonly<{ performed: InputModalityDecision | undefined; missed?: Error }>> {
+  try {
+    await session.performTransition(operation, decision);
+    return { performed: decision };
+  } catch (error) {
+    if (!decision?.fallback || signal?.aborted) throw error;
+    const { fallback, ...chosen } = decision;
+    const performed = Object.freeze({ ...chosen, materialization: fallback });
+    await session.performTransition(operation, performed);
+    const missed = new Error(`${errorToJourneyRunError(error).message} (the transition was then taken through ${fallback.id})`, { cause: error });
+    return { performed, missed };
+  }
 }
 
 async function selectInputModality(

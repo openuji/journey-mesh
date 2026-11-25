@@ -29,6 +29,7 @@ error, and the stdout lines the help documents (for example `PASS <id>` and
 | `journey-executor-appium` | [`packages/journey-executor-appium/src/runtime/cli.ts`](packages/journey-executor-appium/src/runtime/cli.ts) | [`contract/journey-executor-appium.help.txt`](packages/journey-executor-appium/contract/journey-executor-appium.help.txt) |
 | `journey-service-android` | [`packages/journey-service-android/src/cli.ts`](packages/journey-service-android/src/cli.ts) | [`contract/journey-service-android.help.txt`](packages/journey-service-android/contract/journey-service-android.help.txt) |
 | report renderer scripts | [`apps/report-renderer/cli/args.ts`](apps/report-renderer/cli/args.ts) | [`contract/report-renderer.help.txt`](apps/report-renderer/contract/report-renderer.help.txt) |
+| finding reporter scripts | [`apps/finding-reporter/cli/args.ts`](apps/finding-reporter/cli/args.ts) | [`contract/finding-reporter.help.txt`](apps/finding-reporter/contract/finding-reporter.help.txt) |
 
 Each CLI declares its commands once as a `CliDefinition` from
 `@openuji/journey-plugin/cli`. Parsing, defaults, usage lines, help and argument

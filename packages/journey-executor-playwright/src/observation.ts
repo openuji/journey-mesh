@@ -6,4 +6,6 @@
 export type * from "./observers/contracts.js";
 export { playwrightObservationContract } from "./observation-contract.js";
 export { playwrightExecutorName } from "./name.js";
-export { toPlaywrightObservationLocator } from "./locators.js";
+export { toPlaywrightLocator, toPlaywrightObservationLocator } from "./locators.js";
+/** Where the user is, read exactly as the executor's step checks read it. */
+export { PlaywrightFocus } from "./focus.js";
