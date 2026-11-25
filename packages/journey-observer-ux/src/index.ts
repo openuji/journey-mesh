@@ -12,11 +12,33 @@ export type UXCounter = Readonly<{
   status?: "attempted" | "completed" | "failed";
 }>;
 export type UXCheckpoint = Readonly<{ id: string; label: string; operation: string }>;
-export type UXProbe = Readonly<{ id: string; label: string; at: string; target: string }>;
+/**
+ * What a probe requires, checked after the observation: `visible` and `inViewport` (fully contained in
+ * the viewport) describe the probe's target; `scrolled` requires the page to be scrolled vertically.
+ */
+export const uxExpectations = ["visible", "inViewport", "scrolled"] as const;
+export type UXExpectation = (typeof uxExpectations)[number];
+/** Without `expect` a probe is informational; with it, an unmet expectation is an observer error and fails the test. */
+export type UXProbe = Readonly<{ id: string; label: string; at: string; target: string; expect?: readonly UXExpectation[]; screenshot?: boolean }>;
+/** CSS pixels in viewport coordinates, read without scrolling, focusing or hovering. */
+export type UXGeometry = Readonly<{
+  /** Elements matching the target; only exactly one can be measured. */
+  matches: number;
+  rect: Readonly<{ x: number; y: number; width: number; height: number }> | null;
+  viewport: Readonly<{ width: number; height: number }> | null;
+  scroll: Readonly<{ x: number; y: number }>;
+  /** False when the readings kept changing until the bounded stabilization gave up. */
+  stable: boolean;
+}>;
 export type UXObservation = Readonly<{
   runId: string; executionId: string; profileId: string; operationId: string;
   probeId: string; targetOperationId: string; visible: boolean; inViewport: boolean;
+  geometry?: UXGeometry;
+  /** Hrefs of the geometry record and the viewport screenshot written for this probe. */
+  files?: readonly string[];
 }>;
+/** The format of a probe's geometry evidence file. */
+export const uxGeometryFormat = "journey-mesh/ux-geometry";
 export type UXConfiguration = Readonly<{
   id: string; operations: readonly JourneyPlanOperation[];
   counters: readonly UXCounter[]; checkpoints: readonly UXCheckpoint[]; probes: readonly UXProbe[];
@@ -40,7 +62,25 @@ export function validateUXConfiguration(config: UXConfiguration): void {
   config.checkpoints.forEach((checkpoint) => operation(checkpoint.operation));
   for (const probe of config.probes) {
     if (operation(probe.at).kind !== "state" || operation(probe.target).kind === "control-flow") throw new Error(`Probe ${probe.id} requires a state and an observable target`);
+    for (const expectation of probe.expect ?? []) {
+      if (!uxExpectations.includes(expectation)) throw new Error(`Probe ${probe.id} has unknown expectation ${expectation}; use ${uxExpectations.join(", ")}`);
+    }
   }
+}
+
+/** Why an observation does not meet an expectation, or undefined when it does. */
+export function unmetExpectation(expectation: UXExpectation, fact: UXObservation): string | undefined {
+  const geometry = fact.geometry;
+  if (!geometry) return "no geometry was observed";
+  if (!geometry.stable) return "the target's geometry did not stabilize";
+  if (expectation === "scrolled") return geometry.scroll.y > 0 ? undefined : `the page is not scrolled (scrollY ${geometry.scroll.y})`;
+  if (geometry.matches !== 1) return `the target matched ${geometry.matches} elements, not exactly one`;
+  if (!fact.visible || !geometry.rect) return "the target is not visible";
+  if (expectation === "visible") return undefined;
+  const { rect, viewport } = geometry;
+  if (!viewport) return "the viewport size is unknown";
+  return fact.inViewport ? undefined
+    : `the target (x ${rect.x}, y ${rect.y}, ${rect.width}×${rect.height}) is not contained in the ${viewport.width}×${viewport.height} viewport`;
 }
 
 /** Calculation belongs to the observer; reports and comparisons consume this immutable output. */
@@ -49,6 +89,7 @@ export function deriveUXOutput(input: UXConfiguration & Readonly<{
 }>): JourneyObserverOutput {
   validateUXConfiguration(input);
   const measurements: JourneyMeasurement[] = [];
+  const errors: { name: string; message: string }[] = [];
   for (const execution of input.result.evidence.executions) {
     const matching = (fact: { runId: string; executionId: string; profileId: string }) => fact.runId === input.result.runId && fact.executionId === execution.executionId && fact.profileId === execution.profileId;
     const actions = [...new Map(input.actions.filter(matching).map((action) => [action.id, action])).values()];
@@ -76,7 +117,21 @@ export function deriveUXOutput(input: UXConfiguration & Readonly<{
     for (const probe of input.probes) {
       const fact = input.observations.filter(matching).find((item) => item.probeId === probe.id && item.operationId === probe.at && item.targetOperationId === probe.target);
       for (const property of ["visible", "inViewport"] as const) measurements.push({ id: `${probe.id}/${property}`, label: `${probe.label} (${property === "visible" ? "visible" : "in viewport"})`, method: `passive-target-${property}`, unit: "boolean", aggregation: "identity", scope: scope([probe.at, probe.target]), status: fact ? "available" : "unavailable", value: fact ? fact[property] : null, ...(!fact ? { reason: "Probe was not observed." } : {}) });
+      const scrollY = fact?.geometry?.scroll.y;
+      measurements.push({ id: `${probe.id}/scrollY`, label: `${probe.label} (page scroll)`, method: "passive-page-scroll-y", unit: "px", aggregation: "identity", scope: scope([probe.at]), status: scrollY === undefined ? "unavailable" : "available", value: scrollY ?? null, ...(scrollY === undefined ? { reason: "Probe was not observed." } : {}) });
+      if (!probe.expect?.length) continue;
+      // A probe that was due (its state passed) must have been observed; an unreached state is the execution's failure, not the probe's.
+      const due = passed(probe.at);
+      const where = `Probe ${probe.id} in execution ${execution.executionId}`;
+      if (!fact) {
+        if (due) errors.push({ name: "UXExpectationFailed", message: `${where}: expected ${probe.expect.join(", ")}, but the probe was not observed` });
+        continue;
+      }
+      for (const expectation of probe.expect) {
+        const unmet = unmetExpectation(expectation, fact);
+        if (unmet) errors.push({ name: "UXExpectationFailed", message: `${where}: expected ${expectation}, but ${unmet}` });
+      }
     }
   }
-  return immutableSnapshot({ id: input.id, kind: "ux", measurements, evidence: { actions: input.actions.filter((action) => action.runId === input.result.runId), observations: input.observations.filter((observation) => observation.runId === input.result.runId) }, errors: [] });
+  return immutableSnapshot({ id: input.id, kind: "ux", measurements, evidence: { actions: input.actions.filter((action) => action.runId === input.result.runId), observations: input.observations.filter((observation) => observation.runId === input.result.runId) }, errors });
 }

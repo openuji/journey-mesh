@@ -5,32 +5,30 @@ import {
   ownAutomationVersions, ownXcuitestAutomationVersions, resolveAppiumEntry
 } from "./appium-server.js";
 import { defaultCapture, defaultForeground } from "./process.js";
+import { runCommand, type CliDefinition } from "@openuji/journey-plugin/cli";
 
-const help = `Usage:
-  journey-executor-appium appium serve [--address <addr>] [--port <port>] [--log <path>]
-  journey-executor-appium appium ensure-driver [--driver <uiautomator2|xcuitest>]
+/** The command-line contract; its help is committed as contract/journey-executor-appium.help.txt. */
+export const cli: CliDefinition = {
+  program: "journey-executor-appium",
+  commands: {
+    "appium serve": {
+      arguments: [], options: { "--address": { value: "<addr>", default: "127.0.0.1" }, "--port": { value: "<port>", default: "4723" }, "--log": { value: "<path>" } },
+      description: ["Run the Appium server in the foreground, for a caller that owns its process lifecycle, such as CI. With --log, debug output goes to that file."]
+    },
+    "appium ensure-driver": {
+      arguments: [], options: { "--driver": { value: "<uiautomator2|xcuitest>", default: "uiautomator2" } },
+      description: ["Install the pinned UiAutomator2 or XCUITest driver into APPIUM_HOME (default: a driver-specific, version-keyed directory under .tmp/) if it is missing."]
+    }
+  },
+  notes: ["To keep Appium running across tests, use the configured service instead:", "  journey-mesh services up|down <config.yaml> --service appium"],
+  exits: { 0: "Success.", 1: "The command failed.", 2: "Invalid arguments." }
+};
 
-serve runs the Appium server in the foreground (for a caller that owns its own
-process lifecycle, e.g. CI). ensure-driver installs the pinned UiAutomator2 or
-XCUITest driver into APPIUM_HOME (or a version-keyed default under .tmp/) if missing.`;
-
-function parseFlags(args: readonly string[]): Record<string, string> {
-  const options: Record<string, string> = {};
-  for (let index = 0; index < args.length; index++) {
-    const argument = args[index]!;
-    if (!argument.startsWith("--")) throw new Error(`Unknown option ${argument}`);
-    const value = args[++index];
-    if (!value || value.startsWith("--")) throw new Error(`Missing value for ${argument}`);
-    options[argument.slice(2)] = value;
-  }
-  return options;
-}
-
-async function serve(flags: Record<string, string>): Promise<void> {
+async function serve(options: Readonly<Record<string, string>>): Promise<void> {
   const appium = resolveAppiumEntry();
-  const address = flags.address ?? "127.0.0.1";
-  const port = flags.port ?? "4723";
-  const args = [appium, "--address", address, "--port", port, "--log-level", flags.log ? "warn:debug" : "warn", ...(flags.log ? ["--log", flags.log] : [])];
+  const address = options["--address"];
+  const port = options["--port"];
+  const args = [appium, "--address", address, "--port", port, "--log-level", options["--log"] ? "warn:debug" : "warn", ...(options["--log"] ? ["--log", options["--log"]] : [])];
   await new Promise<void>((done, reject) => {
     const child = spawn(process.execPath, args, { stdio: "inherit", env: process.env });
     let stopping = false;
@@ -42,8 +40,8 @@ async function serve(flags: Record<string, string>): Promise<void> {
   });
 }
 
-async function ensureDriver(flags: Record<string, string>): Promise<void> {
-  const driver = flags.driver ?? "uiautomator2";
+async function ensureDriver(options: Readonly<Record<string, string>>): Promise<void> {
+  const driver = options["--driver"];
   if (driver !== "uiautomator2" && driver !== "xcuitest") {
     throw new Error(`Unsupported Appium driver ${driver}; expected uiautomator2 or xcuitest`);
   }
@@ -64,16 +62,8 @@ async function defaultAppiumHome(driver: "uiautomator2" | "xcuitest"): Promise<s
 }
 
 export async function main(args: readonly string[]): Promise<number> {
-  if (!args.length || args.includes("--help")) { console.log(help); return 0; }
-  const [group, action, ...flags] = args;
-  try {
-    if (group !== "appium" || !["serve", "ensure-driver"].includes(action ?? "")) throw new Error(help);
-    const parsed = parseFlags(flags);
-    if (action === "serve") await serve(parsed);
-    else await ensureDriver(parsed);
-    return 0;
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : "journey-executor-appium failed");
-    return 1;
-  }
+  return runCommand(cli, args, async ({ name, options }) => {
+    if (name === "appium serve") await serve(options);
+    else await ensureDriver(options);
+  });
 }

@@ -1,7 +1,8 @@
 import { createServer, type Server } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
-import { fromInvocation, parseArgs, runScript } from "./args.js";
+import { CliUsageError } from "@openuji/journey-plugin/cli";
+import { reportDirectory, runScript } from "./args.js";
 import { viewerDirectory } from "./site.js";
 const types: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
@@ -39,12 +40,10 @@ export async function serveReport(directory: string, port = 9323, viewer = viewe
   return server;
 }
 
-const usage = "Usage: pnpm --filter @openuji/report-renderer serve <run-directory> [--port <number>]";
-runScript(import.meta.url, async (args) => {
-  const { positionals: [directory], flags } = parseArgs(args, usage);
-  const port = flags["--port"] === undefined ? 9323 : Number(flags["--port"]);
-  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error("--port must be a TCP port");
-  const server = await serveReport(fromInvocation(directory), port);
+runScript(import.meta.url, "serve", async ({ positionals: [directory], options }) => {
+  const port = Number(options["--port"]);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new CliUsageError("--port must be a TCP port");
+  const server = await serveReport(await reportDirectory(directory), port);
   const address = server.address();
   console.log(`Journey Mesh report: http://127.0.0.1:${typeof address === "object" && address ? address.port : port}/`);
 });

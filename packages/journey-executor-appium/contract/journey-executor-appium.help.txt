@@ -1,0 +1,21 @@
+Usage:
+  journey-executor-appium appium serve [--address <addr>] [--port <port>] [--log <path>]
+  journey-executor-appium appium ensure-driver [--driver <uiautomator2|xcuitest>]
+
+Commands:
+  appium serve          Run the Appium server in the foreground, for a caller that owns its
+                        process lifecycle, such as CI. With --log, debug output goes to that
+                        file.
+                        Defaults: --address 127.0.0.1, --port 4723.
+  appium ensure-driver  Install the pinned UiAutomator2 or XCUITest driver into APPIUM_HOME
+                        (default: a driver-specific, version-keyed directory under .tmp/) if
+                        it is missing.
+                        Defaults: --driver uiautomator2.
+
+To keep Appium running across tests, use the configured service instead:
+  journey-mesh services up|down <config.yaml> --service appium
+
+Exit codes:
+  0  Success.
+  1  The command failed.
+  2  Invalid arguments.

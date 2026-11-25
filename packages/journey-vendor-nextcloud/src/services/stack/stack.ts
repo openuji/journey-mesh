@@ -129,15 +129,14 @@ export function nextcloudStackRuntime(options: StackOptions, { artifacts, observ
           return { NEXTCLOUD_IMAGE: image };
         },
         /** Install, configure and verify every Nextcloud service of the running stack, then record its identity. */
-        async bootstrap({ run, compose: docker, signal: activeSignal }) {
+        async bootstrap({ run, compose: docker, entrypointFinished, signal: activeSignal }) {
           const occ = (service: string, ...args: string[]) => docker("exec", "-T", "-u", "www-data", service, "php", "occ", ...args);
           /**
            * The image's entrypoint keeps writing config.php (one `occ config:system:set` per trusted domain) after
            * `occ status` reports installed, and only then execs the web server. Nextcloud writes config.php from the
-           * copy each process loaded, so a setting written concurrently is lost. Configure only once PID 1 is no
-           * longer the entrypoint script. An image without that script counts as started.
+           * copy each process loaded, so a setting written concurrently is lost. Configure only once it has finished.
            */
-          const started = (service: string) => docker("exec", "-T", service, "cat", "/proc/1/cmdline").then((cmdline) => !cmdline.includes("entrypoint.sh"), () => false);
+          const started = (service: string) => entrypointFinished(service, "entrypoint.sh");
           const services: unknown[] = [];
           for (const [service, account] of Object.entries(options.services)) {
             let status: { installed?: boolean; versionstring?: string } | undefined;

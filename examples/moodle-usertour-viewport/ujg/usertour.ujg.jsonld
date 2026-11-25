@@ -1,0 +1,744 @@
+{
+  "@context": [
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/core.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/graph.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/surface.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/phase.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/l10n.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/observability.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/entry-binding.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/operability.context.jsonld"
+  ],
+  "@id": "urn:ujg:document:moodle-usertour-viewport",
+  "@type": "UJGDocument",
+  "nodes": [
+    {
+      "@type": "JourneyEntryIndex",
+      "@id": "urn:index:moodle-usertour-viewport",
+      "entryRefs": [
+        "urn:entry:admin-login",
+        "urn:entry:scrolled-tour"
+      ]
+    },
+    {
+      "@type": "Phase",
+      "@id": "urn:phase:setup",
+      "label": "Setup",
+      "order": 0
+    },
+    {
+      "@type": "Phase",
+      "@id": "urn:phase:tour",
+      "label": "User tour",
+      "order": 1
+    },
+    {
+      "@type": "CompositeState",
+      "@id": "urn:composite:admin-login",
+      "label": "Admin login",
+      "subjourneyRefs": [
+        "urn:journey:admin-login"
+      ]
+    },
+    {
+      "@type": "Step",
+      "@id": "urn:step:admin-login",
+      "label": "Admin login",
+      "order": 0,
+      "compositeStateRef": "urn:composite:admin-login",
+      "phaseRef": "urn:phase:setup"
+    },
+    {
+      "@type": "CompositeState",
+      "@id": "urn:composite:scrolled-tour",
+      "label": "Scrolled user tour",
+      "subjourneyRefs": [
+        "urn:journey:scrolled-tour"
+      ]
+    },
+    {
+      "@type": "Step",
+      "@id": "urn:step:scrolled-tour",
+      "label": "Scrolled user tour",
+      "order": 1,
+      "compositeStateRef": "urn:composite:scrolled-tour",
+      "phaseRef": "urn:phase:tour"
+    },
+    {
+      "@type": "Touchpoint",
+      "@id": "urn:touchpoint:moodle",
+      "journeyRefs": [
+        "urn:journey:admin-login",
+        "urn:journey:scrolled-tour"
+      ]
+    },
+    {
+      "@type": "Persona",
+      "@id": "urn:user:admin",
+      "touchpointRefs": [
+        "urn:touchpoint:moodle"
+      ]
+    },
+    {
+      "@type": "Locale",
+      "@id": "urn:locale:en",
+      "localeCode": "en"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:username",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:username:en",
+      "messageMetaRef": "urn:message:username",
+      "localeRef": "urn:locale:en",
+      "value": "Username"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:password",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:password:en",
+      "messageMetaRef": "urn:message:password",
+      "localeRef": "urn:locale:en",
+      "value": "Password"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:log-in",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:log-in:en",
+      "messageMetaRef": "urn:message:log-in",
+      "localeRef": "urn:locale:en",
+      "value": "Log in"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:dashboard",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:dashboard:en",
+      "messageMetaRef": "urn:message:dashboard",
+      "localeRef": "urn:locale:en",
+      "value": "Dashboard"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:page-footer",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:page-footer:en",
+      "messageMetaRef": "urn:message:page-footer",
+      "localeRef": "urn:locale:en",
+      "value": "Page footer"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:next",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:next:en",
+      "messageMetaRef": "urn:message:next",
+      "localeRef": "urn:locale:en",
+      "value": "Next (1/2)"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:orphaned-step",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:orphaned-step:en",
+      "messageMetaRef": "urn:message:orphaned-step",
+      "localeRef": "urn:locale:en",
+      "value": "Orphaned step"
+    },
+    {
+      "@type": "MessageMeta",
+      "@id": "urn:message:end-tour",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:end-tour:en",
+      "messageMetaRef": "urn:message:end-tour",
+      "localeRef": "urn:locale:en",
+      "value": "End tour"
+    },
+    {
+      "@type": "AccessibleFeature",
+      "@id": "urn:feature:exact-name",
+      "accessibleFeatureName": "accessible-name-exact",
+      "accessibleFeatureValue": "true"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:username",
+      "role": "textbox",
+      "accessibleNameRef": "urn:message:username"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:password",
+      "role": "textbox",
+      "accessibleNameRef": "urn:message:password"
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:log-in",
+      "role": "button",
+      "accessibleNameRef": "urn:message:log-in",
+      "accessibleFeatureRefs": [
+        "urn:feature:exact-name"
+      ]
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:dashboard-heading",
+      "role": "heading",
+      "accessibleNameRef": "urn:message:dashboard",
+      "accessibleFeatureRefs": [
+        "urn:feature:exact-name"
+      ]
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:footer-step",
+      "role": "dialog",
+      "accessibleNameRef": "urn:message:page-footer",
+      "accessibleFeatureRefs": [
+        "urn:feature:exact-name"
+      ]
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:next",
+      "role": "button",
+      "accessibleNameRef": "urn:message:next",
+      "accessibleFeatureRefs": [
+        "urn:feature:exact-name"
+      ],
+      "contextLocatorRefs": [
+        "urn:locator:footer-step"
+      ]
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:orphaned-step",
+      "role": "dialog",
+      "accessibleNameRef": "urn:message:orphaned-step",
+      "accessibleFeatureRefs": [
+        "urn:feature:exact-name"
+      ]
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:end-tour",
+      "role": "button",
+      "accessibleNameRef": "urn:message:end-tour",
+      "accessibleFeatureRefs": [
+        "urn:feature:exact-name"
+      ],
+      "contextLocatorRefs": [
+        "urn:locator:orphaned-step"
+      ]
+    },
+    {
+      "@type": "InputModality",
+      "@id": "urn:openuji:input-modality:keyboard-text-entry"
+    },
+    {
+      "@type": "InputModalityProfile",
+      "@id": "urn:input-profile:text-entry",
+      "inputModalityRefs": [
+        "urn:openuji:input-modality:keyboard-text-entry"
+      ]
+    },
+    {
+      "@type": "InputModalityProfile",
+      "@id": "urn:input-profile:pointer",
+      "inputModalityRefs": [
+        "observability:pointer"
+      ]
+    },
+    {
+      "@type": "ObservationEvent",
+      "@id": "urn:observation-event:presence",
+      "label": "Presence"
+    },
+    {
+      "@type": "ObservationEvent",
+      "@id": "urn:observation-event:absence",
+      "label": "Absence"
+    },
+    {
+      "@type": "ObservationEvent",
+      "@id": "urn:observation-event:text-entry",
+      "label": "Text entry",
+      "requiredInputModalityProfileRefs": [
+        "urn:input-profile:text-entry"
+      ]
+    },
+    {
+      "@type": "ObservationEvent",
+      "@id": "urn:observation-event:activation",
+      "label": "Button activation",
+      "requiredInputModalityProfileRefs": [
+        "urn:input-profile:pointer"
+      ]
+    },
+    {
+      "@type": "Journey",
+      "@id": "urn:journey:admin-login",
+      "defaultEntryRef": "urn:entry:admin-login",
+      "entryRefs": [
+        "urn:entry:admin-login"
+      ],
+      "stateRefs": [
+        "urn:state:admin-login-ready",
+        "urn:state:admin-username-entered",
+        "urn:state:admin-password-entered",
+        "urn:state:admin-authenticated"
+      ],
+      "transitionRefs": [
+        "urn:transition:admin-enters-username",
+        "urn:transition:admin-enters-password",
+        "urn:transition:admin-submits-login"
+      ]
+    },
+    {
+      "@type": "JourneyEntry",
+      "@id": "urn:entry:admin-login",
+      "stateRef": "urn:state:admin-login-ready"
+    },
+    {
+      "@type": "EntryBinding",
+      "@id": "urn:entry-binding:admin-login",
+      "entryRef": "urn:entry:admin-login",
+      "value": "moodle.login"
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:admin-login-ready",
+      "label": "The login form is ready"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:admin-login-ready",
+      "graphNodeRef": "urn:state:admin-login-ready"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:admin-login-ready",
+      "observeSurfaceRef": "urn:surface:admin-login-ready",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:username"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:admin-username-entered",
+      "label": "The username is entered"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:admin-username-entered",
+      "graphNodeRef": "urn:state:admin-username-entered"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:admin-username-entered",
+      "observeSurfaceRef": "urn:surface:admin-username-entered",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:password"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:admin-password-entered",
+      "label": "The password is entered"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:admin-password-entered",
+      "graphNodeRef": "urn:state:admin-password-entered"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:admin-password-entered",
+      "observeSurfaceRef": "urn:surface:admin-password-entered",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:log-in"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:admin-authenticated",
+      "label": "The admin is on the dashboard"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:admin-authenticated",
+      "graphNodeRef": "urn:state:admin-authenticated"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:admin-authenticated",
+      "observeSurfaceRef": "urn:surface:admin-authenticated",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:dashboard-heading"
+      ]
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:admin-enters-username",
+      "label": "Enter the username",
+      "from": "urn:state:admin-login-ready",
+      "to": "urn:state:admin-username-entered",
+      "commandRef": "urn:transition:admin-enters-username:command"
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:transition:admin-enters-username:command",
+      "label": "Enter the username"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:admin-enters-username",
+      "graphNodeRef": "urn:transition:admin-enters-username:command"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:admin-enters-username",
+      "observeSurfaceRef": "urn:surface:admin-enters-username",
+      "observationEventRef": "urn:observation-event:text-entry",
+      "locatorRefs": [
+        "urn:locator:username"
+      ]
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:admin-enters-password",
+      "label": "Enter the password",
+      "from": "urn:state:admin-username-entered",
+      "to": "urn:state:admin-password-entered",
+      "commandRef": "urn:transition:admin-enters-password:command"
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:transition:admin-enters-password:command",
+      "label": "Enter the password"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:admin-enters-password",
+      "graphNodeRef": "urn:transition:admin-enters-password:command"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:admin-enters-password",
+      "observeSurfaceRef": "urn:surface:admin-enters-password",
+      "observationEventRef": "urn:observation-event:text-entry",
+      "locatorRefs": [
+        "urn:locator:password"
+      ]
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:admin-submits-login",
+      "label": "Log in",
+      "from": "urn:state:admin-password-entered",
+      "to": "urn:state:admin-authenticated",
+      "commandRef": "urn:transition:admin-submits-login:command"
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:transition:admin-submits-login:command",
+      "label": "Log in"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:admin-submits-login",
+      "graphNodeRef": "urn:transition:admin-submits-login:command"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:admin-submits-login",
+      "observeSurfaceRef": "urn:surface:admin-submits-login",
+      "observationEventRef": "urn:observation-event:activation",
+      "locatorRefs": [
+        "urn:locator:log-in"
+      ]
+    },
+    {
+      "@type": "TransitionMaterialization",
+      "@id": "urn:materialization:admin-submits-login:pointer",
+      "label": "Point at Log in and press",
+      "materializationTransitionRef": "urn:transition:admin-submits-login",
+      "materializationModalityRef": "observability:pointer",
+      "materializationStepRefs": [
+        "urn:step:admin-submits-login:pointer:1",
+        "urn:step:admin-submits-login:pointer:2"
+      ]
+    },
+    {
+      "@type": "MoveStep",
+      "@id": "urn:step:admin-submits-login:pointer:1",
+      "stepMoveKindRef": "operability:pointAt",
+      "stepLocatorRef": "urn:locator:log-in"
+    },
+    {
+      "@type": "ActivationStep",
+      "@id": "urn:step:admin-submits-login:pointer:2",
+      "stepPreviousRef": "urn:step:admin-submits-login:pointer:1"
+    },
+    {
+      "@type": "Journey",
+      "@id": "urn:journey:scrolled-tour",
+      "defaultEntryRef": "urn:entry:scrolled-tour",
+      "entryRefs": [
+        "urn:entry:scrolled-tour"
+      ],
+      "stateRefs": [
+        "urn:state:tour-footer-step",
+        "urn:state:tour-orphaned-step",
+        "urn:state:tour-ended"
+      ],
+      "transitionRefs": [
+        "urn:transition:tour-next",
+        "urn:transition:tour-end"
+      ]
+    },
+    {
+      "@type": "JourneyEntry",
+      "@id": "urn:entry:scrolled-tour",
+      "stateRef": "urn:state:tour-footer-step"
+    },
+    {
+      "@type": "EntryBinding",
+      "@id": "urn:entry-binding:scrolled-tour",
+      "entryRef": "urn:entry:scrolled-tour",
+      "value": "moodle.administration"
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:tour-footer-step",
+      "label": "The tour step on the page footer is shown"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:tour-footer-step",
+      "graphNodeRef": "urn:state:tour-footer-step"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:tour-footer-step",
+      "observeSurfaceRef": "urn:surface:tour-footer-step",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:footer-step"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:tour-orphaned-step",
+      "label": "The orphaned tour step is shown"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:tour-orphaned-step",
+      "graphNodeRef": "urn:state:tour-orphaned-step"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:tour-orphaned-step",
+      "observeSurfaceRef": "urn:surface:tour-orphaned-step",
+      "observationEventRef": "urn:observation-event:presence",
+      "expectedMatchCount": 1,
+      "locatorRefs": [
+        "urn:locator:orphaned-step"
+      ]
+    },
+    {
+      "@type": "State",
+      "@id": "urn:state:tour-ended",
+      "label": "The tour is dismissed"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:tour-ended",
+      "graphNodeRef": "urn:state:tour-ended"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:tour-ended",
+      "observeSurfaceRef": "urn:surface:tour-ended",
+      "observationEventRef": "urn:observation-event:absence",
+      "expectedMatchCount": 0,
+      "locatorRefs": [
+        "urn:locator:orphaned-step"
+      ]
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:tour-next",
+      "label": "Go to the next tour step",
+      "from": "urn:state:tour-footer-step",
+      "to": "urn:state:tour-orphaned-step",
+      "commandRef": "urn:transition:tour-next:command"
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:transition:tour-next:command",
+      "label": "Go to the next tour step"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:tour-next",
+      "graphNodeRef": "urn:transition:tour-next:command"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:tour-next",
+      "observeSurfaceRef": "urn:surface:tour-next",
+      "observationEventRef": "urn:observation-event:activation",
+      "locatorRefs": [
+        "urn:locator:next"
+      ]
+    },
+    {
+      "@type": "TransitionMaterialization",
+      "@id": "urn:materialization:tour-next:pointer",
+      "label": "Point at Next (1/2) and press",
+      "materializationTransitionRef": "urn:transition:tour-next",
+      "materializationModalityRef": "observability:pointer",
+      "materializationStepRefs": [
+        "urn:step:tour-next:pointer:1",
+        "urn:step:tour-next:pointer:2"
+      ]
+    },
+    {
+      "@type": "MoveStep",
+      "@id": "urn:step:tour-next:pointer:1",
+      "stepMoveKindRef": "operability:pointAt",
+      "stepLocatorRef": "urn:locator:next"
+    },
+    {
+      "@type": "ActivationStep",
+      "@id": "urn:step:tour-next:pointer:2",
+      "stepPreviousRef": "urn:step:tour-next:pointer:1"
+    },
+    {
+      "@type": "Transition",
+      "@id": "urn:transition:tour-end",
+      "label": "End the tour",
+      "from": "urn:state:tour-orphaned-step",
+      "to": "urn:state:tour-ended",
+      "commandRef": "urn:transition:tour-end:command"
+    },
+    {
+      "@type": "Command",
+      "@id": "urn:transition:tour-end:command",
+      "label": "End the tour"
+    },
+    {
+      "@type": "Surface",
+      "@id": "urn:surface:tour-end",
+      "graphNodeRef": "urn:transition:tour-end:command"
+    },
+    {
+      "@type": "ObservationBinding",
+      "@id": "urn:obs:tour-end",
+      "observeSurfaceRef": "urn:surface:tour-end",
+      "observationEventRef": "urn:observation-event:activation",
+      "locatorRefs": [
+        "urn:locator:end-tour"
+      ]
+    },
+    {
+      "@type": "TransitionMaterialization",
+      "@id": "urn:materialization:tour-end:pointer",
+      "label": "Point at End tour and press",
+      "materializationTransitionRef": "urn:transition:tour-end",
+      "materializationModalityRef": "observability:pointer",
+      "materializationStepRefs": [
+        "urn:step:tour-end:pointer:1",
+        "urn:step:tour-end:pointer:2"
+      ]
+    },
+    {
+      "@type": "MoveStep",
+      "@id": "urn:step:tour-end:pointer:1",
+      "stepMoveKindRef": "operability:pointAt",
+      "stepLocatorRef": "urn:locator:end-tour"
+    },
+    {
+      "@type": "ActivationStep",
+      "@id": "urn:step:tour-end:pointer:2",
+      "stepPreviousRef": "urn:step:tour-end:pointer:1"
+    },
+    {
+      "@type": "MoveStep",
+      "@id": "urn:step:admin-enters-username:text-entry:1",
+      "stepMoveKindRef": "operability:nextStop"
+    },
+    {
+      "@type": "MoveStep",
+      "@id": "urn:step:admin-enters-username:text-entry:2",
+      "stepMoveKindRef": "operability:nextStop",
+      "stepPreviousRef": "urn:step:admin-enters-username:text-entry:1",
+      "stepLocatorRef": "urn:locator:username"
+    },
+    {
+      "@type": "TransitionMaterialization",
+      "@id": "urn:materialization:admin-enters-username:text-entry",
+      "label": "Focus moves to the field",
+      "materializationTransitionRef": "urn:transition:admin-enters-username",
+      "materializationModalityRef": "urn:openuji:input-modality:keyboard-text-entry",
+      "materializationStepRefs": [
+        "urn:step:admin-enters-username:text-entry:1",
+        "urn:step:admin-enters-username:text-entry:2"
+      ]
+    },
+    {
+      "@type": "MoveStep",
+      "@id": "urn:step:admin-enters-password:text-entry:1",
+      "stepMoveKindRef": "operability:nextStop",
+      "stepLocatorRef": "urn:locator:password"
+    },
+    {
+      "@type": "TransitionMaterialization",
+      "@id": "urn:materialization:admin-enters-password:text-entry",
+      "label": "Focus moves to the field",
+      "materializationTransitionRef": "urn:transition:admin-enters-password",
+      "materializationModalityRef": "urn:openuji:input-modality:keyboard-text-entry",
+      "materializationStepRefs": [
+        "urn:step:admin-enters-password:text-entry:1"
+      ]
+    }
+  ]
+}

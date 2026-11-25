@@ -1,0 +1,16 @@
+Usage:
+  journey-service-ios ios check <config.yaml> [--service <key>] [--require-locale <locale>] [--github-output]
+
+Commands:
+  ios check  Check that the iOS Simulator target in services.<key>.options has a runtime and
+             device type that agree. Prints a confirmation line.
+             --require-locale also requires the target's locale pin to equal <locale>, for a
+             caller whose models depend on it; no locale is assumed without it.
+             --github-output writes simulator, device-type and runtime to GITHUB_OUTPUT, for
+             a step that selects or caches the simulator runtime.
+             Defaults: --service ios.
+
+Exit codes:
+  0  Success.
+  1  The configuration failed the check.
+  2  Invalid arguments.

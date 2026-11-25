@@ -1,0 +1,33 @@
+{
+  "name": "@openuji/journey-vendor-moodle",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./web": "./src/web/client.ts",
+    "./web/plugin": "./src/web/plugin.ts",
+    "./build/service": "./src/services/build/plugin.ts",
+    "./stack/service": "./src/services/stack/plugin.ts",
+    "./user-tours/service": "./src/services/user-tours/plugin.ts"
+  },
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@openuji/journey-execution-model": "workspace:*",
+    "@openuji/journey-platform-web": "workspace:*",
+    "@openuji/journey-plugin": "workspace:*",
+    "@openuji/journey-service-docker": "workspace:*",
+    "@openuji/journey-service-git": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  }
+}

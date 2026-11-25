@@ -20,6 +20,9 @@
  *    and it loads no browser or device runtime.
  * 10. journey-runner depends on no platform, vendor or executor package.
  * 11. Toolkit packages depend on no vendor, executor or observer package.
+ *
+ * Command-line contract:
+ * 12. Every bin commits its --help output as contract/<bin>.help.txt, and a test under test/ compares the two.
  */
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
@@ -133,6 +136,15 @@ for (const name of (await readdir(packagesDirectory, { withFileTypes: true })).f
     const observationEntry = manifest.exports?.["./observation"];
     if (typeof observationEntry !== "string") fail(manifestPath, "rule 9: executor package declares no ./observation entry");
     else await assertEntryLoadsNo(deviceRuntime, resolve(directory, observationEntry), "rule 9: the ./observation entry loads");
+  }
+  // Rule 12: third-party tools rely on what a CLI says, so every bin commits its help and a test checks it.
+  const bins = typeof manifest.bin === "string" ? [name] : Object.keys(manifest.bin ?? {});
+  for (const bin of bins) {
+    const contract = `contract/${bin}.help.txt`;
+    if (!await readFile(join(directory, contract), "utf8").then(() => true, () => false)) fail(manifestPath, `rule 12: bin ${bin} has no committed ${contract}`);
+    const tests = (await files(join(directory, "test"))).filter((file) => sourceExtensions.test(file));
+    const sources = await Promise.all(tests.map((file) => readFile(file, "utf8")));
+    if (!sources.some((source) => source.includes(contract))) fail(manifestPath, `rule 12: no test under test/ checks ${contract}`);
   }
 }
 

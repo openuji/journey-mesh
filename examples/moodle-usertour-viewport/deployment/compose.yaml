@@ -1,0 +1,29 @@
+# A Moodle site for the user tour journeys. The Moodle stack service writes MOODLE_IMAGE and the
+# stack's environment (see mesh.yaml) to the env file it names in MOODLE_STACK_ENV_FILE.
+services:
+  postgres:
+    # Moodle 6.0 requires PostgreSQL 17.
+    image: postgres:17-alpine@sha256:f9cf3e1f0066f0eb0c48707d864f0ac5941e9ff454a072077d97a4d278d07d73
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - postgres:/var/lib/postgresql/data
+
+  moodle:
+    image: ${MOODLE_IMAGE:?Provided by the Moodle stack service}
+    # The stack installs Moodle as soon as the container is up, so the database must be ready first.
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${MOODLE_PORT:?}:80"
+
+volumes:
+  postgres:

@@ -1,9 +1,9 @@
 import { playwrightObservationContract } from "@openuji/journey-executor-playwright/observation";
-import { defineExecutorObserverPlugin, knownOptions, optionsObject, requiredString, type JourneyPluginContext } from "@openuji/journey-plugin";
+import { booleanOption, defineExecutorObserverPlugin, knownOptions, optionsObject, requiredString, type JourneyConfigContext } from "@openuji/journey-plugin";
 import { validateUXConfiguration, type UXConfiguration, type UXCounter, type UXCheckpoint, type UXProbe } from "./index.js";
 import { uxObserver } from "./playwright.js";
 
-function settings(options: Record<string, unknown>, context: JourneyPluginContext): UXConfiguration {
+function settings(options: Record<string, unknown>, context: JourneyConfigContext): UXConfiguration {
   knownOptions(options, ["id", "counters", "checkpoints", "probes"]);
   const list = <T>(key: string, keys: readonly string[], references: readonly string[]): T[] => {
     const values = options[key] ?? [];
@@ -23,7 +23,12 @@ function settings(options: Record<string, unknown>, context: JourneyPluginContex
   const config = { id: requiredString(options.id, "id"), operations: context.operations,
     counters: list<UXCounter>("counters", ["id", "label", "from", "until", "operations", "status"], ["from", "until"]),
     checkpoints: list<UXCheckpoint>("checkpoints", ["id", "label", "operation"], ["operation"]),
-    probes: list<UXProbe>("probes", ["id", "label", "at", "target"], ["at", "target"])
+    probes: list<UXProbe>("probes", ["id", "label", "at", "target", "expect", "screenshot"], ["at", "target"]).map((probe) => {
+      const { expect, screenshot, ...rest } = probe as UXProbe & { expect?: unknown; screenshot?: unknown };
+      if (expect !== undefined && !Array.isArray(expect)) throw new Error(`probes.${probe.id}.expect must be an array`);
+      return { ...rest, ...(expect !== undefined ? { expect: expect.map((item) => requiredString(item, `probes.${probe.id}.expect`)) as UXProbe["expect"] } : {}),
+        ...(screenshot !== undefined ? { screenshot: booleanOption(screenshot) } : {}) };
+    })
   };
   validateUXConfiguration(config);
   return config;
@@ -31,8 +36,8 @@ function settings(options: Record<string, unknown>, context: JourneyPluginContex
 export const journeyMeshPlugin = defineExecutorObserverPlugin({
   kind: "executor-observer", observationContract: playwrightObservationContract,
   parse: settings,
-  create(configuration) {
-    const observer = uxObserver(configuration);
+  create(configuration, context) {
+    const observer = uxObserver(configuration, context.artifacts);
     return { observer, output: ({ result }) => observer.output(result) };
   }
 });

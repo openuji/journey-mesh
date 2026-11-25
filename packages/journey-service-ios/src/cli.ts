@@ -1,44 +1,32 @@
 import { appendFile } from "node:fs/promises";
 import { loadSuiteConfig, interpolate } from "@openuji/journey-host";
 import { parseIosTarget, validateIosTarget } from "@openuji/journey-toolkit-ios";
+import { runCommand, type CliDefinition } from "@openuji/journey-plugin/cli";
 
-const help = `Usage:
-  journey-service-ios ios check <config.yaml> [--service <key>] [--require-locale <locale>] [--github-output]
-
-Loads <config.yaml>'s services.<key> options (default "ios"), parses and
-validates the iOS simulator target (runtime/deviceType agreement). --require-locale
-asserts the target's own locale pin matches exactly. --github-output writes
-simulator/device-type/runtime as GITHUB_OUTPUT entries.`;
-
-function parseFlags(args: readonly string[]): { service: string; requireLocale?: string; githubOutput: boolean } {
-  let service = "ios";
-  let requireLocale: string | undefined;
-  let githubOutput = false;
-  for (let index = 0; index < args.length; index++) {
-    const argument = args[index]!;
-    if (argument === "--github-output") { githubOutput = true; continue; }
-    if (argument === "--service" || argument === "--require-locale") {
-      const value = args[++index];
-      if (!value || value.startsWith("--")) throw new Error(`Missing value for ${argument}`);
-      if (argument === "--service") service = value; else requireLocale = value;
-      continue;
+/** The command-line contract; its help is committed as contract/journey-service-ios.help.txt. */
+export const cli: CliDefinition = {
+  program: "journey-service-ios",
+  commands: {
+    "ios check": {
+      arguments: ["<config.yaml>"], options: { "--service": { value: "<key>", default: "ios" }, "--require-locale": { value: "<locale>" } }, switches: ["--github-output"],
+      description: [
+        "Check that the iOS Simulator target in services.<key>.options has a runtime and device type that agree. Prints a confirmation line.",
+        "--require-locale also requires the target's locale pin to equal <locale>, for a caller whose models depend on it; no locale is assumed without it.",
+        "--github-output writes simulator, device-type and runtime to GITHUB_OUTPUT, for a step that selects or caches the simulator runtime."
+      ]
     }
-    throw new Error(`Unknown option ${argument}`);
-  }
-  return { service, requireLocale, githubOutput };
-}
+  },
+  exits: { 0: "Success.", 1: "The configuration failed the check.", 2: "Invalid arguments." }
+};
 
 export async function main(args: readonly string[]): Promise<number> {
-  if (!args.length || args.includes("--help")) { console.log(help); return 0; }
-  const [group, action, path, ...flags] = args;
-  try {
-    if (group !== "ios" || action !== "check" || !path) throw new Error(help);
-    const { service, requireLocale, githubOutput } = parseFlags(flags);
+  return runCommand(cli, args, async ({ positionals: [path], options, switches }) => {
+    const service = options["--service"], requireLocale = options["--require-locale"], githubOutput = switches.has("--github-output");
     const loaded = await loadSuiteConfig(path);
     const rawOptions = loaded.config.services[service]?.options;
     if (!rawOptions) throw new Error(`${path} is missing services.${service}.options`);
-    const options = interpolate(rawOptions, loaded.env, `services.${service}.options`);
-    const target = parseIosTarget(options);
+    const targetOptions = interpolate(rawOptions, loaded.env, `services.${service}.options`);
+    const target = parseIosTarget(targetOptions);
     validateIosTarget(target);
     if (requireLocale !== undefined && target.locale !== requireLocale) {
       throw new Error(`services.${service}.options.locale is ${target.locale ?? "unset"}; expected ${requireLocale}`);
@@ -50,9 +38,5 @@ export async function main(args: readonly string[]): Promise<number> {
       ].join("\n"));
     }
     console.log(`iOS simulator target's runtime and deviceType agree (services.${service}).`);
-    return 0;
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : "journey-service-ios failed");
-    return 1;
-  }
+  });
 }

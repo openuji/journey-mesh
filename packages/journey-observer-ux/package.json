@@ -19,9 +19,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
-    "test": "node --import tsx --test test/*.test.ts"
+    "test": "node --import tsx --test test/*.test.ts",
+    "test:browser": "node --import tsx --test test/*.test.mts"
   },
   "devDependencies": {
-    "tsx": "^4.20.3"
+    "tsx": "^4.20.3",
+    "playwright": "^1.61.1"
   }
 }
