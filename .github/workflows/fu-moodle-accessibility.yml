@@ -31,6 +31,8 @@ jobs:
       RESULT_DIR: examples/moodle-usertour-viewport/test-results
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Resolve source to an exact commit
         shell: bash
         run: |
