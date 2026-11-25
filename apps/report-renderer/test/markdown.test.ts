@@ -21,6 +21,16 @@ test("the Markdown summary reads the report model as plain JSON", async () => {
   assert.doesNotMatch(markdown, /## collective-own/);
 });
 
+test("measurements show their unit, except true/false values", async () => {
+  const measurement = (label: string, unit: string, value: number | boolean) => ({ id: label, label, method: "probe", unit, aggregation: "identity", status: "available" as const, value, scope: { runId: "run", executionId: "execution", profileId: "keyboard", operationIds: [] } });
+  const measured = { ...savedTest(), observers: [{ id: "custom", kind: "custom", errors: [], evidence: {}, measurements: [measurement("Visible", "boolean", true), measurement("Scroll", "px", 1114)] }] };
+  const directory = await writeRun(await mkdtemp(join(tmpdir(), "markdown-units-")), suiteRun([measured]));
+  await buildReport(directory);
+  const markdown = await renderMarkdown(reader(directory));
+  assert.match(markdown, /- keyboard · Visible: true\n/);
+  assert.match(markdown, /- keyboard · Scroll: 1114 px\n/);
+});
+
 test("comparisons summarize subjects and changed measurements", async () => {
   const root = await mkdtemp(join(tmpdir(), "markdown-comparison-"));
   const measured = (value: number) => ({ ...savedTest(), observers: [{ id: "custom", kind: "custom", errors: [], evidence: {}, measurements: [{ id: "effort", label: "Effort", method: "count", unit: "command", aggregation: "count", status: "available" as const, value, scope: { runId: "run", executionId: "execution", profileId: "keyboard", operationIds: [] } }] }] });

@@ -1,0 +1,23 @@
+Usage:
+  pnpm --filter @openuji/report-renderer serve <run-directory> [--port <number>]
+  pnpm --filter @openuji/report-renderer site <run-directory> --out <directory> [--max-file-size-mib <number>]
+  pnpm --filter @openuji/report-renderer markdown <run-directory> [--output <file.md>]
+
+Commands:
+  serve     Serve the interactive viewer for a run or comparison directory on 127.0.0.1,
+            reading its existing report; runs nothing. Prints Journey Mesh report: <url>.
+            Defaults: --port 9323.
+  site      Publish a run or comparison directory with the viewer as a static site in --out.
+            A JSON file larger than --max-file-size-mib is split into linked parts; any
+            other file over the limit fails. Prints Site: <path>.
+            Defaults: --max-file-size-mib 5.
+  markdown  Print a Markdown summary of the report, for a CI job summary or a pull request
+            comment, or write it to --output and print Markdown: <path>.
+
+<run-directory> resolves against the directory pnpm was started from, and must contain
+report/report.json; build one with journey-mesh report.
+
+Exit codes:
+  0  Success.
+  1  The command failed.
+  2  Invalid arguments, or <run-directory> has no report.

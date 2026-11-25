@@ -139,15 +139,29 @@ the executor ([`second-vendor.test.ts`](../packages/journey-host/test/second-ven
 - Rendering reads the report model and evidence files, never run records.
   Publication concerns (static sites, file-size limits, splitting) belong to the
   app; run directories are never split.
-- `journey-mesh test` exits 0 when all tests passed, 1 when one failed, 2 on a
-  configuration error, and 3 when the tests passed but the report could not be
-  built.
+
+### Command-line contract
+
+Third-party tools, such as agent skills, run the CLIs and rely on what they
+print: help text, exit codes, the first line of an error, and the stdout lines
+the help documents.
+
+- Each CLI declares its commands once, with `@openuji/journey-plugin/cli`.
+  Parsing, defaults, usage lines, help and argument errors derive from that
+  declaration, so a CLI cannot accept what its help does not say, or the
+  reverse.
+- Each CLI's `--help` is committed as `contract/<cli>.help.txt`, and a test in
+  `test/contract.test.ts` compares the two and checks the help's promises.
+  Rule 12 of `pnpm lint` requires both for every bin.
+- Every CLI exits 0 on success, 1 on failure and 2 on invalid arguments.
+  `journey-mesh` also exits 2 on invalid configuration, and 3 when tests passed
+  but the report could not be built.
 
 ## Where the details are
 
 | Topic | Source of truth |
 | --- | --- |
-| CLI | `journey-mesh --help` |
+| CLIs | `--help`, committed as `contract/*.help.txt` in [`journey-cli`](../packages/journey-cli/contract), [`journey-executor-appium`](../packages/journey-executor-appium/contract), [`journey-service-android`](../packages/journey-service-android/contract), [`report-renderer`](../apps/report-renderer/contract) |
 | Suite configuration | [`journey-host/src/config/schema.ts`](../packages/journey-host/src/config/schema.ts) |
 | Plugin kinds and contracts | [`journey-plugin/src/plugins.ts`](../packages/journey-plugin/src/plugins.ts) |
 | Run record format | [`journey-run-record/src/types.ts`](../packages/journey-run-record/src/types.ts), [`paths.ts`](../packages/journey-run-record/src/paths.ts) |

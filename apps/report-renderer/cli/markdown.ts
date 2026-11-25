@@ -5,14 +5,15 @@
 import { writeFile } from "node:fs/promises";
 import { runReader } from "@openuji/journey-run-record/node";
 import type { ReportModel, TestModel } from "@openuji/journey-reporter/model";
-import { fromInvocation, parseArgs, runScript } from "./args.js";
+import { fromInvocation, reportDirectory, runScript } from "./args.js";
 
 /** Reads a UTF-8 file of the directory; `href` is relative to it. */
 export type TextReader = (href: string) => Promise<string>;
 
 const cell = (value: unknown) => String(value ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 const icon = (ok: boolean) => ok ? "✅" : "❌";
-const value = (metric: { value: unknown; unit: string }) => metric.value === null ? "unavailable" : `${String(metric.value)} ${metric.unit}`.trim();
+const value = (metric: { value: unknown; unit: string }) => metric.value === null ? "unavailable"
+  : typeof metric.value === "boolean" ? String(metric.value) : `${String(metric.value)} ${metric.unit}`.trim();
 
 async function suite(read: TextReader, model: ReportModel, heading = "#"): Promise<string[]> {
   const lines = [`${heading} ${icon(model.ok)} ${cell(model.label ?? "Journey Mesh run")}`, ""];
@@ -64,11 +65,11 @@ export async function renderMarkdown(read: TextReader): Promise<string> {
   return lines.join("\n").trimEnd() + "\n";
 }
 
-const usage = "Usage: pnpm --filter @openuji/report-renderer markdown <run-directory> [--output <file.md>]";
-runScript(import.meta.url, async (args) => {
-  const { positionals: [directory], flags } = parseArgs(args, usage);
-  const read = runReader(fromInvocation(directory));
+runScript(import.meta.url, "markdown", async ({ positionals: [directory], options: flags }) => {
+  const read = runReader(await reportDirectory(directory));
   const markdown = await renderMarkdown(async (href) => new TextDecoder().decode(await read(href)));
-  if (flags["--output"]) await writeFile(fromInvocation(flags["--output"]), markdown);
-  else process.stdout.write(markdown);
+  if (flags["--output"]) {
+    await writeFile(fromInvocation(flags["--output"]), markdown);
+    console.log(`Markdown: ${fromInvocation(flags["--output"])}`);
+  } else process.stdout.write(markdown);
 });

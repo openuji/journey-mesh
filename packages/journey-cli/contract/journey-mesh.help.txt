@@ -1,0 +1,57 @@
+Usage:
+  journey-mesh test <config.yaml> [--test <id>] [--output <directory>] [--no-report]
+  journey-mesh validate <config.yaml>... [--test <id>]
+  journey-mesh discover <config.yaml> [--test <id>] [--profile <id>] [--output <directory>] [--apply] [--rediscover]
+  journey-mesh report <run-directory> [--config <config.yaml>]
+  journey-mesh export <run-directory> [--output <file.json>] [--data]
+  journey-mesh compare <baseline-run> <candidate-run> [--pairings <file.yaml>] [--title <text>] [--config <config.yaml>] [--output <directory>]
+  journey-mesh services up <config.yaml> [--service <key>]
+  journey-mesh services down <config.yaml> [--service <key>]
+
+Commands:
+  test           Run the tests and write a run record to --output (default: the YAML's
+                 outputDir, else test-results next to it), then build its report model below
+                 <output>/report/ from the YAML's report: section (skip with --no-report).
+                 Without --test, every test is selected, and all must pass preflight before
+                 any starts. Prints PASS <id> or FAIL <id> per test, then Run record: <path>
+                 and, with a report, Report model: <path>.
+  validate       Preflight configurations without starting services or running anything.
+                 Takes several, for example both sides of a comparison. Prints Valid tests:
+                 <ids>.
+  discover       Find the keyboard and pointer paths the model does not declare yet, and
+                 write them to materializations.json in --output (default: discover/ in the
+                 suite's output directory). Web only: a test with a journey on any other
+                 executor, such as Android, is rejected. --apply declares the found paths
+                 through the suite's model plugin, and --rediscover measures declared paths
+                 again. An authoring aid; test never discovers.
+  report         Rebuild <run-directory>/report/ from the run record; runs nothing. --config
+                 selects the report: section to apply. Without it, no interpreters run, so
+                 observer data such as axe results is left out. Prints Run record: <path>
+                 and Report model: <path>.
+  export         Print the report as one JSON value with test models and views inlined, or
+                 write it to --output and print Exported report: <path>. --data also inlines
+                 every interpreter output.
+  compare        Copy two run directories below --output and pair their executions by test
+                 and profile ID; runs nothing. A subject keeps its own report; --config
+                 builds a missing one. Prints PASS or FAIL per subject, then Comparison:
+                 <path>. --pairings pairs different IDs with a YAML list of:
+                   - { id: <id>, baseline: { test: <id>, profile: <id> },
+                       candidate: { test: <id>, profile: <id> } }
+                 Defaults: --output comparison-results.
+  services up    Start configured services and their dependencies outside a test run, and
+                 leave them running. Without --service, every service in the YAML is
+                 selected.
+  services down  Stop services started with services up, and their dependencies. Without
+                 --service, every service in the YAML is selected.
+
+View a report or comparison with the workspace renderer:
+  pnpm --filter @openuji/report-renderer serve <run-directory>
+
+Exit codes:
+  0  Success.
+  1  test: a test failed. discover: a test failed, a path was not found, profiles found
+     different paths, or preflight still fails after --apply. compare: a subject did not
+     pass. Any command: an unexpected error.
+  2  Invalid arguments or configuration.
+  3  test: the tests passed, but the report could not be built. report: the report could not
+     be built.
