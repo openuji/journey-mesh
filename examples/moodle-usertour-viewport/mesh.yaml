@@ -26,7 +26,7 @@ services:
   source:
     use: "@openuji/journey-service-git/plugin"
     options:
-      repository: https://github.com/zavalit/moodle.git
+      repository: ${MOODLE_SOURCE_REPOSITORY:-https://github.com/zavalit/moodle.git}
       sha: ${MOODLE_SOURCE_SHA:-b5b1675c7967fea1df5f1bd4961710c33a74ea43}
       directory: ./.runtime/source/moodle
   build:
@@ -40,7 +40,7 @@ services:
       composerImage: composer:2@sha256:cd3a90dc5624c59a2f9ddf80dad08569f06416db31de519024f249d63bca554b
       verifyFiles:
         # The compiled tour code MDL-90255 changes; the running site must serve exactly these bytes.
-        - public/admin/tool/usertours/amd/build/tour.min.js
+        - ${MOODLE_TOUR_ASSET:-public/admin/tool/usertours/amd/build/tour.min.js}
   stack:
     use: "@openuji/journey-vendor-moodle/stack/service"
     inputs:
