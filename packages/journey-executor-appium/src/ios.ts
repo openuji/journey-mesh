@@ -272,7 +272,7 @@ class AppiumIosExecution implements JourneyExecutorSession {
         "appium:fullReset": true,
         "appium:language": "en",
         "appium:locale": "en_US",
-        "appium:newCommandTimeout": 180,
+        "appium:newCommandTimeout": 300,
         "appium:wdaLaunchTimeout": 120_000,
         "appium:autoAcceptAlerts": true,
         "appium:settings[defaultActiveApplication]": "auto",

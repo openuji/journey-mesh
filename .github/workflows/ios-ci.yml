@@ -1,0 +1,120 @@
+name: Nextcloud iOS CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nextcloud-ios-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    name: Alice web / Bob iOS
+    # macos-26-intel provides Xcode 26 + iOS 26 Simulator and nested virtualization
+    # required by Colima/Docker for the Nextcloud Compose stack (Apple Silicon hosted
+    # runners reject nested virtualization with HV_UNSUPPORTED).
+    runs-on: macos-26-intel
+    timeout-minutes: 90
+    env:
+      APPIUM_HOME: ${{ github.workspace }}/.tmp/appium
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Select Xcode 26 and available iOS simulator target
+        run: |
+          if ! xcodebuild -version | head -n 1 | grep -Eq '^Xcode 2[6-9]\.'; then
+            xcode_app=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)
+            if [ -n "$xcode_app" ]; then
+              sudo xcode-select -s "$xcode_app/Contents/Developer"
+            fi
+          fi
+          xcodebuild -version
+          node -e '
+            const { execFileSync } = require("node:child_process");
+            const fs = require("node:fs");
+            const list = JSON.parse(execFileSync("xcrun", ["simctl", "list", "--json"], { encoding: "utf8" }));
+            const runtimes = (list.runtimes ?? []).filter((r) => r.isAvailable !== false && /^iOS\b/i.test(r.name ?? ""));
+            if (!runtimes.length) throw new Error("No available iOS simulator runtimes on runner");
+            const defaultRuntime = process.env.IOS_RUNTIME || "26.4";
+            const matchedRuntime = runtimes.find((r) => r.version === defaultRuntime)
+              ?? runtimes.filter((r) => String(r.version).startsWith("26.")).at(-1)
+              ?? runtimes.at(-1);
+            const devices = (list.devicetypes ?? []).filter((d) => /^iPhone\b/.test(d.name ?? ""));
+            const defaultDevice = process.env.IOS_DEVICE_TYPE || "iPhone 17";
+            const matchedDevice = devices.find((d) => d.name === defaultDevice)
+              ?? devices.find((d) => /^iPhone 1[67]\b/.test(d.name))
+              ?? devices.at(-1);
+            if (!matchedDevice) throw new Error("No available iPhone simulator device types on runner");
+            const lines = [];
+            if (matchedRuntime.version !== defaultRuntime) lines.push("IOS_RUNTIME=" + matchedRuntime.version);
+            if (matchedDevice.name !== defaultDevice) lines.push("IOS_DEVICE_TYPE=" + matchedDevice.name);
+            if (lines.length) fs.appendFileSync(process.env.GITHUB_ENV, lines.join("\n") + "\n");
+            console.log("Selected simulator target:", matchedDevice.name, "iOS", matchedRuntime.version);
+          '
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check iOS runtime target
+        id: ios-runtime
+        run: pnpm --filter @openuji/example-nextcloud-filesharing ios:check --github-output
+      - name: Cache Nextcloud iOS build
+        uses: actions/cache@v4
+        with:
+          path: examples/nextcloud-filesharing/.runtime/builds/nextcloud-ios
+          key: ${{ runner.os }}-${{ runner.arch }}-nextcloud-ios-${{ steps.ios-runtime.outputs.runtime }}-${{ hashFiles('examples/nextcloud-filesharing/mesh.yaml', 'examples/nextcloud-filesharing/deployment/fixtures/mock-GoogleService-Info.plist') }}
+      - name: Start Docker runtime
+        run: |
+          if ! command -v colima >/dev/null 2>&1 || ! command -v docker >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install colima docker docker-compose
+          elif ! docker compose version >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install docker-compose
+          fi
+          if [ -x "$(brew --prefix)/opt/docker-compose/bin/docker-compose" ]; then
+            mkdir -p ~/.docker/cli-plugins
+            ln -sf "$(brew --prefix)/opt/docker-compose/bin/docker-compose" ~/.docker/cli-plugins/docker-compose
+          fi
+          colima start --runtime docker --cpu 2 --memory 4
+          docker version
+          docker compose version
+          grep -q 'host.docker.internal' /etc/hosts || echo '127.0.0.1 host.docker.internal' | sudo tee -a /etc/hosts >/dev/null
+      - name: Build and prepare tooling
+        run: |
+          pnpm build
+          pnpm --filter @openuji/journey-executor-playwright exec playwright install chromium
+          pnpm --filter @openuji/journey-executor-appium exec journey-executor-appium appium ensure-driver --driver xcuitest
+      - name: Run mixed journey on iOS simulator
+        run: |
+          mkdir -p .tmp/ios-logs
+          (while true; do date -u +"=== %Y-%m-%dT%H:%M:%SZ ==="; vm_stat; df -h /; sleep 15; done) > .tmp/ios-logs/resources.log 2>&1 &
+          resource_pid=$!
+          trap 'kill "$resource_pid" 2>/dev/null || true' EXIT
+          pnpm --filter @openuji/example-nextcloud-filesharing e2e:ios
+      - name: Capture runner diagnostics
+        if: always()
+        run: |
+          mkdir -p .tmp/ios-logs
+          xcrun simctl list > .tmp/ios-logs/simctl-list.txt 2>&1 || true
+          vm_stat > .tmp/ios-logs/memory-after.txt 2>&1 || true
+          df -h > .tmp/ios-logs/disk-after.txt 2>&1 || true
+          colima stop >/dev/null 2>&1 || true
+      - name: Upload evidence and logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nextcloud-filesharing-ios
+          if-no-files-found: warn
+          path: |
+            examples/nextcloud-filesharing/test-results
+            examples/nextcloud-filesharing/.tmp/diagnostics
+            examples/nextcloud-filesharing/.runtime/builds/nextcloud-ios/*.log
+            .tmp/ios-logs

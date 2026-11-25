@@ -107,15 +107,15 @@ services:
         POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
         NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER}
         NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD}
-        NEXTCLOUD_ALICE_HOST: ${NEXTCLOUD_IOS_STACK_HOST}
+        NEXTCLOUD_ALICE_HOST: ${NEXTCLOUD_IOS_STACK_HOST:-host.docker.internal}
         NEXTCLOUD_ALICE_PORT: ${NEXTCLOUD_IOS_ALICE_PORT:-18085}
-        NEXTCLOUD_ALICE_URL: &ios-alice-url http://${NEXTCLOUD_IOS_STACK_HOST}:${NEXTCLOUD_IOS_ALICE_PORT:-18085}
+        NEXTCLOUD_ALICE_URL: &ios-alice-url http://${NEXTCLOUD_IOS_STACK_HOST:-host.docker.internal}:${NEXTCLOUD_IOS_ALICE_PORT:-18085}
         NEXTCLOUD_ALICE_DB: ${NEXTCLOUD_ALICE_DB}
         NEXTCLOUD_ALICE_DB_USER: ${NEXTCLOUD_ALICE_DB_USER}
         NEXTCLOUD_ALICE_DB_PASSWORD: ${NEXTCLOUD_ALICE_DB_PASSWORD}
-        NEXTCLOUD_BOB_HOST: ${NEXTCLOUD_IOS_STACK_HOST}
+        NEXTCLOUD_BOB_HOST: ${NEXTCLOUD_IOS_STACK_HOST:-host.docker.internal}
         NEXTCLOUD_BOB_PORT: ${NEXTCLOUD_IOS_BOB_PORT:-18086}
-        NEXTCLOUD_BOB_URL: &ios-bob-url http://${NEXTCLOUD_IOS_STACK_HOST}:${NEXTCLOUD_IOS_BOB_PORT:-18086}
+        NEXTCLOUD_BOB_URL: &ios-bob-url http://${NEXTCLOUD_IOS_STACK_HOST:-host.docker.internal}:${NEXTCLOUD_IOS_BOB_PORT:-18086}
         NEXTCLOUD_BOB_DB: ${NEXTCLOUD_BOB_DB}
         NEXTCLOUD_BOB_DB_USER: ${NEXTCLOUD_BOB_DB_USER}
         NEXTCLOUD_BOB_DB_PASSWORD: ${NEXTCLOUD_BOB_DB_PASSWORD}
@@ -203,7 +203,7 @@ tests:
   browser-sharing:
     services:
       - web-stack
-    timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-600000}
+    timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-900000}
     journeys:
       - id: alice-setup
         source: ./ujg/setup.web.ujg.jsonld
@@ -258,7 +258,7 @@ tests:
   native-recipient-sharing:
     services:
       - android-stack
-    timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-600000}
+    timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-900000}
     environment:
       use: "@openuji/journey-vendor-nextcloud/federated-sharing/plugin"
       options:
@@ -307,7 +307,7 @@ tests:
   ios-recipient-sharing:
     services:
       - ios-stack
-    timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-600000}
+    timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-900000}
     environment:
       use: "@openuji/journey-vendor-nextcloud/federated-sharing/plugin"
       options:
@@ -472,7 +472,7 @@ executors:
             source: user.username
           urn:transition:bob-enters-password:
             source: user.password
-          urn:transition:alice-enters-remote-bob: ${NEXTCLOUD_BOB_USER}@http://${NEXTCLOUD_IOS_STACK_HOST}:${NEXTCLOUD_IOS_BOB_PORT:-18086}
+          urn:transition:alice-enters-remote-bob: ${NEXTCLOUD_BOB_USER}@http://${NEXTCLOUD_IOS_STACK_HOST:-host.docker.internal}:${NEXTCLOUD_IOS_BOB_PORT:-18086}
     observers:
       - use: "@openuji/journey-observer-operability/plugin"
         options:

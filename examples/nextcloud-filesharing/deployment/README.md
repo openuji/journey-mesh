@@ -9,6 +9,7 @@ initialization, source environment defaults, and the scenario fixture.
 | --- | --- | --- | --- |
 | `web-stack` | `journey-mesh-filesharing-web` | `host.docker.internal` | 18081 / 18082 |
 | `android-stack` | `journey-mesh-filesharing-android` | `NEXTCLOUD_ANDROID_STACK_HOST` | 18083 / 18084 |
+| `ios-stack` | `journey-mesh-filesharing-ios` | `host.docker.internal` | 18085 / 18086 |
 
 ## Run
 
@@ -57,10 +58,11 @@ configure emulator DNS.
 
 YAML contains the pinned Nextcloud image/version and these overridable defaults:
 
-- `NEXTCLOUD_WEB_STACK_PROJECT`, `NEXTCLOUD_ANDROID_STACK_PROJECT`
-- `NEXTCLOUD_WEB_STACK_HOST` (browser only)
+- `NEXTCLOUD_WEB_STACK_PROJECT`, `NEXTCLOUD_ANDROID_STACK_PROJECT`, `NEXTCLOUD_IOS_STACK_PROJECT`
+- `NEXTCLOUD_WEB_STACK_HOST` (browser), `NEXTCLOUD_IOS_STACK_HOST` (iOS Simulator)
 - `NEXTCLOUD_WEB_ALICE_PORT`, `NEXTCLOUD_WEB_BOB_PORT`
 - `NEXTCLOUD_ANDROID_ALICE_PORT`, `NEXTCLOUD_ANDROID_BOB_PORT`
+- `NEXTCLOUD_IOS_ALICE_PORT`, `NEXTCLOUD_IOS_BOB_PORT`
 
 Shared account and database defaults use the `NEXTCLOUD_ALICE_*`,
 `NEXTCLOUD_BOB_*`, `NEXTCLOUD_ADMIN_*`, and `POSTGRES_*` values in `.env.example`.

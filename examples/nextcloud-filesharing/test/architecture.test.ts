@@ -143,12 +143,13 @@ test("native Android and iOS selections require hosts and share overridden URLs 
     }
   }
 
-  const iosStackEnvironment = config.services["ios-stack"].options.environment as Record<string, string>;
-  assert.throws(() => interpolate(iosStackEnvironment.NEXTCLOUD_ALICE_HOST, {}, "ios-stack"), /NEXTCLOUD_IOS_STACK_HOST/);
-  await assert.rejects(
-    validateSuite(path, { test: "ios-recipient-sharing", env: { NEXTCLOUD_IOS_STACK_HOST: "" } }),
-    /NEXTCLOUD_IOS_STACK_HOST/
-  );
+  const { env: defaultIosEnv } = await loadSuiteConfig(path, {});
+  const defaultIosStack = interpolate(config.services["ios-stack"].options, defaultIosEnv, "ios-stack") as {
+    environment: Record<string, string>;
+  };
+  assert.equal(defaultIosStack.environment.NEXTCLOUD_ALICE_URL, "http://host.docker.internal:18085");
+  assert.equal(defaultIosStack.environment.NEXTCLOUD_BOB_URL, "http://host.docker.internal:18086");
+  assert.deepEqual((await validateSuite(path, { test: "ios-recipient-sharing", env: {} })).tests, ["ios-recipient-sharing"]);
   const { env: iosEnv } = await loadSuiteConfig(path, {
     NEXTCLOUD_IOS_STACK_HOST: "192.0.2.50",
     NEXTCLOUD_IOS_ALICE_PORT: "19085",

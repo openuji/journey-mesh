@@ -19,7 +19,26 @@ export const createIosWebdriverIoSession: IosAppiumSessionFactory = async (optio
       const found = await client.findElements("xpath", xpath);
       return Object.freeze(found.map((item) => Object.freeze({ elementId: item["element-6066-11e4-a52e-4f735466cecf"] })));
     },
-    async tap(id) { await client.elementClick(id); },
+    async tap(id) {
+      let previous = await client.getElementRect(id).catch(() => undefined);
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        const [current, hittable] = await Promise.all([
+          client.getElementRect(id).catch(() => undefined),
+          client.getElementAttribute(id, "hittable").catch(() => undefined)
+        ]);
+        const stable =
+          !previous ||
+          !current ||
+          (current.x === previous.x &&
+            current.y === previous.y &&
+            current.width === previous.width &&
+            current.height === previous.height);
+        previous = current;
+        if (stable && (hittable === undefined || hittable === null || hittable === "true")) break;
+      }
+      await client.elementClick(id);
+    },
     async setValue(id, value) {
       const placeholder = await client.getElementAttribute(id, "placeholderValue").catch(() => undefined);
       const isFilled = (actual: string | null | undefined): boolean =>
@@ -60,6 +79,11 @@ export const createIosWebdriverIoSession: IosAppiumSessionFactory = async (optio
     async activateApplication(bundleId) { await client.execute("mobile: activateApp", { bundleId }); },
     async terminateApplication(bundleId) { await client.execute("mobile: terminateApp", { bundleId }); },
     async openDeepLink(url, bundleId) { await client.execute("mobile: deepLink", { url, bundleId }); },
-    async close() { await client.deleteSession(); }
+    async close() {
+      try { await client.deleteSession(); }
+      catch (error) {
+        if (!/terminated or not started|invalid session id/i.test(String(error))) throw error;
+      }
+    }
   };
 };
