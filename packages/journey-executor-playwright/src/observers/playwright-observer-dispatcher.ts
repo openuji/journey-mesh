@@ -3,6 +3,7 @@ import type { JourneyExecutionDescriptor } from "@openuji/journey-runner";
 
 import type {
   PlaywrightExecutionObserver,
+  PlaywrightFailureObservation,
   PlaywrightOperationObservation
 } from "./contracts.js";
 
@@ -29,6 +30,14 @@ export class PlaywrightObserverDispatcher {
       if (!observer.observeOperation) continue;
 
       await observer.observeOperation(observation);
+    }
+  }
+
+  /** An operation failed. Errors thrown here are dropped so they never replace the operation's own error. */
+  async failed(failure: PlaywrightFailureObservation): Promise<void> {
+    for (const observer of this.observers) {
+      try { await observer.observeFailure?.(failure); }
+      catch { /* The operation's error is the one that counts. */ }
     }
   }
 }

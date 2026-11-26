@@ -1,4 +1,5 @@
 import {
+  isCanonical,
   keyboardInputModalityId,
   keyboardTextEntryInputModalityId,
   pointerInputModalityId,
@@ -16,7 +17,8 @@ export type JourneyProfileScope = Pick<JourneyProfile, "appliesTo">;
 export type MaterializationSelectionOptions = {
   /**
    * Materialization IRIs to run when a transition declares several through the selected
-   * modality. The first listed candidate wins; source order never decides.
+   * modality. The first listed candidate wins; source order never decides. A canonical
+   * materialization always runs first, so beside one this chooses its fallback.
    */
   materializationPreference?: readonly string[];
   /**
@@ -113,37 +115,72 @@ function selectDecision(
     const match = findProfileWithSingleModality(operation.activation.requiredInputModalityProfiles, modalityId);
     if (!match) continue;
     const materialization = selectMaterialization(profileId, operation, match.modality, selection);
+    const fallback = selectFallback(profileId, operation, match.modality, selection);
     return Object.freeze({
       profileId,
       inputModalityProfile: match.profile,
       modality: match.modality,
-      ...(materialization ? { materialization } : {})
+      ...(materialization ? { materialization } : {}),
+      ...(fallback ? { fallback } : {})
     });
   }
   throw new Error(`No supported input modality for ${operation.transition.id} in profile ${profileId}`);
 }
 
-/** Choose the one declared materialization to perform; never guess among alternatives. */
+/** Choose the one declared materialization to perform first: the canonical one, else never guess among several. */
 export function selectMaterialization(
   profileId: string,
   operation: TransitionPlanOperation,
   modality: ResolvedInputModality,
   selection: Required<MaterializationSelectionOptions>
 ): ResolvedTransitionMaterialization | undefined {
-  const candidates = (operation.materializations ?? []).filter((candidate) => candidate.modality.id === modality.id);
-  if (candidates.length === 1) return candidates[0];
-  if (candidates.length > 1) {
-    const preferred = selection.materializationPreference.find((id) => candidates.some((candidate) => candidate.id === id));
-    if (preferred) return candidates.find((candidate) => candidate.id === preferred);
+  const candidates = declaredThrough(operation, modality);
+  const canonical = candidates.filter(isCanonical);
+  if (canonical.length > 1) {
     throw new Error(
-      `Transition ${operation.transition.id} declares ${candidates.length} TransitionMaterializations through ${modality.id} ` +
-      `(${candidates.map((candidate) => candidate.id).join(", ")}); list the one to run in profile ${profileId} option materializationPreference`
+      `Transition ${operation.transition.id} declares ${canonical.length} canonical TransitionMaterializations through ${modality.id} ` +
+      `(${canonical.map((candidate) => candidate.id).join(", ")}); only one can be canonical`
     );
   }
+  if (canonical.length === 1) return canonical[0];
+  if (candidates.length) return chooseOne(profileId, operation, modality, candidates, selection);
   if (modality.id === keyboardTextEntryInputModalityId || !selection.requireMaterialization) return undefined;
   throw new Error(
     `Transition ${operation.transition.id} has no TransitionMaterialization through ${modality.id} (profile ${profileId}); ` +
     "declare the steps in the UJG document"
+  );
+}
+
+/** Beside a canonical materialization, the declared one that may be performed when a check of it fails. */
+function selectFallback(
+  profileId: string,
+  operation: TransitionPlanOperation,
+  modality: ResolvedInputModality,
+  selection: Required<MaterializationSelectionOptions>
+): ResolvedTransitionMaterialization | undefined {
+  const candidates = declaredThrough(operation, modality);
+  if (!candidates.some(isCanonical)) return undefined;
+  const others = candidates.filter((candidate) => !isCanonical(candidate));
+  return others.length ? chooseOne(profileId, operation, modality, others, selection) : undefined;
+}
+
+function declaredThrough(operation: TransitionPlanOperation, modality: ResolvedInputModality): ResolvedTransitionMaterialization[] {
+  return (operation.materializations ?? []).filter((candidate) => candidate.modality.id === modality.id);
+}
+
+function chooseOne(
+  profileId: string,
+  operation: TransitionPlanOperation,
+  modality: ResolvedInputModality,
+  candidates: readonly ResolvedTransitionMaterialization[],
+  selection: Required<MaterializationSelectionOptions>
+): ResolvedTransitionMaterialization {
+  if (candidates.length === 1) return candidates[0]!;
+  const preferred = selection.materializationPreference.find((id) => candidates.some((candidate) => candidate.id === id));
+  if (preferred) return candidates.find((candidate) => candidate.id === preferred)!;
+  throw new Error(
+    `Transition ${operation.transition.id} declares ${candidates.length} TransitionMaterializations through ${modality.id} ` +
+    `(${candidates.map((candidate) => candidate.id).join(", ")}); list the one to run in profile ${profileId} option materializationPreference`
   );
 }
 

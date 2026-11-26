@@ -106,3 +106,20 @@ test("the interpreter publishes one labelled data document and no node metrics",
   assert.deepEqual(interpretation.data?.map((item) => [item.name, item.format, item.label]), [["operability.json", operabilityReportFormat, "Input steps"]]);
   await assert.rejects(async () => journeyMeshInterpreter.interpret({ test: { plan, result } as never, output: { ...output, evidence: {} }, excludedPhaseIds: [], read: async () => new Uint8Array(), readJson: async () => ({}) as never }, undefined), /has no recorded operability evidence/);
 });
+
+test("a transition decided twice shows the materialization that took it, and the failed one as extra rows", () => {
+  const decided = { runId: "run", executionId: "keyboard-only", profileId: "keyboard-only", operationId: "select-drafts", inputModalityProfileId: "urn:p:keyboard", modalityId: keyboard.id };
+  const report = buildOperabilityReport({ observerId: "input-steps", test: { plan, result }, excludedPhaseIds: ["urn:phase:setup"], evidence: {
+    ...evidence,
+    decisions: [{ ...decided, materializationId: "urn:material:expected" }, { ...decided, materializationId: "urn:material:keyboard" }],
+    actions: [
+      action("keyboard-only", "select-drafts", "k/0", "failed", { stepId: "urn:step:expected", command: "activate", error: { name: "Error", message: "the user must be at the tab" } }),
+      action("keyboard-only", "select-drafts", "k/1", "completed", { stepId: "urn:step:k1", gesture: "Tab" })
+    ]
+  } });
+  const selected = report.executions[0]!.transitions[0]!;
+  assert.equal(selected.input?.materialization?.id, "urn:material:keyboard");
+  assert.deepEqual(selected.steps.map((step) => [step.stepId, step.status]), [
+    ["urn:step:k1", "completed"], ["urn:step:k2", "not-performed"], ["urn:step:k3", "not-performed"], ["urn:step:expected", "failed"]
+  ]);
+});

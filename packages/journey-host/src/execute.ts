@@ -80,7 +80,9 @@ async function executeTest(test: AssembledTest, options: ExecuteOptions): Promis
     clearTimeout(timer); options.signal?.removeEventListener("abort", abort);
   }
   const { outputs, errors } = await collectObserverOutputs(test.observers, result);
-  const verdict = { result, observers: outputs, observerErrors: errors };
+  // What an observer threw during the run counts against the test like an invalid output.
+  const observerErrors = [...test.observers.flatMap((component) => component.thrown()), ...errors];
+  const verdict = { result, observers: outputs, observerErrors };
   return immutableSnapshot({ format: testRecordFormat, version: runRecordVersion, id: test.id, ok: testPassed(verdict), ...journeySegments(test),
     plan: test.plan, ...verdict, files: test.artifacts.files });
 }

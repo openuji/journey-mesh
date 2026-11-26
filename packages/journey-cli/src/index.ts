@@ -30,7 +30,7 @@ export const cli: CliDefinition = {
     },
     discover: {
       arguments: ["<config.yaml>"], options: { "--test": { value: "<id>" }, "--profile": { value: "<id>" }, "--output": { value: "<directory>" } }, switches: ["--apply", "--rediscover"],
-      description: ["Find the keyboard and pointer paths the model does not declare yet, and write them to materializations.json in --output (default: discover/ in the suite's output directory). Web only: a test with a journey on any other executor, such as Android, is rejected. --apply declares the found paths through the suite's model plugin, and --rediscover measures declared paths again. An authoring aid; test never discovers."],
+      description: ["Find the keyboard and pointer paths the model does not declare yet, and write them to materializations.json in --output (default: discover/ in the suite's output directory). Web only: a test with a journey on any other executor, such as Android, is rejected. --apply declares the found paths through the suite's model plugin, and --rediscover measures declared paths again. A canonical materialization is performed as declared and never replaced; where a check of it fails before it sends input, the path beside it is found. An authoring aid; test never discovers."],
       exits: { 1: "a test failed, a path was not found, profiles found different paths, or preflight still fails after --apply" }
     },
     report: {

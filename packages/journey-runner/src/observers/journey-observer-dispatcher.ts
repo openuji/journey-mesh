@@ -14,28 +14,30 @@ export class JourneyObserverDispatcher {
 
   async runStarted(
     input: JourneyObserverRunStartedInput
-  ): Promise<JourneyRunError | undefined> {
-    for (const observer of this.journeyObservers) {
-      if (!observer.onRunStarted) continue;
-
-      try {
-        await observer.onRunStarted(input);
-      } catch (error) {
-        return errorToJourneyRunError(error);
-      }
-    }
-
-    return undefined;
+  ): Promise<readonly JourneyRunError[]> {
+    return this.started((observer) => observer.onRunStarted?.(input));
   }
 
   async executionStarted(
     execution: JourneyExecutionDescriptor
-  ): Promise<void> {
-    for (const observer of this.journeyObservers) {
-      if (!observer.onExecutionStarted) continue;
+  ): Promise<readonly JourneyRunError[]> {
+    return this.started((observer) => observer.onExecutionStarted?.({ execution }));
+  }
 
-      await observer.onExecutionStarted({ execution });
+  /** Tells every observer that something starts. One that throws stops neither the others nor the run. */
+  private async started(
+    notify: (observer: JourneyObserver) => Promise<void> | void
+  ): Promise<readonly JourneyRunError[]> {
+    const errors: JourneyRunError[] = [];
+    for (const observer of this.journeyObservers) {
+      try {
+        await notify(observer);
+      } catch (error) {
+        errors.push(errorToJourneyRunError(error));
+      }
     }
+
+    return errors;
   }
 
   async executionCompleted(

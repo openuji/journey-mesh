@@ -170,3 +170,11 @@ test("manual plans need no source references for measurement", () => {
   const output = deriveUXOutput({ ...config, operations: manual, result: result(manual), actions: [actionFact("command", "accept")], observations: [] });
   assert.equal(output.measurements[0].value, 1);
 });
+
+test("a transition taken through its fallback counts the inputs of the path that took it, and the interval completes", () => {
+  const through = (id: string, operationId: string, materializationId: string, status: JourneyInputAction["status"] = "completed") => ({ ...actionFact(id, operationId, status), materializationId });
+  const actions = [actionFact("a", "navigate"), through("b", "accept", "urn:canonical", "failed"), through("c", "accept", "urn:fallback"), through("d", "accept", "urn:fallback")];
+  const output = derive(result(operations, "accept"), actions);
+  assert.deepEqual([output.measurements[0].status, output.measurements[0].value], ["available", 3]);
+  assert.equal(output.measurements[2].value, false, "the checkpoint still says the canonical path failed");
+});

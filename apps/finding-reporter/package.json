@@ -1,0 +1,30 @@
+{
+  "name": "@openuji/finding-reporter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Turns a run's findings into GitHub-ready bundles: annotated screenshots, issue text and evidence. An app, not a library.",
+  "dependencies": {
+    "@openuji/journey-plugin": "workspace:*",
+    "@openuji/journey-report-findings": "workspace:*",
+    "@openuji/journey-reporter": "workspace:*",
+    "@openuji/journey-run-record": "workspace:*",
+    "playwright": "^1.61.1",
+    "tsx": "^4.20.3"
+  },
+  "devDependencies": {
+    "@openuji/journey-execution-model": "workspace:*",
+    "@openuji/journey-executor-playwright": "workspace:*",
+    "@openuji/journey-observer-findings": "workspace:*",
+    "@openuji/journey-runner": "workspace:*",
+    "@types/node": "^22.13.14",
+    "typescript": "^5.8.3"
+  },
+  "scripts": {
+    "bundle": "tsx cli/bundle.ts",
+    "typecheck:test": "tsc -p tsconfig.json",
+    "test": "node --import tsx --test test/*.test.ts",
+    "test:browser": "node --import tsx --test test/*.test.mts"
+  }
+}

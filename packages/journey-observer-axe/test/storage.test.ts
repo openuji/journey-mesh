@@ -56,3 +56,50 @@ test("308 audits are captured once as raw evidence files; the recorded output st
   for (const file of rawAudits) passingNodes += ((await readFile(join(directory, file.href), "utf8")).match(/raw-only-/g) ?? []).length;
   assert.equal(passingNodes, 153_252);
 });
+
+test("an operation observed again, as a transition taken through its fallback is, is audited once", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "axe-repeated-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const operation = { id: "state", sequence: 0, kind: "state" as const, actorId: "actor", touchpointId: "app",
+    entry: { id: "entry", stateId: "state" }, state: { id: "state" }, surface: { id: "surface" },
+    target: { expectedMatchCount: 1, bindings: [], observation: { stateId: "state", surfaceId: "surface", expectedMatchCount: 1, bindings: [] } } };
+  const plan: JourneyPlan = { id: "repeated", operations: [operation] };
+  const violation = { id: "rule", nodes: [{ target: ["#a"], html: "<a>", any: [], all: [], none: [] }] };
+  const scan = () => ({ url: "https://example.test/", violations: [violation], incomplete: [], inapplicable: [], passes: [] }) as unknown as AxeResults;
+  const observer = axeObserver({ artifacts: fileEvidenceStore(directory, "tests/repeated/files"), reportId: "audits", auditRunner: async (input) => buildAxeAuditReport({
+    auditId: input.auditId, metadata: input.metadata, url: "https://example.test/", createdAt: "now", strict: false
+  }, [], { pageState: scan(), matchedSurface: scan() }) });
+  const execution = executionDescriptor({ plan, profile: { id: "default" }, runId: "repeated", executionId: "default" });
+  observer.onExecutionStarted!({ execution });
+  for (let attempt = 0; attempt < 2; attempt++) await observer.observeOperation!({ stage: "state-asserted", execution, operation, expectedMatchCount: 1, locator: {} as never, page: {} as never });
+  assert.equal(observer.evidence.filter((fact) => fact.kind === "operation-observed").length, 1);
+  const output = observer.output({ ok: true, runId: "repeated", plan: { id: plan.id }, errors: [], assessments: [],
+    executions: [{ executionId: "default", profileId: "default", outcome: { kind: "passed" } }],
+    evidence: { executions: [{ executionId: "default", profileId: "default", operations: [{ operationId: "state", operationKind: "state", outcome: { kind: "passed" } }] }] } });
+  assert.equal(output.measurements.find((metric) => metric.id === "axe/pageState/violations")?.value, 1);
+});
+
+test("a failed audit leaves the counts partial, also when the execution went on and passed", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "axe-missing-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const operations = [0, 1].map((index) => ({ id: `state-${index}`, sequence: index, kind: "state" as const, actorId: "actor", touchpointId: "app",
+    entry: { id: "entry", stateId: "state-0" }, state: { id: `state-${index}` }, surface: { id: "surface" },
+    target: { expectedMatchCount: 1, bindings: [], observation: { stateId: `state-${index}`, surfaceId: "surface", expectedMatchCount: 1, bindings: [] } } }));
+  const plan: JourneyPlan = { id: "missing", operations };
+  const scan = () => ({ url: "https://example.test/", violations: [], incomplete: [], inapplicable: [], passes: [] }) as unknown as AxeResults;
+  let audits = 0;
+  const observer = axeObserver({ artifacts: fileEvidenceStore(directory, "tests/missing/files"), reportId: "audits", auditRunner: async (input) => {
+    if (audits++ === 1) throw new Error("axe timed out");
+    return buildAxeAuditReport({ auditId: input.auditId, metadata: input.metadata, url: "https://example.test/", createdAt: "now", strict: false }, [], { pageState: scan(), matchedSurface: scan() });
+  } });
+  const execution = executionDescriptor({ plan, profile: { id: "default" }, runId: "missing", executionId: "default" });
+  observer.onExecutionStarted!({ execution });
+  const observe = async (index: number) => observer.observeOperation!({ stage: "state-asserted", execution, operation: operations[index]!, expectedMatchCount: 1, locator: {} as never, page: {} as never });
+  await observe(0);
+  await assert.rejects(observe(1), /axe timed out/);
+  const output = observer.output({ ok: true, runId: "missing", plan: { id: plan.id }, errors: [], assessments: [],
+    executions: [{ executionId: "default", profileId: "default", outcome: { kind: "passed" } }],
+    evidence: { executions: [{ executionId: "default", profileId: "default", operations: operations.map((operation) => ({ operationId: operation.id, operationKind: "state", outcome: { kind: "passed" } })) }] } });
+  const metric = output.measurements.find((item) => item.id === "axe/pageState/violations");
+  assert.deepEqual([metric?.status, metric?.reason], ["partial", "An axe audit did not complete."]);
+});

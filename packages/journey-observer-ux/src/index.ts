@@ -92,16 +92,24 @@ export function deriveUXOutput(input: UXConfiguration & Readonly<{
   const errors: { name: string; message: string }[] = [];
   for (const execution of input.result.evidence.executions) {
     const matching = (fact: { runId: string; executionId: string; profileId: string }) => fact.runId === input.result.runId && fact.executionId === execution.executionId && fact.profileId === execution.profileId;
-    const actions = [...new Map(input.actions.filter(matching).map((action) => [action.id, action])).values()];
+    const performed = [...new Map(input.actions.filter(matching).map((action) => [action.id, action])).values()];
+    // A transition taken through its fallback was performed twice: only the materialization that took it counts.
+    const taking = new Map(performed.map((action) => [action.operationId, action.materializationId]));
+    const actions = performed.filter((action) => action.materializationId === taking.get(action.operationId));
     const scope = (operationIds: readonly string[]) => ({ runId: input.result.runId, executionId: execution.executionId, profileId: execution.profileId, operationIds });
     const passed = (id: string) => execution.operations.some((op) => op.operationId === id && op.outcome.kind === "passed");
+    // The runner goes on after a failed operation only when its transition was taken through its fallback.
+    const reached = (id: string) => {
+      const index = execution.operations.findIndex((op) => op.operationId === id);
+      return index >= 0 && (execution.operations[index]!.outcome.kind === "passed" || index < execution.operations.length - 1);
+    };
     for (const counter of input.counters) {
       const from = input.operations.findIndex((op) => op.id === counter.from);
       const until = input.operations.findIndex((op) => op.id === counter.until);
       const operationIds = input.operations.slice(from, until + 1).map((op) => op.id);
       const observed = actions.filter((action) => operationIds.includes(action.operationId) && (!counter.operations || counter.operations.includes(action.operationId)));
-      const started = passed(counter.from) || observed.length > 0;
-      const complete = passed(counter.from) && passed(counter.until);
+      const started = reached(counter.from) || observed.length > 0;
+      const complete = reached(counter.from) && reached(counter.until);
       const status = counter.status ?? "attempted";
       measurements.push({
         id: counter.id, label: counter.label, method: `adapter-command-${status}`, unit: "adapter-command", aggregation: "count", scope: scope(operationIds),

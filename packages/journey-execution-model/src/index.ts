@@ -173,13 +173,65 @@ export type ResolvedTransitionMaterialization = LabeledRef & {
   extensions?: Readonly<Record<string, unknown>>;
 };
 
+/**
+ * The `extensions` key that marks the TransitionMaterialization saying how its transition is expected
+ * to be performed through its modality. Its presence marks it; UJG requires the value to be an object,
+ * `{}`. A Journey Mesh convention until UJG specifies it. A run performs the canonical one first;
+ * another materialization of the transition through the same modality is only the way on after a check of
+ * it failed.
+ */
+export const canonicalMaterializationExtension = "urn:openuji:journey-mesh:canonical";
+
+export function isCanonical(materialization: ResolvedTransitionMaterialization): boolean {
+  return materialization.extensions?.[canonicalMaterializationExtension] !== undefined;
+}
+
 export type ResolvedMaterializationStep = LabeledRef & {
   kind: "move" | "activation" | "shortcut";
   previousStepId?: string;
   locator?: ResolvedAccessibleLocator;
+  /** `focus` for a FocusMoveKind, `move` for a MoveKind: the model's type, never inferred from the IRI. */
   moveKind?: LabeledRef & { type: "focus" | "move" };
   extensions?: Readonly<Record<string, unknown>>;
 };
+
+/** The standard Operability move kinds by type, for code that makes steps itself rather than reading a model. */
+export const standardMoveKindTypes: Readonly<Record<string, "focus" | "move">> = Object.freeze({
+  [nextStopMoveKindId]: "focus",
+  [previousStopMoveKindId]: "focus",
+  [nextItemMoveKindId]: "focus",
+  [previousItemMoveKindId]: "focus",
+  [firstItemMoveKindId]: "focus",
+  [lastItemMoveKindId]: "focus",
+  [pointAtMoveKindId]: "move",
+  "operability:nextPage": "move",
+  "operability:previousPage": "move"
+});
+
+/**
+ * What "the object the user is at" means for a step: focus, the pointer, or neither (`other`, a move
+ * of the view or a kind no executor knows).
+ */
+export type StepPosition = "focus" | "pointer" | "other";
+
+/**
+ * Where the user is for `step` (Operability RC4). A MoveStep's kind decides what it moves: a
+ * FocusMoveKind moves focus, `operability:pointAt` the pointer. Any other step acts where the last
+ * MoveStep before it (in performance order) that moved focus or the pointer left the user. Before any
+ * such move, the user is at the pointer in a pointer materialization and at focus otherwise.
+ */
+export function stepPosition(materialization: ResolvedTransitionMaterialization, step: ResolvedMaterializationStep): StepPosition {
+  const moved = (item: ResolvedMaterializationStep): StepPosition =>
+    item.moveKind?.type === "focus" ? "focus" : item.moveKind?.id === pointAtMoveKindId ? "pointer" : "other";
+  if (step.kind === "move") return moved(step);
+  const index = materialization.steps.findIndex((item) => item.id === step.id);
+  for (const item of materialization.steps.slice(0, Math.max(index, 0)).reverse()) {
+    if (item.kind !== "move") continue;
+    const position = moved(item);
+    if (position !== "other") return position;
+  }
+  return materialization.modality.id === pointerInputModalityId ? "pointer" : "focus";
+}
 
 export type TransitionPlanOperation = JourneyPlanOperationBase<"transition"> & {
   transition: LabeledRef & {
@@ -241,4 +293,9 @@ export type InputModalityDecision = {
    * profile allows unmaterialized transitions, or for producer text entry, which types at the current focus.
    */
   materialization?: ResolvedTransitionMaterialization;
+  /**
+   * Set only beside a canonical `materialization`: the runner performs this one when a check of that one
+   * fails and the user is at this one's start, and records the operation as failed.
+   */
+  fallback?: ResolvedTransitionMaterialization;
 };

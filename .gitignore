@@ -14,3 +14,5 @@ apps/web/
 .netlify
 examples/moodle-usertour-viewport/test-results/
 examples/moodle-usertour-viewport/.runtime/
+finding-report-*
+.DS_Store

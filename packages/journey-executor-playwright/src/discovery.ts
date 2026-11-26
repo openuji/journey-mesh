@@ -7,6 +7,7 @@ import {
   pointerInputModalityId,
   previousItemMoveKindId as previousItem,
   previousStopMoveKindId as previousStop,
+  standardMoveKindTypes,
   type InputModalityDecision,
   type ResolvedAccessibleLocator,
   type ResolvedTransitionMaterialization,
@@ -365,7 +366,8 @@ function resolved(
     steps: steps.map((step, index) => ({
       id: `${id}:${index + 1}`,
       kind: step.kind,
-      ...(step.kind === "move" ? { moveKind: { id: step.moveKindId, type: step.moveKindId === pointAt ? "move" as const : "focus" as const } } : {}),
+      // Discovery only reports standard move kinds; their type comes from the vocabulary, not the IRI.
+      ...(step.kind === "move" ? { moveKind: { id: step.moveKindId, type: standardMoveKindTypes[step.moveKindId] ?? "move" } } : {}),
       ...(step.locatorId && locator ? { locator } : {})
     }))
   };

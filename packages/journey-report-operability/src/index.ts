@@ -96,7 +96,8 @@ export function buildOperabilityReport(input: Readonly<{
       profileId: execution.profileId,
       transitions: transitions.map((operation): OperabilityTransitionReport => {
         const recorded = outcomes.find((item) => item.operationId === operation.id);
-        const decision = evidence.decisions.find((item) => item.executionId === execution.executionId && item.operationId === operation.id);
+        // The last decision took the transition: a fallback materialization is decided after the failed one.
+        const decision = evidence.decisions.filter((item) => item.executionId === execution.executionId && item.operationId === operation.id).at(-1);
         const actions = evidence.actions.filter((item) => item.executionId === execution.executionId && item.operationId === operation.id);
         const materialization = decision?.materializationId
           ? operation.materializations?.find((item) => item.id === decision.materializationId)

@@ -69,22 +69,29 @@ function applyFeature(locator: Locator, feature: AccessibleFeature): Locator {
   throw new Error(`No Playwright executor for AccessibleFeature ${feature.name}`);
 }
 
+/** `failure` makes the error a failed check, when it is one: the count, or the first match never visible. */
 export async function assertPlaywrightLocator(
   locator: Locator,
   expectedCount: number,
-  options: { timeoutMs: number; signal?: AbortSignal }
+  options: { timeoutMs: number; signal?: AbortSignal; failure?: (message: string) => Error }
 ): Promise<void> {
   await pollUntil(async () => {
     const count = await locator.count();
     return count === expectedCount ? "ok" : `count:${count}`;
   }, { message: `Expected locator count ${expectedCount}`, ...options });
   options.signal?.throwIfAborted();
-  if (expectedCount > 0) await locator.first().waitFor({ state: "visible", timeout: options.timeoutMs });
+  if (expectedCount === 0) return;
+  try {
+    await locator.first().waitFor({ state: "visible", timeout: options.timeoutMs });
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === "TimeoutError" && !options.signal?.aborted;
+    throw timedOut && options.failure ? options.failure(`Expected locator to be visible; ${error.message.split("\n")[0]}`) : error;
+  }
 }
 
 export async function pollUntil(
   check: () => Promise<string>,
-  options: { message: string; timeoutMs: number; signal?: AbortSignal }
+  options: { message: string; timeoutMs: number; signal?: AbortSignal; failure?: (message: string) => Error }
 ): Promise<void> {
   const startedAt = Date.now();
   let lastValue = "not-run";
@@ -95,7 +102,8 @@ export async function pollUntil(
     if (lastValue === "ok") return;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  throw new Error(`${options.message}; last value: ${lastValue}`);
+  const message = `${options.message}; last value: ${lastValue}`;
+  throw options.failure?.(message) ?? new Error(message);
 }
 
 function expandedOption(locator: ResolvedAccessibleLocator): boolean | undefined {

@@ -17,7 +17,7 @@ flowchart LR
     reporter["reporter + interpreters"]
   end
   subgraph rendering["Rendering (apps)"]
-    renderer["viewer, static site, Markdown"]
+    renderer["viewer, static site, Markdown, finding bundles"]
   end
   host -->|writes| record -->|read by| reporter -->|report model| renderer
   cli["journey-cli (composition root)"] -.-> host
@@ -91,16 +91,49 @@ the executor ([`second-vendor.test.ts`](../packages/journey-host/test/second-ven
   evidence stores; nothing runtime is shared across runs.
 - **Sequential runner.** Profiles and operations run in order. A failed
   operation stops its profile; executor cleanup and environment teardown still
-  run, and their failures are kept next to the original one.
+  run, and their failures are kept next to the original one. The one exception
+  is a transition that has a fallback (see **Canonical materialization**) and
+  is taken through it: its operation is recorded as failed, the profile goes
+  on, and the execution fails
+  ([`integration.test.ts`](../packages/journey-runner/test/integration.test.ts)).
 - **Portable runner.** The runner never sees services, and its main entry loads
   no Node built-in or automation runtime
   ([`runner-portability.mjs`](../packages/journey-runner/test/runner-portability.mjs)).
 - **The model is the script.** A model binding lowers into the runner's existing
   operation kinds; unsupported source features fail explicitly. Executors
   perform what the model declares and never invent a path, step or locator.
-- **Observers only observe.** They own no session and start no interaction.
-  They affect a verdict only through `errors` in their output (for example a
-  strict accessibility policy).
+  What a step moves, and whether its check is about focus or the pointer, comes
+  from its move kind's type (`FocusMoveKind` or `MoveKind`), never from the
+  modality or an IRI ([`materialization-browser.test.mts`](../packages/journey-executor-playwright/test/materialization-browser.test.mts)).
+- **Canonical materialization.** The `urn:openuji:journey-mesh:canonical`
+  extension (`{}`; a convention until UJG specifies it) marks the
+  TransitionMaterialization saying how its transition is expected to be
+  performed through its modality, at most one per transition and modality. A
+  run performs it first, whatever the profile prefers
+  ([`profiles.test.ts`](../packages/journey-profiles/test/profiles.test.ts)).
+  Another declared materialization beside it is the fallback. The runner
+  performs it only after a start or step check of the canonical one failed, and
+  a findings observer sees that failure first. If the canonical one had sent
+  input, the fallback is performed only if it names its start
+  (`materializationStartLocatorRef`), which is checked before its steps. When
+  both fail, or an effect check fails after the fallback, the run record keeps
+  both errors
+  ([`integration.test.ts`](../packages/journey-runner/test/integration.test.ts),
+  [`materialization-browser.test.mts`](../packages/journey-executor-playwright/test/materialization-browser.test.mts)).
+  Discovery never replaces a canonical materialization, and measures a path
+  beside one only if a check of it failed before it sent input
+  ([`discovery-browser.test.mts`](../packages/journey-executor-playwright/test/discovery-browser.test.mts),
+  [`materializations.test.ts`](../packages/journey-model-ujg/test/materializations.test.ts)).
+- **Observers only observe.** They own no session, start no interaction and
+  never change what a run does. They affect a verdict only through errors: those
+  in their output (for example a strict accessibility policy), and those they
+  throw, which are recorded. The runner enforces this for journey observers, and
+  the host for the executor observers it hands to executors
+  ([`executor-observers.test.ts`](../packages/journey-host/test/executor-observers.test.ts),
+  [`integration.test.ts`](../packages/journey-runner/test/integration.test.ts)).
+  A transition taken through its fallback is shown to observers twice; they
+  record the operation once (axe audits it once, UX counts the materialization
+  that took it).
 - **Effects are verified by the environment**, not by observers, and effect
   checks never mutate the application.
 - **Services own their effects.** Effects start at `start()`, which returns
@@ -139,6 +172,17 @@ the executor ([`second-vendor.test.ts`](../packages/journey-host/test/second-ven
 - Rendering reads the report model and evidence files, never run records.
   Publication concerns (static sites, file-size limits, splitting) belong to the
   app; run directories are never split.
+- A finding is a failed check of what the model declares (a State's or a
+  Transition's object, a materialization's start or a step), captured with its
+  page before the error propagates; nothing is declared next to the model. Any
+  other failure, such as a missing key setting, is not shown to observers as
+  one, and a failure in an excluded phase is not a finding
+  ([`materialization-browser.test.mts`](../packages/journey-executor-playwright/test/materialization-browser.test.mts)).
+  The findings interpreter reads only the findings observer's evidence. A
+  finding bundle is written only from what the run captured, and its text cannot
+  mention anyone or reference an issue
+  ([`pipeline-browser.test.mts`](../apps/finding-reporter/test/pipeline-browser.test.mts),
+  [`document.test.ts`](../apps/finding-reporter/test/document.test.ts)).
 
 ### Command-line contract
 
@@ -161,7 +205,7 @@ the help documents.
 
 | Topic | Source of truth |
 | --- | --- |
-| CLIs | `--help`, committed as `contract/*.help.txt` in [`journey-cli`](../packages/journey-cli/contract), [`journey-executor-appium`](../packages/journey-executor-appium/contract), [`journey-service-android`](../packages/journey-service-android/contract), [`report-renderer`](../apps/report-renderer/contract) |
+| CLIs | `--help`, committed as `contract/*.help.txt` in [`journey-cli`](../packages/journey-cli/contract), [`journey-executor-appium`](../packages/journey-executor-appium/contract), [`journey-service-android`](../packages/journey-service-android/contract), [`report-renderer`](../apps/report-renderer/contract), [`finding-reporter`](../apps/finding-reporter/contract) |
 | Suite configuration | [`journey-host/src/config/schema.ts`](../packages/journey-host/src/config/schema.ts) |
 | Plugin kinds and contracts | [`journey-plugin/src/plugins.ts`](../packages/journey-plugin/src/plugins.ts) |
 | Run record format | [`journey-run-record/src/types.ts`](../packages/journey-run-record/src/types.ts), [`paths.ts`](../packages/journey-run-record/src/paths.ts) |

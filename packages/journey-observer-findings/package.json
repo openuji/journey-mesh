@@ -1,0 +1,31 @@
+{
+  "name": "@openuji/journey-observer-findings",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Captures every failed operation where it happens: a screenshot, the focused object, what the failed check expected, and the closest elements.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./plugin": "./src/plugin.ts",
+    "./evidence": "./src/evidence.ts"
+  },
+  "dependencies": {
+    "@openuji/journey-core": "workspace:*",
+    "@openuji/journey-execution-model": "workspace:*",
+    "@openuji/journey-executor-playwright": "workspace:*",
+    "@openuji/journey-plugin": "workspace:*",
+    "@openuji/journey-runner": "workspace:*",
+    "yaml": "2.9.1"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "test:browser": "node --import tsx --test test/*.test.mts"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3",
+    "playwright": "^1.61.1"
+  }
+}
