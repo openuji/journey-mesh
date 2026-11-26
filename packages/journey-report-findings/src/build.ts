@@ -1,6 +1,6 @@
 /**
- * Turns the findings observer's facts into findings: each failed operation, grouped across profiles.
- * Failures in excluded phases (setup) are left out. Reads the run record only.
+ * Turns the findings observer's facts into findings: each failed check, grouped across profiles.
+ * Failures in excluded phases (setup) are left out. Reads the findings observer's evidence only.
  */
 import { immutableSnapshot, type JourneyInputAction } from "@openuji/journey-core";
 import type { JourneyPlanOperation, ResolvedMaterializationStep } from "@openuji/journey-execution-model";
@@ -37,7 +37,6 @@ export function buildFindingsReport(input: BuildFindingsInput): FindingsReport {
   const operations = [...test.plan.operations].sort((left, right) => left.sequence - right.sequence);
   const operation = (id: string) => operations.find((item) => item.id === id);
   const executions: Execution[] = test.result.executions.map(({ executionId, profileId }) => ({ executionId, profileId }));
-  const outcomes = (executionId: string) => test.result.evidence.executions.find((item) => item.executionId === executionId)?.operations ?? [];
   const label = (id: string) => labelOf(operation(id), id);
 
   /** The keys up to `upTo`; in `upTo` itself, only those up to the step that failed. */
@@ -84,10 +83,10 @@ export function buildFindingsReport(input: BuildFindingsInput): FindingsReport {
       used.add(id);
       const text = failureText(failureClass, failure, label(failure.operationId), stepOf(operation(failure.operationId), failure.stepId));
       const frames: FindingFrame[] = [];
-      const confirmed = lastConfirmedState(execution.executionId, failure.operationId);
       const shot = failure.snapshot.screenshot;
-      if (confirmed && shot) {
-        frames.push({ key: "before", label: `Last confirmed: "${label(confirmed.operationId)}"`, screenshot: confirmed.href, viewport: shot.viewport, scale: shot.scale, fullPage: confirmed.fullPage, marks: [] });
+      if (failure.before && shot) {
+        const before = failure.before.screenshot;
+        frames.push({ key: "before", label: `Last confirmed: "${label(failure.before.operationId)}"`, screenshot: before.href, viewport: before.viewport, scale: before.scale, marks: [] });
       }
       if (shot) {
         const { marks, banners } = failureMarks(failureClass, failure);
@@ -108,19 +107,6 @@ export function buildFindingsReport(input: BuildFindingsInput): FindingsReport {
     });
   }
 
-  /**
-   * The newest screenshot another observer (an audit's full-page source screenshot, for example) took
-   * of the last state this execution confirmed before `operationId`. This observer screenshots failures only.
-   */
-  function lastConfirmedState(executionId: string, operationId: string): { operationId: string; href: string; fullPage: boolean } | undefined {
-    const failedAt = operation(operationId)?.sequence ?? 0;
-    const passed = new Set(outcomes(executionId).filter((item) => item.outcome.kind === "passed").map((item) => item.operationId));
-    const state = operations.filter((item) => item.kind === "state" && item.sequence < failedAt && passed.has(item.id)).at(-1);
-    if (!state) return undefined;
-    const chosen = test.files.filter((file) => file.contentType === "image/png" && file.scope?.executionId === executionId && file.scope.operationId === state.id && !file.name.startsWith(`${observerId}.`)).at(-1);
-    return chosen ? { operationId: state.id, href: chosen.href, fullPage: true } : undefined;
-  }
-
   const findings = failureFindings();
   findings.sort((left, right) => (operation(left.operationId)?.sequence ?? 0) - (operation(right.operationId)?.sequence ?? 0));
   return immutableSnapshot({ format: findingsReportFormat, version: 1, observerId, test: test.id, findings });
@@ -131,6 +117,7 @@ function classify(failure: FailureCapture): FailureClass {
   const expected = failure.expected;
   if (!expected) return "other";
   if (expected.kind === "focus") return "focus-mismatch";
+  if (expected.expectedCount === 0 && (expected.count ?? 0) > 0) return "target-present";
   if (expected.count === 0) return "target-missing";
   if (expected.count !== undefined && expected.count > expected.expectedCount) return "target-ambiguous";
   return "other";
@@ -156,8 +143,13 @@ function failureText(failureClass: FailureClass, failure: FailureCapture, operat
       return { title: nearMiss ? `${capitalize(target)} is named "${nearMiss.name}"${within}` : `${capitalize(target)} not found${within}`, expected: `A ${target}${within} ("${operationLabel}").`, observed: `No ${expected?.role ?? "element"} with that name is there.${found}` };
     case "target-ambiguous":
       return { title: `${expected!.count} elements match ${target}${within}`, expected: `Exactly ${expected!.expectedCount} ${target}${within} ("${operationLabel}").`, observed: `${expected!.count} elements match.${found}` };
+    case "target-present":
+      return { title: `${capitalize(target)} is still shown${within}`, expected: `No ${target}${within} ("${operationLabel}").`, observed: expected!.count === 1 ? "It is still there." : `${expected!.count} of them are still there.` };
     case "focus-mismatch": {
       const pressed = failure.gesture ? ` with ${failure.gesture}` : "";
+      if (expected?.start) {
+        return { title: `Focus is not on ${target} where "${operationLabel}" starts`, expected: `"${operationLabel}" starts with focus on ${target}.`, observed: focusNow };
+      }
       if (step?.kind === "move" && !step.locator) {
         return { title: `Focus does not move in "${operationLabel}"`, expected: `Focus moves${pressed}.`, observed: failure.snapshot.focus ? `Focus stays on ${describe(failure.snapshot.focus)}.` : focusNow };
       }
@@ -179,6 +171,15 @@ function failureMarks(failureClass: FailureClass, failure: FailureCapture): { ma
     if (!focus) banners.push("No element has focus");
     else if (focus.box) marks.push({ tone: "problem", box: focus.box, label: `focus: ${describe(focus)}` });
     if (failure.target?.box) marks.push({ tone: "expected", box: failure.target.box, label: `expected focus: ${describe(failure.target)}` });
+    return { marks, banners };
+  }
+  if (failureClass === "target-present") {
+    // What is still there: the objects with the name the State expected to be gone.
+    const name = failure.expected?.name;
+    const present = failure.candidates.filter((candidate) => name === undefined || (candidate.name !== undefined && normalizedName(candidate.name) === normalizedName(name)));
+    for (const candidate of present) if (candidate.box) marks.push({ tone: "problem", box: candidate.box, label: describe(candidate) });
+    if (!marks.length && failure.target?.box) marks.push({ tone: "problem", box: failure.target.box, label: describe(failure.target) });
+    if (!marks.length && failure.expected) banners.push(`${capitalize(named(failure.expected.role, failure.expected.name))} is still there`);
     return { marks, banners };
   }
   if (failureClass === "target-missing" || failureClass === "target-ambiguous") {
@@ -206,7 +207,7 @@ function isNearMiss(candidate: FailureCapture["candidates"][number], expectedNam
 
 function frame(key: FindingFrame["key"], label: string, snapshot: FindingSnapshot, marks: FindingMark[], banners: string[] = []): FindingFrame {
   const shot = snapshot.screenshot!;
-  return { key, label, screenshot: shot.href, viewport: shot.viewport, scale: shot.scale, fullPage: false, ...(banners.length ? { banner: banners.join(" · ") } : {}), marks };
+  return { key, label, screenshot: shot.href, viewport: shot.viewport, scale: shot.scale, ...(banners.length ? { banner: banners.join(" · ") } : {}), marks };
 }
 
 function markupOf(facts: readonly (ElementFact | null | undefined)[]): FindingMarkup[] {

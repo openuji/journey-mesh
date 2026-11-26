@@ -23,7 +23,7 @@ before(async () => {
   await page.setContent(`<div role="dialog" aria-label="Add widget" style="position:absolute;left:250px;top:60px;width:300px;height:300px;border:1px solid #888;padding:16px">
     <h2>Add widget</h2><div style="position:absolute;left:50px;top:60px;width:120px;height:32px;background:#eee">Widget type</div>
     <div style="position:absolute;left:50px;top:140px;width:120px;height:32px;background:#eee">Pick one</div></div>`);
-  images = { "tests/page-arrange/files/failure.png": await page.screenshot(), "tests/page-arrange/files/state.png": await page.screenshot({ fullPage: true }) };
+  images = { "tests/page-arrange/files/failure.png": await page.screenshot(), "tests/page-arrange/files/state.png": await page.screenshot() };
   await page.close();
 });
 after(async () => { await browser?.close(); });

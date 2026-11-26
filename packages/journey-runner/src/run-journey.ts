@@ -294,9 +294,15 @@ async function executeOperation(
     const decision = await selectInputModality(operation, input.context);
     const { performed, missed } = await performTransition(session, operation, decision, input.context.signal);
     input.context.signal?.throwIfAborted();
-    for (const effect of operation.effects) {
-      input.context.signal?.throwIfAborted();
-      await input.environment?.verifyEffect?.({ context: input.context, operation, effect, decision: performed });
+    try {
+      for (const effect of operation.effects) {
+        input.context.signal?.throwIfAborted();
+        await input.environment?.verifyEffect?.({ context: input.context, operation, effect, decision: performed });
+      }
+    } catch (error) {
+      // After a fallback the canonical materialization's failure stays next to the effect's.
+      if (!missed) throw error;
+      throw new AggregateError([missed, error], `${missed.message}; the effect check failed: ${errorToJourneyRunError(error).message}`);
     }
     if (missed) return { entries, missed };
   } else {

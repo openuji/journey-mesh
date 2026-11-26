@@ -1,15 +1,17 @@
 import {
   toPlaywrightLocator,
   toPlaywrightObservationLocator,
+  type PlaywrightCheck,
   type PlaywrightExecutionObserver,
   type PlaywrightFailureObservation
 } from "@openuji/journey-executor-playwright/observation";
 import { immutableSnapshot, type JourneyInputAction, type JourneyObserverOutput } from "@openuji/journey-core";
 import {
+  pointerInputModalityId,
   stepPosition,
   type ResolvedAccessibleLocator,
-  type ResolvedMaterializationStep,
-  type ResolvedTransitionMaterialization,
+  type ResolvedObservationBinding,
+  type StatePlanOperation,
   type TransitionPlanOperation
 } from "@openuji/journey-execution-model";
 import type { JourneyArtifactStore } from "@openuji/journey-plugin";
@@ -17,7 +19,9 @@ import type { RunResult } from "@openuji/journey-runner";
 import {
   findingsEvidenceFormat,
   findingsObserverKind,
+  normalizedName,
   type CaptureError,
+  type ConfirmedState,
   type ElementFact,
   type ExpectedTarget,
   type FailureCapture,
@@ -35,11 +39,23 @@ const screenshotTimeoutMs = 5_000;
 const fileSegment = (value: string) => value.replace(/[^A-Za-z0-9._-]+/g, "_");
 const errorOf = (error: unknown): CaptureError => ({ name: error instanceof Error ? error.name : "Error", message: error instanceof Error ? error.message : String(error) });
 
+type Shot = Readonly<{ png: Uint8Array; viewport: Viewport; scale: number; browser?: string }>;
+
 /**
- * Captures every failed operation where it happens: a screenshot, the focused object, what the failed
- * check expected, and the closest elements. What a finding is comes from the model: an operation that
- * failed against what it declares. It only reads the page and never throws, so it cannot change an
- * operation or a verdict. `artifacts` stores the screenshots; without it, only the facts are kept.
+ * What a failed check compared with the page. `objects` for a State's or the Transition's object, which
+ * must be there in the expected number; `user` for where the user is: focus, the pointer, or the object
+ * a ShortcutStep acts on.
+ */
+type Checked =
+  | Readonly<{ kind: "objects"; expected: "state" | "activation"; bindings: readonly ResolvedObservationBinding[]; expectedCount: number }>
+  | Readonly<{ kind: "user"; expected: "focus" | "pointer" | "shortcut"; locator?: ResolvedAccessibleLocator; start?: true; stepId?: string }>;
+
+/**
+ * Captures every failed check of what the model declares where it happens: a screenshot, the focused
+ * object, what the check expected, and the closest elements. It keeps a screenshot of the last State
+ * each execution confirmed, in memory, and writes it only beside a failure. It only reads the page and
+ * never throws, so it cannot change an operation or a verdict. `artifacts` stores the screenshots;
+ * without it, only the facts are kept.
  */
 export function findingsObserver(options: FindingsConfiguration, artifacts?: JourneyArtifactStore): PlaywrightExecutionObserver & {
   readonly evidence: FindingsEvidence;
@@ -49,9 +65,13 @@ export function findingsObserver(options: FindingsConfiguration, artifacts?: Jou
   const failures: FailureCapture[] = [];
   const problems: CaptureError[] = [];
   const actions = new Map<string, JourneyInputAction>();
-  let failureSequence = 0;
+  /** The last State each execution confirmed, by execution. */
+  const confirmed = new Map<string, Shot & Readonly<{ operationId: string }>>();
+  /** Confirmed States already written beside a failure, by execution and operation. */
+  const written = new Map<string, ConfirmedState>();
+  let fileSequence = 0;
 
-  async function screenshot(page: Page): Promise<{ png: Uint8Array; viewport: Viewport; scale: number; browser?: string }> {
+  async function screenshot(page: Page): Promise<Shot> {
     const viewport = await viewportOf(page);
     const scale = await page.evaluate("devicePixelRatio") as number;
     const png = await page.screenshot({ fullPage: false, timeout: screenshotTimeoutMs });
@@ -59,60 +79,75 @@ export function findingsObserver(options: FindingsConfiguration, artifacts?: Jou
     return { png, viewport, scale, ...(browser ? { browser: `${browser.browserType().name()} ${browser.version()}` } : {}) };
   }
 
-  async function capture({ execution, operation, page, action, error }: PlaywrightFailureObservation): Promise<void> {
+  async function write(kind: "failure" | "state", executionId: string, png: Uint8Array, scope: Parameters<JourneyArtifactStore["write"]>[0]["scope"]): Promise<string> {
+    const file = await artifacts!.write({ name: `${fileSegment(config.id)}.${kind}.${fileSegment(executionId)}.${String(fileSequence++).padStart(3, "0")}.png`, data: png, contentType: "image/png", ...(scope ? { scope } : {}) });
+    return file.href;
+  }
+
+  /** The last confirmed State of the execution, written once, however many failures follow it. */
+  async function before(ids: Readonly<{ runId: string; executionId: string; profileId: string }>): Promise<ConfirmedState | undefined> {
+    const state = confirmed.get(ids.executionId);
+    if (!state || !artifacts) return undefined;
+    const key = JSON.stringify([ids.executionId, state.operationId]);
+    if (!written.has(key)) {
+      const href = await write("state", ids.executionId, state.png, { ...ids, operationId: state.operationId });
+      written.set(key, { operationId: state.operationId, screenshot: { href, viewport: state.viewport, scale: state.scale } });
+    }
+    return written.get(key);
+  }
+
+  async function capture({ execution, operation, page, action, error, check }: PlaywrightFailureObservation): Promise<void> {
     const ids = { runId: execution.runId, executionId: execution.executionId, profileId: execution.profile.id, operationId: operation.id };
     const snapshot: { -readonly [K in keyof FindingSnapshot]: FindingSnapshot[K] } = { focus: null };
+    const checked = whatWasChecked(operation, check);
     let expected: ExpectedTarget | undefined;
     let target: ElementFact | undefined;
     let candidates: FailureCapture["candidates"] = [];
+    let confirmedBefore: ConfirmedState | undefined;
     try {
       const shot = await screenshot(page);
       if (artifacts) {
-        const file = await artifacts.write({ name: `${fileSegment(config.id)}.failure.${fileSegment(execution.executionId)}.${String(failureSequence++).padStart(3, "0")}.png`, data: shot.png, contentType: "image/png", scope: ids });
-        snapshot.screenshot = { href: file.href, viewport: shot.viewport, scale: shot.scale };
+        snapshot.screenshot = { href: await write("failure", execution.executionId, shot.png, ids), viewport: shot.viewport, scale: shot.scale };
+        confirmedBefore = await before(ids);
       }
       if (shot.browser) snapshot.browser = shot.browser;
       const path = pathOf(page);
       if (path) snapshot.path = path;
       snapshot.focus = await focusFact(page, shot.viewport);
-      const failed = operation.kind === "transition" && action?.stepId ? stepOf(operation, action.stepId) : undefined;
-      if (failed) {
-        const check = checkOf(failed.materialization, failed.step);
-        const declared = failed.step.locator;
-        if (check === "focus") {
-          // Where focus is (above) against where the step expected it, when it names an object.
-          if (declared) {
-            const located = await toPlaywrightLocator(page, declared);
-            expected = { kind: "focus", ...describeLocator(declared), expectedCount: 1, count: await located.count() };
-            if (expected.count === 1) {
-              target = await describe(page, located, shot.viewport);
-              snapshot.expectedFocus = target;
-              snapshot.focusIsExpected = await focusIs(page, located);
-            }
-          } else {
-            expected = { kind: "focus", expectedCount: 1 };
-          }
-        } else if (check && declared) {
-          // The pointer or a shortcut needs exactly one object: what is there instead, never focus.
-          const located = await toPlaywrightLocator(page, declared);
-          expected = { kind: check, ...describeLocator(declared), expectedCount: 1, count: await located.count() };
-          if (expected.count === 1) target = await describe(page, located, shot.viewport);
-          candidates = await candidatesFor(page, declared, shot.viewport);
-        }
-      } else if (!action) {
-        const bindings = operation.kind === "state" ? operation.target.bindings : operation.activation.bindings;
-        const expectedCount = operation.kind === "state" ? operation.target.expectedMatchCount : 1;
-        const located = await toPlaywrightObservationLocator(page, bindings);
-        const first = bindings[0]?.locators[0];
-        expected = { kind: operation.kind === "state" ? "state" : "activation", ...(first ? describeLocator(first) : {}), expectedCount, count: await located.count() };
+      if (checked?.kind === "objects") {
+        const located = await toPlaywrightObservationLocator(page, checked.bindings);
+        const first = checked.bindings[0]?.locators[0];
+        expected = { kind: checked.expected, ...(first ? describeLocator(first) : {}), expectedCount: checked.expectedCount, count: await located.count() };
         if (expected.count === 1) target = await describe(page, located, shot.viewport);
         if (first) candidates = await candidatesFor(page, first, shot.viewport);
+      } else if (checked?.expected === "focus") {
+        // Where focus is (above) against where the check expected it, when it names an object.
+        const start = checked.start ? { start: true as const } : {};
+        if (checked.locator) {
+          const located = await toPlaywrightLocator(page, checked.locator);
+          expected = { kind: "focus", ...start, ...describeLocator(checked.locator), expectedCount: 1, count: await located.count() };
+          if (expected.count === 1) {
+            target = await describe(page, located, shot.viewport);
+            snapshot.expectedFocus = target;
+            snapshot.focusIsExpected = await focusIs(page, located);
+          }
+        } else {
+          expected = { kind: "focus", ...start, expectedCount: 1 };
+        }
+      } else if (checked?.locator) {
+        // The pointer or a shortcut needs exactly one object: what is there instead, never focus.
+        const located = await toPlaywrightLocator(page, checked.locator);
+        expected = { kind: checked.expected, ...(checked.start ? { start: true as const } : {}), ...describeLocator(checked.locator), expectedCount: 1, count: await located.count() };
+        if (expected.count === 1) target = await describe(page, located, shot.viewport);
+        candidates = await candidatesFor(page, checked.locator, shot.viewport);
       }
     } catch (failure) { snapshot.error = errorOf(failure); }
+    const stepId = checked?.kind === "user" ? checked.stepId : undefined;
     failures.push(immutableSnapshot({
       ...ids, error,
-      ...(action?.stepId ? { stepId: action.stepId } : {}), ...(action?.gesture ? { gesture: action.gesture } : {}),
-      ...(expected ? { expected } : {}), ...(target ? { target } : {}), candidates, snapshot
+      ...(stepId ? { stepId } : {}), ...(action?.gesture ? { gesture: action.gesture } : {}),
+      ...(expected ? { expected } : {}), ...(target ? { target } : {}), candidates, snapshot,
+      ...(confirmedBefore ? { before: confirmedBefore } : {})
     }));
   }
 
@@ -120,6 +155,11 @@ export function findingsObserver(options: FindingsConfiguration, artifacts?: Jou
     name: "@openuji/journey-observer-findings",
     get evidence() { return evidenceOf(undefined); },
     onAction(action) { actions.set(action.id, immutableSnapshot(action)); },
+    async observeOperation(observation) {
+      if (observation.stage !== "state-asserted") return;
+      try { confirmed.set(observation.execution.executionId, { operationId: observation.operation.id, ...await screenshot(observation.page) }); }
+      catch (error) { problems.push(errorOf(error)); }
+    },
     async observeFailure(failure) {
       try { await capture(failure); } catch (error) { problems.push(errorOf(error)); }
     },
@@ -134,23 +174,31 @@ export function findingsObserver(options: FindingsConfiguration, artifacts?: Jou
   }
 }
 
-/** The declared step that failed, with its materialization. */
-function stepOf(operation: TransitionPlanOperation, stepId: string): { materialization: ResolvedTransitionMaterialization; step: ResolvedMaterializationStep } | undefined {
-  for (const materialization of operation.materializations ?? []) {
-    const step = materialization.steps.find((item) => item.id === stepId);
-    if (step) return { materialization, step };
-  }
-  return undefined;
-}
-
 /**
- * What a failed step checked. A ShortcutStep acts on its own object. Every other step checks where the
- * user is, and its move kind's type (through `stepPosition`) says whether that is focus or the pointer.
+ * What the failed check compared with the page, from the check the executor reports and the model.
+ * Where the user is comes from the move kinds' type (`stepPosition`), as the executor decides it.
  */
-function checkOf(materialization: ResolvedTransitionMaterialization, step: ResolvedMaterializationStep): "focus" | "pointer" | "shortcut" | undefined {
-  if (step.kind === "shortcut") return "shortcut";
-  const position = stepPosition(materialization, step);
-  return position === "other" ? undefined : position;
+function whatWasChecked(operation: StatePlanOperation | TransitionPlanOperation, check: PlaywrightCheck): Checked | undefined {
+  if (operation.kind === "state") return { kind: "objects", expected: "state", bindings: operation.target.bindings, expectedCount: operation.target.expectedMatchCount };
+  if (check.kind === "state" || check.kind === "target") return { kind: "objects", expected: "activation", bindings: operation.activation.bindings, expectedCount: 1 };
+  if (check.kind === "entry") {
+    const bindings = operation.activation.bindings;
+    const locator = bindings.length === 1 && bindings[0]!.locators.length === 1 ? bindings[0]!.locators[0] : undefined;
+    return { kind: "user", expected: "focus", ...(locator ? { locator } : {}) };
+  }
+  const materialization = operation.materializations?.find((item) => item.id === check.materializationId);
+  if (!materialization) return undefined;
+  if (check.kind === "start") {
+    const first = materialization.steps[0];
+    const pointer = first ? stepPosition(materialization, first) === "pointer" : materialization.modality.id === pointerInputModalityId;
+    return { kind: "user", expected: pointer ? "pointer" : "focus", start: true, ...(materialization.startLocator ? { locator: materialization.startLocator } : {}) };
+  }
+  const step = materialization.steps.find((item) => item.id === check.stepId);
+  if (!step) return undefined;
+  // A ShortcutStep acts on its own object. Every other step checks where the user is.
+  const position = step.kind === "shortcut" ? "shortcut" : stepPosition(materialization, step);
+  if (position === "other") return undefined;
+  return { kind: "user", expected: position, stepId: step.id, ...(step.locator ? { locator: step.locator } : {}) };
 }
 
 function describeLocator(locator: ResolvedAccessibleLocator): Pick<ExpectedTarget, "role" | "name" | "context"> {
@@ -185,7 +233,8 @@ async function candidatesFor(page: Page, locator: ResolvedAccessibleLocator, vie
     .map((fact) => ({ fact, score: fact.name === undefined ? -1 : nameSimilarity(fact.name, expected) }))
     .sort((left, right) => right.score - left.score)
     .slice(0, candidateLimit)
-    .map(({ fact }) => Object.freeze({ ...fact, sameIgnoringWhitespace: fact.name !== undefined && !!expected && sameIgnoringWhitespace(fact.name, expected) }));
+    .map(({ fact }) => Object.freeze({ ...fact, sameIgnoringWhitespace: fact.name !== undefined && !!expected
+      && normalizedName(fact.name) !== normalizedName(expected) && sameIgnoringWhitespace(fact.name, expected) }));
 }
 
 /** Path and hash of an http(s) page; never an origin, a query or a local file path. */

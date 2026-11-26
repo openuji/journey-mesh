@@ -84,7 +84,8 @@ function targetMissing(runId: string): FailureCapture[] {
       { ...fact("combobox", "Table o r view", { box: box(300) }), sameIgnoringWhitespace: true },
       { ...fact("combobox", "Widget type", { box: box(100) }), sameIgnoringWhitespace: false }
     ],
-    snapshot: { screenshot: shot(`failure-${execution.profileId}`), focus: fact("option", "Table or view") }
+    snapshot: { screenshot: shot(`failure-${execution.profileId}`), focus: fact("option", "Table or view") },
+    before: { operationId: "saved", screenshot: shot(`state-${execution.profileId}`) }
   }));
 }
 
@@ -98,9 +99,10 @@ test("a failure is one finding across profiles, with the last confirmed state an
   assert.equal(finding.title, `Combobox "Table or view" is named "Table o r view" in the dialog "Add widget"`, "the closest element is named in the title");
   assert.equal(finding.expected, `A combobox "Table or view" in the dialog "Add widget" ("The table widget settings are shown").`);
   assert.match(finding.observed, /Found instead: combobox "Table o r view", combobox "Widget type"\. Combobox "Table o r view" differs from the expected name only in spacing\./);
-  assert.deepEqual(finding.frames.map((item) => [item.key, item.label, item.screenshot, item.fullPage]), [
-    ["before", `Last confirmed: "Details are saved"`, "tests/t/files/keyboard-only-005-saved.png", true],
-    ["failure", `At failure: "The table widget settings are shown"`, "tests/t/files/failure-keyboard-only.png", false]
+  // Both frames are the findings observer's own screenshots, never another observer's.
+  assert.deepEqual(finding.frames.map((item) => [item.key, item.label, item.screenshot]), [
+    ["before", `Last confirmed: "Details are saved"`, "tests/t/files/state-keyboard-only.png"],
+    ["failure", `At failure: "The table widget settings are shown"`, "tests/t/files/failure-keyboard-only.png"]
   ]);
   assert.deepEqual(finding.frames[1]!.marks.map((mark) => [mark.tone, mark.label]), [["problem", `combobox "Table o r view"`], ["context", `combobox "Widget type"`]]);
   assert.equal(finding.error, "Expected locator count 1; last value: count:0");
@@ -214,4 +216,30 @@ test("an execution whose canonical path and fallback failed the same way is list
   const twice = [...targetMissing("r8"), ...targetMissing("r8")];
   const finding = byId(build("r8", twice).findings, "page-arrange--form");
   assert.deepEqual(finding.executions.map((execution) => execution.profileId), ["keyboard-only", "default"]);
+});
+
+test("a State that expected an object to be gone says it is still shown, and marks it", () => {
+  const failure: FailureCapture = {
+    runId: "r9", executionId: "keyboard-only-r9", profileId: "keyboard-only", operationId: "saved", error: { name: "Error", message: "Expected locator count 0; last value: count:1" },
+    expected: { kind: "state", role: "dialog", name: "Edit details", expectedCount: 0, count: 1 }, target: fact("dialog", "Edit details", { box: box(400) }),
+    candidates: [{ ...fact("dialog", "Edit details", { box: box(400) }), sameIgnoringWhitespace: false }], snapshot: { screenshot: shot("failure"), focus: null }
+  };
+  const finding = build("r9", [failure], "saved").findings[0]!;
+  assert.deepEqual([finding.failureClass, finding.title, finding.expected, finding.observed], [
+    "target-present", `Dialog "Edit details" is still shown`, `No dialog "Edit details" ("Details are saved").`, "It is still there."
+  ]);
+  assert.deepEqual(finding.frames.at(-1)!.marks.map((mark) => [mark.tone, mark.label]), [["problem", `dialog "Edit details"`]]);
+});
+
+test("a failed start check says where the transition was to start, and marks focus against it", () => {
+  const failure: FailureCapture = {
+    runId: "r10", executionId: "keyboard-only-r10", profileId: "keyboard-only", operationId: "open", error: { name: "Error", message: "the user must start at urn:locator:page-actions" },
+    expected: { kind: "focus", start: true, role: "button", name: "Page actions", expectedCount: 1, count: 1 }, target: fact("button", "Page actions", { box: box(700) }),
+    candidates: [], snapshot: { screenshot: shot("failure"), focus: fact("button", "Save", { box: box(300) }) }
+  };
+  const finding = build("r10", [failure], "open").findings[0]!;
+  assert.deepEqual([finding.failureClass, finding.title, finding.expected, finding.observed], [
+    "focus-mismatch", `Focus is not on button "Page actions" where "Open Page actions" starts`, `"Open Page actions" starts with focus on button "Page actions".`, `Focus is on button "Save".`
+  ]);
+  assert.deepEqual(finding.frames.at(-1)!.marks.map((mark) => mark.tone), ["problem", "expected"]);
 });

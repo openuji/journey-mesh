@@ -8,24 +8,24 @@ export const findingsReportFormat = "journey-mesh/findings";
 export const findingsReportName = "findings.json";
 export const findingsReportLabel = "Findings";
 
-export type FailureClass = "target-missing" | "target-ambiguous" | "focus-mismatch" | "other";
+/** `target-present`: a State expected an object to be gone, and it is still there. */
+export type FailureClass = "target-missing" | "target-ambiguous" | "target-present" | "focus-mismatch" | "other";
 
 /** `problem`: what is wrong (solid red). `expected`: where it should be (dashed green). `context`: for orientation (grey). */
 export type MarkTone = "problem" | "expected" | "context";
 export type FindingMark = Readonly<{ tone: MarkTone; box: FindingBox; label: string }>;
 
-/** `before`: the last state the execution confirmed. `failure`: the page when the operation failed. */
+/** `before`: the last state the execution confirmed. `failure`: the page when the check failed. */
 export type FrameKey = "before" | "failure";
+/** A viewport screenshot the findings observer took. */
 export type FindingFrame = Readonly<{
   key: FrameKey;
   label: string;
   /** Relative to the run directory. */
   screenshot: string;
-  /** CSS pixels the marks refer to; for a reused full-page screenshot, the viewport of the same execution. */
+  /** CSS pixels the marks refer to. */
   viewport: Readonly<{ width: number; height: number }>;
   scale: number;
-  /** A full-page screenshot reused from another observer; it has no marks. */
-  fullPage: boolean;
   /** A fact with no element to box, such as "No element has focus". */
   banner?: string;
   marks: readonly FindingMark[];
@@ -51,7 +51,7 @@ export type Finding = Readonly<{
   /** The operation that failed. */
   operationId: string;
   executions: readonly FindingExecution[];
-  /** From the first execution, in run order, in which the operation failed; empty without a screenshot. */
+  /** From the first execution, in run order, in which the check failed; empty without a screenshot. */
   frames: readonly FindingFrame[];
   reproduce: readonly ReproduceStep[];
   /** Page path and hash, browser, and the markup of the elements involved, for the details. */

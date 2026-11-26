@@ -15,8 +15,8 @@ export const targetMissing: Finding = {
   observed: `No combobox with that name is there. Found instead: combobox "Tables or views".`,
   operationId: "form", executions: [{ executionId: "keyboard-only-02", profileId: "keyboard-only" }, { executionId: "default-01", profileId: "default" }],
   frames: [
-    { key: "before", label: `Last confirmed: "Matching widget types are listed"`, screenshot: "tests/page-arrange/files/state.png", viewport: { width: 800, height: 600 }, scale: 1, fullPage: true, marks: [] },
-    { key: "failure", label: `At failure: "The table widget settings are shown"`, screenshot: "tests/page-arrange/files/failure.png", viewport: { width: 800, height: 600 }, scale: 1, fullPage: false,
+    { key: "before", label: `Last confirmed: "Matching widget types are listed"`, screenshot: "tests/page-arrange/files/state.png", viewport: { width: 800, height: 600 }, scale: 1, marks: [] },
+    { key: "failure", label: `At failure: "The table widget settings are shown"`, screenshot: "tests/page-arrange/files/failure.png", viewport: { width: 800, height: 600 }, scale: 1,
       marks: [{ tone: "problem", box: box(300, 200), label: `combobox "Tables or views"` }, { tone: "context", box: box(300, 120), label: `combobox "Widget type"` }] }
   ],
   reproduce: [{ label: "Complete the setup (2 steps, left out of this report)" }, { label: "Open Add widget", keys: "Shift+Tab ×3, Space" }, { label: "Choose Table or view", keys: "Enter" }],

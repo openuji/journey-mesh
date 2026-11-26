@@ -53,15 +53,18 @@ export type FindingSnapshot = Readonly<{
   error?: CaptureError;
 }>;
 
-/** What the failed operation was waiting for. */
+/** What the failed check was waiting for. */
 export type ExpectedTarget = Readonly<{
   /**
-   * `state`: a state's target. `activation`: a transition's target. The rest are a failed step's check,
-   * decided by its move kind's type (`stepPosition`), never by its modality or IRI: `focus` where a
-   * FocusMoveKind move, or an activation at focus, expected focus; `pointer` where a pointAt move, or an
-   * activation at the pointer, expected the pointer; `shortcut` the object a ShortcutStep acts on.
+   * `state`: a state's target. `activation`: a transition's target. The rest are where the user is,
+   * decided by the move kinds' type (`stepPosition`), never by the modality or an IRI: `focus` where a
+   * FocusMoveKind move, an activation at focus, the start of a materialization or text entry expected
+   * focus; `pointer` where a pointAt move, an activation at the pointer or a start expected the pointer;
+   * `shortcut` the object a ShortcutStep acts on.
    */
   kind: "state" | "activation" | "focus" | "pointer" | "shortcut";
+  /** The check was where the materialization starts (`materializationStartLocatorRef`). */
+  start?: true;
   role?: string;
   name?: string;
   /** The context the locator is scoped to, e.g. a dialog. */
@@ -70,6 +73,9 @@ export type ExpectedTarget = Readonly<{
   /** How many elements matched when the failure was observed; absent for a focus move without a locator. */
   count?: number;
 }>;
+
+/** The last State this execution confirmed before the failure, as the findings observer saw it. */
+export type ConfirmedState = Readonly<{ operationId: string; screenshot: FindingScreenshot }>;
 
 export type FailureCapture = Readonly<{
   runId: string;
@@ -83,8 +89,10 @@ export type FailureCapture = Readonly<{
   /** The expected element, when exactly one matched (for example, present but hidden). */
   target?: ElementFact;
   /** Elements with the expected role inside the expected context, most similar name first. */
+  /** `sameIgnoringWhitespace`: the name differs from the expected one, but only in spacing. */
   candidates: readonly (ElementFact & Readonly<{ sameIgnoringWhitespace: boolean }>)[];
   snapshot: FindingSnapshot;
+  before?: ConfirmedState;
 }>;
 
 export type FindingsEvidence = Readonly<{

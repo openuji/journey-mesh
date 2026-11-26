@@ -437,7 +437,7 @@ async function runTabsJourney({ steps, canonical, canonicalStart, start, binding
 
 const toDrafts = () => [move("operability:nextStop"), move("operability:nextStop", tab("Home")), move("operability:nextItem", tab("Drafts")), activate(tab("Drafts"))];
 
-test("a failed operation is observed with its page before the error propagates", async () => {
+test("a failed check is observed with its page before the error propagates, and says what was checked", async () => {
   const failures = async (input: Parameters<typeof runTabsJourney>[0]) => {
     const run = await runTabsJourney(input);
     assert.equal(run.result.ok, false);
@@ -445,11 +445,13 @@ test("a failed operation is observed with its page before the error propagates",
   };
   const [state] = await failures({ steps: toDrafts(), to: "missing" });
   assert.equal(state?.operation.kind, "state");
+  assert.deepEqual(state!.check, { kind: "state" });
   assert.match(state!.error.message, /Expected locator count 1/);
   assert.equal(state!.action, undefined);
 
   const [binding] = await failures({ steps: toDrafts(), binding: tab("Archive") });
   assert.equal(binding?.operation.kind, "transition");
+  assert.deepEqual(binding!.check, { kind: "target" });
   assert.equal(binding!.action, undefined);
 
   const steps = [move("operability:nextStop"), move("operability:nextStop", tab("Home")), move("operability:nextStop", locator("urn:locator:after", "button", "After"))];
@@ -457,6 +459,7 @@ test("a failed operation is observed with its page before the error propagates",
   assert.equal(step?.operation.kind, "transition");
   assert.equal(step!.action?.status, "failed");
   assert.equal(step!.action?.stepId, steps[2]!.id);
+  assert.deepEqual(step!.check, { kind: "step", materializationId: step!.action!.materializationId, stepId: steps[2]!.id });
   assert.match(step!.error.message, /focus is at tab "Drafts", expected urn:locator:after/);
 });
 
@@ -525,13 +528,15 @@ test("after the canonical path sent input, a fallback performs from the start it
 });
 
 test("a canonical path whose start does not hold sent nothing, so its fallback is performed", async () => {
-  const { result } = await runTabsJourney({ canonical: [move("operability:nextItem", tab("Drafts"))], canonicalStart: tab("Home"), steps: toDrafts() });
+  const { result, failures, expected } = await runTabsJourney({ canonical: [move("operability:nextItem", tab("Drafts"))], canonicalStart: tab("Home"), steps: toDrafts() });
+  assert.deepEqual(failures.map((failure) => failure.check), [{ kind: "start", materializationId: expected!.id }]);
   assert.deepEqual(result.evidence.executions[0]!.operations.map((operation) => operation.outcome.kind), ["passed", "failed", "passed"]);
   assert.match(result.errors[0]!.message, /the user must start at urn:locator:home-tab.*the transition was then taken through/);
 });
 
-test("a canonical path that fails without a failed check, here for want of a key, has no fallback", async () => {
-  const { result } = await runTabsJourney({ canonical: [move("operability:nextItem", tab("Drafts"))], steps: toDrafts() });
+test("a canonical path that fails without a failed check, here for want of a key, has no fallback and is not observed", async () => {
+  const { result, failures } = await runTabsJourney({ canonical: [move("operability:nextItem", tab("Drafts"))], steps: toDrafts() });
+  assert.deepEqual(failures, [], "a missing key setting says nothing about the application");
   assert.deepEqual(result.evidence.executions[0]!.operations.map((operation) => operation.outcome.kind), ["passed", "failed"]);
   assert.match(result.errors[0]!.message, /^Materialization .*: no key for moves\["operability:nextItem"\]/);
   assert.doesNotMatch(result.errors[0]!.message, /taken through|not performed/);

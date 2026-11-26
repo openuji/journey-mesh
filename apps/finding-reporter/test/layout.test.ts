@@ -4,7 +4,7 @@ import type { FindingFrame } from "@openuji/journey-report-findings";
 import { cropOf, layoutSheet, markRect, sheetHtml } from "../src/layout.js";
 
 const frame = (marks: FindingFrame["marks"], overrides: Partial<FindingFrame> = {}): FindingFrame =>
-  ({ key: "failure", label: "At failure", screenshot: "x.png", viewport: { width: 1600, height: 1000 }, scale: 1, fullPage: false, marks, ...overrides });
+  ({ key: "failure", label: "At failure", screenshot: "x.png", viewport: { width: 1600, height: 1000 }, scale: 1, marks, ...overrides });
 const mark = (x: number, y: number, width = 100, height = 30) => ({ tone: "problem" as const, box: { x, y, width, height }, label: "button" });
 
 test("a frame is cropped to its marks with room around them, at least 640×360, inside the viewport", () => {
@@ -14,7 +14,7 @@ test("a frame is cropped to its marks with room around them, at least 640×360, 
   assert.deepEqual(cropOf(frame([mark(10, 10)])), { x: 0, y: 0, width: 640, height: 360 });
   // Marks far apart are all kept.
   assert.deepEqual(cropOf(frame([mark(100, 100), mark(1400, 800)])), { x: 4, y: 0, width: 1592, height: 950 });
-  // A frame without marks (a reused full-page screenshot) shows the top viewport.
+  // A frame without marks (the last confirmed state) shows the whole viewport.
   assert.deepEqual(cropOf(frame([])), { x: 0, y: 0, width: 1600, height: 1000 });
   // A viewport smaller than the minimum is shown whole.
   assert.deepEqual(cropOf(frame([mark(100, 100)], { viewport: { width: 500, height: 300 } })), { x: 0, y: 0, width: 500, height: 300 });

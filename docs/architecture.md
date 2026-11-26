@@ -116,7 +116,8 @@ the executor ([`second-vendor.test.ts`](../packages/journey-host/test/second-ven
   a findings observer sees that failure first. If the canonical one had sent
   input, the fallback is performed only if it names its start
   (`materializationStartLocatorRef`), which is checked before its steps. When
-  both fail, the run record keeps both errors
+  both fail, or an effect check fails after the fallback, the run record keeps
+  both errors
   ([`integration.test.ts`](../packages/journey-runner/test/integration.test.ts),
   [`materialization-browser.test.mts`](../packages/journey-executor-playwright/test/materialization-browser.test.mts)).
   Discovery never replaces a canonical materialization, and measures a path
@@ -126,9 +127,13 @@ the executor ([`second-vendor.test.ts`](../packages/journey-host/test/second-ven
 - **Observers only observe.** They own no session, start no interaction and
   never change what a run does. They affect a verdict only through errors: those
   in their output (for example a strict accessibility policy), and those they
-  throw, which are recorded
+  throw, which are recorded. The runner enforces this for journey observers, and
+  the host for the executor observers it hands to executors
   ([`executor-observers.test.ts`](../packages/journey-host/test/executor-observers.test.ts),
   [`integration.test.ts`](../packages/journey-runner/test/integration.test.ts)).
+  A transition taken through its fallback is shown to observers twice; they
+  record the operation once (axe audits it once, UX counts the materialization
+  that took it).
 - **Effects are verified by the environment**, not by observers, and effect
   checks never mutate the application.
 - **Services own their effects.** Effects start at `start()`, which returns
@@ -167,11 +172,17 @@ the executor ([`second-vendor.test.ts`](../packages/journey-host/test/second-ven
 - Rendering reads the report model and evidence files, never run records.
   Publication concerns (static sites, file-size limits, splitting) belong to the
   app; run directories are never split.
-- A finding is an operation that failed against what the model declares,
-  captured with its page before the error propagates; nothing is declared next
-  to the model. A failure in an excluded phase is not a finding. A finding
-  bundle is written only from what the run captured
-  ([`bundle-browser.test.mts`](../apps/finding-reporter/test/bundle-browser.test.mts)).
+- A finding is a failed check of what the model declares (a State's or a
+  Transition's object, a materialization's start or a step), captured with its
+  page before the error propagates; nothing is declared next to the model. Any
+  other failure, such as a missing key setting, is not shown to observers as
+  one, and a failure in an excluded phase is not a finding
+  ([`materialization-browser.test.mts`](../packages/journey-executor-playwright/test/materialization-browser.test.mts)).
+  The findings interpreter reads only the findings observer's evidence. A
+  finding bundle is written only from what the run captured, and its text cannot
+  mention anyone or reference an issue
+  ([`pipeline-browser.test.mts`](../apps/finding-reporter/test/pipeline-browser.test.mts),
+  [`document.test.ts`](../apps/finding-reporter/test/document.test.ts)).
 
 ### Command-line contract
 

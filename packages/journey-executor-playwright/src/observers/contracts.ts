@@ -42,9 +42,23 @@ export type PlaywrightOperationObservation =
       readonly operation: ControlFlowPlanOperation;
     };
 
+/** What a failed check compared with the page: something the model declares. */
+export type PlaywrightCheck =
+  /** The objects a State's ObservationBinding names, in the expected number. */
+  | Readonly<{ kind: "state" }>
+  /** The one object the Transition's ObservationBinding names. */
+  | Readonly<{ kind: "target" }>
+  /** Where a materialization starts (`materializationStartLocatorRef`). */
+  | Readonly<{ kind: "start"; materializationId: string }>
+  /** The check of one step (Operability §7). */
+  | Readonly<{ kind: "step"; materializationId: string; stepId: string }>
+  /** Text entry: the Transition's object has focus. */
+  | Readonly<{ kind: "entry"; materializationId?: string }>;
+
 /**
- * An operation failed while its page was open, observed before the error propagates. The executor
- * ignores observer errors here: the operation's own error is what fails.
+ * A check of an operation failed while its page was open, observed before the error propagates. Other
+ * failures, such as a missing key setting, are not observed. The executor ignores observer errors
+ * here: the operation's own error is what fails.
  */
 export type PlaywrightFailureObservation = {
   readonly stage: "operation-failed";
@@ -52,7 +66,8 @@ export type PlaywrightFailureObservation = {
   readonly operation: StatePlanOperation | TransitionPlanOperation;
   readonly page: Page;
   readonly error: Readonly<{ name: string; message: string }>;
-  /** The step that failed, when the failure was inside one. */
+  readonly check: PlaywrightCheck;
+  /** The executor command that failed, when the failure was inside one. */
   readonly action?: JourneyInputAction;
 };
 

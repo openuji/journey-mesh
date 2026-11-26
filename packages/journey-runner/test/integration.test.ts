@@ -152,7 +152,7 @@ const start = { id: "urn:test:start", features: [] as [], contexts: [] as [] };
 const checkFailed = (id: string, sentInput = false) => new MaterializationFailedError(`${id} failed`, sentInput);
 
 /** Runs a transition whose materializations throw what `failing` names for them. */
-async function runWithFallback(failing: Readonly<Record<string, Error>>, startLocator?: typeof start) {
+async function runWithFallback(failing: Readonly<Record<string, Error>>, startLocator?: typeof start, effectFails = false) {
   const calls: string[] = [];
   const result = await runJourney({
     plan: plan(state, transition, { ...state, id: "after", sequence: 2 }),
@@ -170,7 +170,7 @@ async function runWithFallback(failing: Readonly<Record<string, Error>>, startLo
         recordControlFlow() {}, close({ executionFailed }) { calls.push(`close:${executionFailed}`); }
       })
     },
-    environment: { verifyEffect: ({ decision }) => { calls.push(`effect:${decision?.materialization?.id}`); } }
+    environment: { verifyEffect: ({ decision }) => { calls.push(`effect:${decision?.materialization?.id}`); if (effectFails) throw new Error("not saved"); } }
   });
   return { result, calls, operations: result.evidence.executions[0]!.operations };
 }
@@ -216,4 +216,10 @@ test("a canonical materialization that passes never runs its fallback", async ()
   const { result, calls } = await runWithFallback({});
   assert.deepEqual(calls, ["state:state", "perform:urn:test:expected (has fallback)", "effect:urn:test:expected", "state:after", "close:false"]);
   assert.equal(result.ok, true);
+});
+
+test("an effect that fails after a fallback keeps the canonical materialization's failure too", async () => {
+  const { result, operations } = await runWithFallback({ "urn:test:expected": checkFailed("urn:test:expected") }, undefined, true);
+  assert.deepEqual(operations.map((operation) => operation.outcome.kind), ["passed", "failed"]);
+  assert.equal(result.errors[0]!.message, "urn:test:expected failed (the transition was then taken through urn:test:around); the effect check failed: not saved");
 });

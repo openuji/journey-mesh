@@ -35,8 +35,8 @@ import { defaultPlaywrightKeyboard, type PlaywrightKeyboard } from "./keyboard.j
 import { type PlaywrightTransientUi } from "./transient.js";
 import { PlaywrightPathFinder, discoverTransition, type PlaywrightDiscovery } from "./discovery.js";
 import { assertPlaywrightLocator, toPlaywrightObservationLocator, validatePlaywrightBindings } from "./locators.js";
+import { PlaywrightCheckError, failedCheck } from "./checks.js";
 import {
-  PlaywrightCheckError,
   PlaywrightStepPerformer,
   playwrightPerformsModality,
   validatePlaywrightMaterializations,
@@ -88,7 +88,9 @@ export type {
   PlaywrightLifecycleStatus,
   PlaywrightResource
 } from "./lifecycle.js";
+export { PlaywrightCheckError } from "./checks.js";
 export type {
+  PlaywrightCheck,
   PlaywrightExecutionObserver,
   PlaywrightFailureObservation,
   PlaywrightJourneyObserver,
@@ -237,7 +239,8 @@ class PlaywrightExecutorSession implements JourneyExecutorSession {
       const locator = await toPlaywrightObservationLocator(page, operation.target.bindings);
       await assertPlaywrightLocator(locator, operation.target.expectedMatchCount, {
         timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs,
-        signal: this.context.signal
+        signal: this.context.signal,
+        failure: (message) => new PlaywrightCheckError(message, { kind: "state" })
       });
       this.context.signal?.throwIfAborted();
       await this.observers.observe({
@@ -312,7 +315,8 @@ class PlaywrightExecutorSession implements JourneyExecutorSession {
     const locator = await toPlaywrightObservationLocator(page, operation.activation.bindings);
     await assertPlaywrightLocator(locator, 1, {
       timeoutMs: this.options.assertionTimeoutMs ?? defaultAssertionTimeoutMs,
-      signal: this.context.signal
+      signal: this.context.signal,
+      failure: (message) => new PlaywrightCheckError(message, { kind: "target" })
     });
     this.context.signal?.throwIfAborted();
     await this.observers.observe({
@@ -410,16 +414,17 @@ class PlaywrightExecutorSession implements JourneyExecutorSession {
     this.context.signal?.throwIfAborted();
   }
 
-  /** Lets observers see the page of a failed operation before the runner closes it. */
+  /** Lets observers see the page of a failed check before the runner closes it. Other failures are not shown. */
   private async observeFailure(
     operation: StatePlanOperation | TransitionPlanOperation,
     page: Page,
     error: unknown,
     action?: JourneyInputAction
   ): Promise<void> {
-    if (this.context.signal?.aborted || page.isClosed()) return;
+    const check = failedCheck(error);
+    if (!check || this.context.signal?.aborted || page.isClosed()) return;
     await this.observers.failed({
-      stage: "operation-failed", execution: this.execution, operation, page,
+      stage: "operation-failed", execution: this.execution, operation, page, check,
       error: Object.freeze({ name: error instanceof Error ? error.name : "Error", message: error instanceof Error ? error.message : String(error) }),
       ...(action ? { action } : {})
     });

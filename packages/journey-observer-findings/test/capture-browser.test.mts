@@ -66,16 +66,26 @@ function driver(page: Page, operations: Operation[]) {
   const find = (id: string) => operations.find((item) => item.id === id)! as never;
   return {
     artifacts, observer,
-    /** The operation failed outside a step: a state's target, or a transition's target before its steps. */
+    /** The check of a state's target, or of a transition's target before its steps, failed. */
     async fail(id: string, message = "Expected locator count 1; last value: count:0") {
-      await observer.observeFailure!({ stage: "operation-failed", execution, operation: find(id), page, error: { name: "Error", message } } as never);
+      const operation = find(id) as Operation;
+      await observer.observeFailure!({ stage: "operation-failed", execution, operation, page, error: { name: "Error", message }, check: { kind: operation.kind === "state" ? "state" : "target" } } as never);
+    },
+    /** The start check of transition `id` failed before any step. */
+    async failStart(id: string, message: string) {
+      await observer.observeFailure!({ stage: "operation-failed", execution, operation: find(id), page, error: { name: "Error", message }, check: { kind: "start", materializationId: `urn:materialization:${id}` } } as never);
     },
     /** The step `stepId` of transition `id` failed after pressing `gesture`. */
     async failStep(id: string, stepId: string, gesture: string, message: string) {
       const error = { name: "Error", message };
       const action: JourneyInputAction = { id: `keyboard-01/action/${actionSequence++}`, runId: "run", executionId: "keyboard-01", profileId: keyboard, operationId: id, modalityId: keyboard, command: "move", stepId, unit: "adapter-command", status: "failed", gesture, error };
       observer.onAction!(action);
-      await observer.observeFailure!({ stage: "operation-failed", execution, operation: find(id), page, error, action } as never);
+      const check = { kind: "step", materializationId: `urn:materialization:${id}`, stepId };
+      await observer.observeFailure!({ stage: "operation-failed", execution, operation: find(id), page, error, action, check } as never);
+    },
+    /** The state `id` passed its check. */
+    async confirm(id: string) {
+      await observer.observeOperation!({ stage: "state-asserted", execution, operation: find(id), page, locator: {} as never, expectedMatchCount: 1 } as never);
     },
     async evidence(): Promise<FindingsEvidence> {
       return (await observer.output({ runId: "run" } as never)).evidence as FindingsEvidence;
@@ -123,7 +133,7 @@ const actionsButton = locator("urn:locator:actions", "button", "Page actions");
 const titleHeading = locator("urn:locator:saved", "heading", "Saved");
 
 /** Saves the dialog with the keyboard; the model then declares that the user activates Page actions where focus is. */
-async function afterSave(reopen: ResolvedMaterializationStep[]) {
+async function afterSave(reopen: ResolvedMaterializationStep[], start?: ResolvedAccessibleLocator) {
   const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
   after(() => page.close());
   await page.setContent(dialogPage);
@@ -133,7 +143,9 @@ async function afterSave(reopen: ResolvedMaterializationStep[]) {
   await page.keyboard.press("Tab");
   await page.keyboard.press("Space");
   await page.getByRole("heading", { name: "Saved" }).waitFor();
-  const journey = [state("saved", 0, titleHeading), transition("reopen", 1, "saved", "dialog", actionsButton, reopen)];
+  const reopening = transition("reopen", 1, "saved", "dialog", actionsButton, reopen);
+  if (start) reopening.materializations = [{ ...reopening.materializations[0]!, startLocator: start }];
+  const journey = [state("saved", 0, titleHeading), reopening];
   return { page, drive: driver(page, journey) };
 }
 
@@ -213,4 +225,33 @@ test("observing never moves focus or scroll", async () => {
     assert.equal(failure!.snapshot.focus?.name, "Field");
     assert.equal(failure!.snapshot.focus?.inViewport, false);
   } finally { await page.close(); }
+});
+
+test("a failed start check compares focus with where the materialization starts", async () => {
+  const { drive } = await afterSave([activate(actionsButton)], actionsButton);
+  await drive.failStart("reopen", "Materialization urn:materialization:reopen: the user must start at urn:locator:actions");
+  const [failure] = (await drive.evidence()).failures;
+  assert.deepEqual(failure!.expected, { kind: "focus", start: true, role: "button", name: "Page actions", expectedCount: 1, count: 1 });
+  assert.equal(failure!.stepId, undefined);
+  assert.equal(failure!.snapshot.focusIsExpected, false);
+});
+
+test("the last confirmed state is the observer's own screenshot, written once beside the failures after it", async () => {
+  const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
+  after(() => page.close());
+  await page.setContent(widgetPage);
+  const drive = driver(page, widgetJourney());
+  await drive.confirm("state-widget-types");
+  assert.equal(drive.artifacts.files.length, 0, "nothing is written while nothing fails");
+  await drive.fail("state-data-widget-form");
+  await drive.fail("state-data-widget-form");
+  const [first, second] = (await drive.evidence()).failures;
+  assert.equal(first!.before?.operationId, "state-widget-types");
+  assert.deepEqual(first!.before, second!.before);
+  assert.deepEqual(first!.before!.screenshot.viewport, { width: 800, height: 600 });
+  assert.deepEqual(drive.artifacts.files.map((file) => [file.name, file.scope?.operationId]), [
+    ["findings.failure.keyboard-01.000.png", "state-data-widget-form"],
+    ["findings.state.keyboard-01.001.png", "state-widget-types"],
+    ["findings.failure.keyboard-01.002.png", "state-data-widget-form"]
+  ]);
 });

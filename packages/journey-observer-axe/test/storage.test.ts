@@ -57,7 +57,7 @@ test("308 audits are captured once as raw evidence files; the recorded output st
   assert.equal(passingNodes, 153_252);
 });
 
-test("a transition observed again, as when its fallback runs, counts one scan in the measurements", async (t) => {
+test("an operation observed again, as a transition taken through its fallback is, is audited once", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "axe-repeated-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const operation = { id: "state", sequence: 0, kind: "state" as const, actorId: "actor", touchpointId: "app",
@@ -72,6 +72,7 @@ test("a transition observed again, as when its fallback runs, counts one scan in
   const execution = executionDescriptor({ plan, profile: { id: "default" }, runId: "repeated", executionId: "default" });
   observer.onExecutionStarted!({ execution });
   for (let attempt = 0; attempt < 2; attempt++) await observer.observeOperation!({ stage: "state-asserted", execution, operation, expectedMatchCount: 1, locator: {} as never, page: {} as never });
+  assert.equal(observer.evidence.filter((fact) => fact.kind === "operation-observed").length, 1);
   const output = observer.output({ ok: true, runId: "repeated", plan: { id: plan.id }, errors: [], assessments: [],
     executions: [{ executionId: "default", profileId: "default", outcome: { kind: "passed" } }],
     evidence: { executions: [{ executionId: "default", profileId: "default", operations: [{ operationId: "state", operationKind: "state", outcome: { kind: "passed" } }] }] } });

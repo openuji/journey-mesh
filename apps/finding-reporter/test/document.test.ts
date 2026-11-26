@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { altText, indexEntry, indexMarkdown, issueMarkdown, targetLine } from "../src/document.js";
+import { altText, code, indexEntry, indexMarkdown, issueMarkdown, targetLine } from "../src/document.js";
 import { focusWithoutScreenshot, target, targetMissing } from "./fixture.js";
 
 const files = { annotated: "annotated.png", frames: targetMissing.frames.map((frame) => ({ key: frame.key, file: `${frame.key}.png`, label: frame.label })) };
@@ -44,4 +44,23 @@ test("the target line and alt text read without Journey Mesh knowledge", () => {
   assert.equal(targetLine({ repository: "https://git.example.org/app.git", sourceSha: "0123456789" }), "https://git.example.org/app @ 0123456");
   assert.equal(targetLine(undefined), undefined);
   assert.equal(altText([{ ...targetMissing.frames[1]!, banner: "No element has focus", marks: [] }]), `At failure: "The table widget settings are shown". No element has focus.`);
+});
+
+test("text the page chose cannot mention anyone, reference an issue, or add HTML or Markdown", () => {
+  const name = "Save @octocat see #1, GH-2 and owner/repo#3 <!-- *bold* `x`";
+  const markup = '<button aria-label="x">```</button>';
+  const finding = { ...targetMissing, title: `Button "Save" is named "${name}"`, observed: `- Found instead: button "${name}".`,
+    markup: [{ label: `button "${name}"`, html: markup }], error: "count:0\n`@octocat`" };
+  const issue = issueMarkdown(finding, files, {});
+  const index = indexMarkdown([indexEntry(finding)], {});
+  for (const text of [issue, index]) {
+    // Code is left as it is: GitHub links nothing inside code spans and blocks.
+    const prose = text.replace(/````html[\s\S]*?````/, "").replace(/^- Error: .*$/m, "");
+    assert.doesNotMatch(prose, /@octocat|(?<!&)#[0-9]|GH-2|<!--|\*bold\*/, text);
+  }
+  assert.match(issue, /^## Button "Save" is named "Save @&#8203;octocat see #&#8203;1, GH&#8203;-2 and owner\/repo#&#8203;3 &lt;!-- \\\*bold\\\* \\`x\\`"/);
+  assert.match(issue, /### Actual\n\n\\- Found instead/, "page text never starts a list of its own");
+  assert.match(issue, /  ````html\n  <button aria-label="x">```<\/button>\n  ````/, "a fence longer than any backtick run in the markup");
+  assert.match(issue, /- Error: `` count:0 `@octocat` ``/, "a code span holds the backticks it contains");
+  assert.equal(code("`x`"), "`` `x` ``");
 });
