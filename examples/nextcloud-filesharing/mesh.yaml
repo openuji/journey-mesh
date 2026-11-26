@@ -309,7 +309,8 @@ tests:
   ios-recipient-sharing:
     services:
       - ios-stack
-    timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-900000}
+    # Fixed, because .env.example sets UJG_EXAMPLE_TIMEOUT_MS to 15 minutes. Both profiles share this limit.
+    timeoutMs: 3600000
     environment:
       use: "@openuji/journey-vendor-nextcloud/federated-sharing/plugin"
       options:
@@ -325,6 +326,8 @@ tests:
           shareCreated: urn:effect:alice-confirm-share
           shareAccepted: urn:effect:bob-accept-share
         preserveFixtures: ${NEXTCLOUD_PRESERVE_FIXTURES:-false}
+        # Limits the cleanup after each profile.
+        timeoutMs: 180000
     journeys:
       - id: alice-setup
         source: ./ujg/setup.web.ujg.jsonld
@@ -451,8 +454,10 @@ executors:
     options:
       browser: chromium
       headless: ${HEADLESS:-true}
-      actionTimeoutMs: 30000
-      navigationTimeoutMs: 30000
+      # Nextcloud shares a hosted runner with the iOS simulator and can take more than 30s to answer.
+      assertionTimeoutMs: 180000
+      actionTimeoutMs: 180000
+      navigationTimeoutMs: 180000
       contextOptions: *sharing-browser-context
     client:
       use: "@openuji/journey-vendor-nextcloud/web/plugin"
