@@ -60,9 +60,21 @@ export async function runOwnedProcess(command: string, args: readonly string[], 
   }
 }
 
+const errorCode = (error: unknown) => (error as NodeJS.ErrnoException).code;
+
+/** EPERM means the group exists but a member cannot be signalled (macOS reports this for a zombie member), so it counts as alive. */
 function processGroupAlive(pid: number): boolean {
   try { process.kill(-pid, 0); return true; }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error; }
+  catch (error) { if (errorCode(error) === "ESRCH") return false; if (errorCode(error) === "EPERM") return true; throw error; }
+}
+
+/** Signals the group; when a member refuses the group signal, signals the leader alone. Returns false when nothing could be signalled. */
+function signalGroup(pid: number, signal: NodeJS.Signals): boolean {
+  for (const target of [-pid, pid]) {
+    try { process.kill(target, signal); return true; }
+    catch (error) { if (errorCode(error) !== "ESRCH" && errorCode(error) !== "EPERM") throw error; }
+  }
+  return false;
 }
 
 /** Stop an already-verified group, including descendants whose leader has exited. */
@@ -75,10 +87,10 @@ export async function stopProcessGroup(pid: number, {
 }> = {}): Promise<void> {
   for (const [name, waitMs] of [["SIGTERM", graceMs], ["SIGKILL", killWaitMs]] as const) {
     if (!processGroupAlive(pid)) return;
-    try { process.kill(-pid, name); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; }
+    signalGroup(pid, name);
     for (let elapsed = 0; elapsed < waitMs && processGroupAlive(pid); elapsed += 100) await delay(Math.min(100, waitMs - elapsed));
   }
-  if (processGroupAlive(pid)) throw new Error(`Process group ${pid} did not stop`);
+  if (processGroupAlive(pid)) throw new Error(`Process group ${pid} did not stop after SIGKILL; the operating system refuses to signal it (EPERM) or it is stuck`);
 }
 
 export type TextPublication = Readonly<{ path: string; content: string; previous?: string }>;

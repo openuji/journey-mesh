@@ -45,7 +45,7 @@ export function validateIosTarget(target: IosRuntimeTarget): void {
 }
 
 export type IosCaptureResult = { stdout: string; stderr: string; failed?: boolean };
-export type IosCapture = (command: string, args: readonly string[], options?: { optional?: boolean; timeout?: number }) => Promise<IosCaptureResult>;
+export type IosCapture = (command: string, args: readonly string[], options?: { optional?: boolean; timeout?: number; onOutput?: (data: string) => void }) => Promise<IosCaptureResult>;
 
 type SimctlRuntime = {
   identifier: string;
@@ -83,6 +83,7 @@ function defaultCapture(environment: NodeJS.ProcessEnv, cwd: string, signal?: Ab
         env: environment,
         signal,
         stdoutOnly: true,
+        ...(options.onOutput ? { onOutput: options.onOutput } : {}),
         timeoutMs: options.timeout ?? 60_000
       });
       signal?.throwIfAborted();
@@ -210,17 +211,33 @@ export async function iosUp({
     });
   }
 
+  // Shutdown is attempted from the boot request on: a boot that hangs may still leave a booting device behind.
   let bootedByUs = false;
+  const phase = async <T>(label: string, run: () => Promise<T>): Promise<T> => {
+    const started = Date.now();
+    log(`[ios:up] ${label}`);
+    try {
+      const result = await run();
+      log(`[ios:up] ${label}: done in ${Math.round((Date.now() - started) / 1000)}s`);
+      return result;
+    } catch (error) {
+      throw new Error(`iOS simulator ${target.simulator} (${udid}): ${label} failed after ${Math.round((Date.now() - started) / 1000)}s: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    }
+  };
   try {
-    log(`[ios:up] Boot ${target.simulator} (${udid})`);
-    await capture("xcrun", ["simctl", "boot", udid], { timeout: 300_000 });
     bootedByUs = true;
-    await capture("xcrun", ["simctl", "bootstatus", udid, "-b"], { timeout: 900_000 });
+    await phase("requesting boot (simctl boot)", () => capture("xcrun", ["simctl", "boot", udid], { timeout: 300_000 }));
+    await phase("waiting until the simulator is ready (simctl bootstatus)", () => capture("xcrun", ["simctl", "bootstatus", udid, "-b"], {
+      timeout: 600_000,
+      onOutput: (data) => { for (const line of data.split(/\r?\n/)) if (line.trim()) log(`[ios:up] bootstatus: ${line.trim()}`); }
+    }));
     if (target.locale) {
       const appleLocale = target.locale.replaceAll("-", "_");
       const language = target.locale.split(/[-_]/)[0]!;
-      await capture("xcrun", ["simctl", "spawn", udid, "defaults", "write", "NSGlobalDomain", "AppleLanguages", "-array", language]);
-      await capture("xcrun", ["simctl", "spawn", udid, "defaults", "write", "NSGlobalDomain", "AppleLocale", "-string", appleLocale]);
+      await phase(`setting the locale to ${target.locale}`, async () => {
+        await capture("xcrun", ["simctl", "spawn", udid, "defaults", "write", "NSGlobalDomain", "AppleLanguages", "-array", language]);
+        await capture("xcrun", ["simctl", "spawn", udid, "defaults", "write", "NSGlobalDomain", "AppleLocale", "-string", appleLocale]);
+      });
     }
     log(`[ios:up] Ready: ${target.simulator} (${udid})`);
     return Object.freeze({

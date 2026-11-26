@@ -18,7 +18,7 @@ jobs:
     # required by Colima/Docker for the Nextcloud Compose stack (Apple Silicon hosted
     # runners reject nested virtualization with HV_UNSUPPORTED).
     runs-on: macos-26-intel
-    timeout-minutes: 150
+    timeout-minutes: 120
     env:
       APPIUM_HOME: ${{ github.workspace }}/.tmp/appium
     steps:
@@ -67,6 +67,12 @@ jobs:
       - name: Check iOS runtime target
         id: ios-runtime
         run: pnpm --filter @openuji/example-nextcloud-filesharing ios:check --github-output
+      # Booting a fresh simulator is slow on a hosted runner and timed out in the journey run, after the
+      # Docker stack and xcodebuild had loaded the runner. Boot it first, while the runner is idle and a
+      # failure costs minutes, not an hour; the journey run reuses the booted simulator.
+      - name: Boot iOS simulator
+        timeout-minutes: 20
+        run: pnpm --filter @openuji/example-nextcloud-filesharing ios:up
       - name: Restore Nextcloud iOS build
         id: ios-build-cache
         uses: actions/cache/restore@v4
@@ -112,6 +118,7 @@ jobs:
         run: |
           mkdir -p .tmp/ios-logs
           xcrun simctl list > .tmp/ios-logs/simctl-list.txt 2>&1 || true
+          cp -R ~/Library/Logs/CoreSimulator .tmp/ios-logs/CoreSimulator 2>/dev/null || true
           vm_stat > .tmp/ios-logs/memory-after.txt 2>&1 || true
           df -h > .tmp/ios-logs/disk-after.txt 2>&1 || true
           colima stop >/dev/null 2>&1 || true
