@@ -18,7 +18,7 @@ jobs:
     # required by Colima/Docker for the Nextcloud Compose stack (Apple Silicon hosted
     # runners reject nested virtualization with HV_UNSUPPORTED).
     runs-on: macos-26-intel
-    timeout-minutes: 90
+    timeout-minutes: 150
     env:
       APPIUM_HOME: ${{ github.workspace }}/.tmp/appium
     steps:
@@ -67,8 +67,9 @@ jobs:
       - name: Check iOS runtime target
         id: ios-runtime
         run: pnpm --filter @openuji/example-nextcloud-filesharing ios:check --github-output
-      - name: Cache Nextcloud iOS build
-        uses: actions/cache@v4
+      - name: Restore Nextcloud iOS build
+        id: ios-build-cache
+        uses: actions/cache/restore@v4
         with:
           path: examples/nextcloud-filesharing/.runtime/builds/nextcloud-ios
           key: ${{ runner.os }}-${{ runner.arch }}-nextcloud-ios-${{ steps.ios-runtime.outputs.runtime }}-${{ hashFiles('examples/nextcloud-filesharing/mesh.yaml', 'examples/nextcloud-filesharing/deployment/fixtures/mock-GoogleService-Info.plist') }}
@@ -99,6 +100,13 @@ jobs:
           resource_pid=$!
           trap 'kill "$resource_pid" 2>/dev/null || true' EXIT
           pnpm --filter @openuji/example-nextcloud-filesharing e2e:ios
+      # The build is the slowest step on a hosted runner, so keep it even when the journey fails.
+      - name: Save Nextcloud iOS build
+        if: always() && steps.ios-build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: examples/nextcloud-filesharing/.runtime/builds/nextcloud-ios
+          key: ${{ runner.os }}-${{ runner.arch }}-nextcloud-ios-${{ steps.ios-runtime.outputs.runtime }}-${{ hashFiles('examples/nextcloud-filesharing/mesh.yaml', 'examples/nextcloud-filesharing/deployment/fixtures/mock-GoogleService-Info.plist') }}
       - name: Capture runner diagnostics
         if: always()
         run: |

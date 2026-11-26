@@ -213,9 +213,9 @@ export async function iosUp({
   let bootedByUs = false;
   try {
     log(`[ios:up] Boot ${target.simulator} (${udid})`);
-    await capture("xcrun", ["simctl", "boot", udid], { timeout: 120_000 });
+    await capture("xcrun", ["simctl", "boot", udid], { timeout: 300_000 });
     bootedByUs = true;
-    await capture("xcrun", ["simctl", "bootstatus", udid, "-b"], { timeout: 180_000 });
+    await capture("xcrun", ["simctl", "bootstatus", udid, "-b"], { timeout: 900_000 });
     if (target.locale) {
       const appleLocale = target.locale.replaceAll("-", "_");
       const language = target.locale.split(/[-_]/)[0]!;
