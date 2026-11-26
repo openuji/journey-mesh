@@ -59,8 +59,8 @@ function locatorConditions(locator: ResolvedAccessibleLocator, precedingScope = 
 }
 
 /** Pure XCUITest XPath compilation: conjunction within bindings, union across bindings. */
-export function appiumIosLocatorQuery(locator: ResolvedAccessibleLocator): string {
-  return `//*[${locatorConditions(locator)} and @visible='true']`;
+export function appiumIosLocatorQuery(locator: ResolvedAccessibleLocator, options: { requireVisible?: boolean } = {}): string {
+  return `//*[${locatorConditions(locator)}${options.requireVisible === false ? "" : " and @visible='true'"}]`;
 }
 
 export function appiumIosObservationQuery(bindings: readonly ResolvedObservationBinding[]): string {

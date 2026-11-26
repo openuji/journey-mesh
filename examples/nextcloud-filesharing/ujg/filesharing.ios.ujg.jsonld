@@ -363,7 +363,7 @@
     {
       "@type": "Surface",
       "@id": "urn:surface:bob-shared-report-visible",
-      "label": "Bob shared report in Recommended Files",
+      "label": "Bob shared report in Files",
       "graphNodeRef": "urn:state:bob-shared-report-visible"
     },
     {
@@ -377,7 +377,7 @@
     {
       "@type": "Surface",
       "@id": "urn:surface:bob-refreshes-files",
-      "label": "Bob pulls down on the Files list",
+      "label": "Bob pulls down from the top of the Files list",
       "graphNodeRef": "urn:transition:bob-refreshes-files:command"
     },
     {
@@ -610,11 +610,14 @@
     {
       "@type": "AccessibleLocator",
       "@id": "urn:locator:bob-shared-report-file-row",
-      "label": "Native iOS shared report in Recommended Files",
+      "label": "Native iOS shared report in Files",
       "role": "text",
       "accessibleNameRef": "urn:message:report-file-basename",
       "accessibleFeatureRefs": [
         "urn:feature:ios-accessible-true"
+      ],
+      "contextLocatorRefs": [
+        "urn:locator:ios-files-collection"
       ]
     },
     {
@@ -899,11 +902,11 @@
     {
       "@type": "ObservationBinding",
       "@id": "urn:obs:bob-refreshes-files-activation",
-      "label": "Pull down on Bob native iOS Files list",
+      "label": "Pull down from the top of Bob's Files list",
       "observeSurfaceRef": "urn:surface:bob-refreshes-files",
       "observationEventRef": "urn:observation-event:touch-activation",
       "locatorRefs": [
-        "urn:locator:ios-files-first-row"
+        "urn:locator:ios-files-tab"
       ]
     },
     {
@@ -1198,29 +1201,6 @@
       ]
     },
     {
-      "@type": "MessageMeta",
-      "@id": "urn:message:native-documents",
-      "label": "native-documents",
-      "defaultLocaleRef": "urn:locale:en"
-    },
-    {
-      "@type": "Message",
-      "@id": "urn:message-value:native-documents:en",
-      "messageMetaRef": "urn:message:native-documents",
-      "localeRef": "urn:locale:en",
-      "value": "Documents"
-    },
-    {
-      "@type": "AccessibleLocator",
-      "@id": "urn:locator:ios-files-first-row",
-      "label": "Native iOS first folder in Files",
-      "role": "text",
-      "accessibleNameRef": "urn:message:native-documents",
-      "contextLocatorRefs": [
-        "urn:locator:ios-files-collection"
-      ]
-    },
-    {
       "@type": "TransitionMaterialization",
       "@id": "urn:materialization:bob-opens-native-notifications:touch",
       "label": "Tap Notifications in the navigation bar",
@@ -1268,7 +1248,7 @@
     {
       "@type": "TransitionMaterialization",
       "@id": "urn:materialization:bob-refreshes-files:touch",
-      "label": "Swipe down on the Files list to refresh",
+      "label": "Swipe down from the top of Files to refresh",
       "materializationTransitionRef": "urn:transition:bob-refreshes-files",
       "materializationModalityRef": "urn:openuji:input:touch",
       "materializationStepRefs": [
@@ -1279,7 +1259,7 @@
       "@type": "MoveStep",
       "@id": "urn:step:bob-refreshes-files:touch:1",
       "stepMoveKindRef": "urn:openuji:move:swipe-down",
-      "stepLocatorRef": "urn:locator:ios-files-first-row"
+      "stepLocatorRef": "urn:locator:ios-files-collection"
     }
   ]
 }

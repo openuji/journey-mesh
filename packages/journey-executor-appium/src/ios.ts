@@ -280,7 +280,7 @@ class AppiumIosExecution implements JourneyExecutorSession {
     for (const step of materialization.steps) {
       this.input.context.signal?.throwIfAborted();
       const stepTargets = step.locator
-        ? await this.assertCount(session, appiumIosLocatorQuery(step.locator), 1)
+        ? await this.assertCount(session, appiumIosLocatorQuery(step.locator, { requireVisible: step.kind !== "move" }), 1)
         : activationTargets;
       const command = step.kind === "move" ? "move" : "activate";
       const gesture = step.kind === "move" ? "swipe-down" : "tap";

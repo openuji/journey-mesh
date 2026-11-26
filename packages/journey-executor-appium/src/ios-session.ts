@@ -42,9 +42,10 @@ export const createIosWebdriverIoSession: IosAppiumSessionFactory = async (optio
     async swipeDown(id) {
       const [rect, window] = await Promise.all([client.getElementRect(id), client.getWindowRect()]);
       const x = Math.round(rect.x + rect.width / 2);
-      const fromY = Math.round(rect.y + rect.height / 2);
-      // Drag far enough to cross UIRefreshControl's threshold while staying clear of the bottom tab bar.
-      const toY = Math.round(Math.min(fromY + window.height * 0.35, window.height * 0.8));
+      // Start in the upper scroll area even when the target spans the whole view or sits lower.
+      // Pull far enough to trigger UIRefreshControl while clearing the bottom tab bar.
+      const fromY = Math.round(Math.min(rect.y + rect.height / 2, window.height * 0.36));
+      const toY = Math.round(window.height * 0.8);
       if (toY - fromY < 100) {
         throw new Error("iOS swipe down requires at least 100 points of vertical room below the target element");
       }

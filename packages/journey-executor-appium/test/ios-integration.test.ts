@@ -149,6 +149,15 @@ test("iOS XCUITest query compilation maps roles, name, label, and visibility det
     }),
     "//*[(@type='XCUIElementTypeCell') and @label='report.pdf' and @visible='true']"
   );
+  assert.equal(
+    appiumIosLocatorQuery({
+      id: "files-collection",
+      role: "list",
+      features: [{ id: "collection-name", name: "name", value: "NCCollectionViewCommon" }],
+      contexts: []
+    }, { requireVisible: false }),
+    "//*[(@type='XCUIElementTypeCollectionView' or @type='XCUIElementTypeTable') and @name='NCCollectionViewCommon']"
+  );
   assert.equal(appiumCommandForModality(touchTapInputModalityId), "tap");
   assert.equal(appiumCommandForModality(keyboardTextEntryInputModalityId), "type");
 });
