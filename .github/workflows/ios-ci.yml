@@ -131,5 +131,5 @@ jobs:
           path: |
             examples/nextcloud-filesharing/test-results
             examples/nextcloud-filesharing/.tmp/diagnostics
-            examples/nextcloud-filesharing/.runtime/builds/nextcloud-ios/*.log
+            examples/nextcloud-filesharing/.runtime/builds/nextcloud-ios/work/*/xcodebuild.log
             .tmp/ios-logs

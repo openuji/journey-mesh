@@ -55,6 +55,15 @@ test("runtime capture failure is retained separately and cannot change a passing
   assert.match(await readFile(join(f.directory, "runtime-events"), "utf8"), /captured\ndisposed\nobserver-closed/);
 });
 
+test("the host publishes each service's lifecycle around startup and release, also when startup fails", async () => {
+  for (const [failService, phases] of [[false, ["starting", "ready", "releasing", "released"]], [true, ["starting", "failed"]]] as const) {
+    const f = await fixture(failService);
+    await writeFile(f.path, stringify({ ...f.config, runtimeObservers: [{ use: plugin("lifecycle-observer") }] }));
+    await runSuite(f.path);
+    assert.deepEqual((await readFile(join(f.directory, "lifecycle"), "utf8")).trim().split("\n"), phases.map((phase) => `services.fixture ${phase}`));
+  }
+});
+
 test("invalid runtime observer settings fail before resources or observer instances exist", async () => {
   const f = await fixture();
   await writeFile(f.path, stringify({ ...f.config, runtimeObservers: [{ use: plugin("runtime-observer"), options: { invalid: true } }] }));

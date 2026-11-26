@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/journey-service-docker" },
     { "path": "packages/journey-observer-docker" },
+    { "path": "packages/journey-observer-progress" },
     {
       "path": "packages/journey-observer-ux/tsconfig.json"
     },

@@ -6,6 +6,7 @@
   "type": "module",
   "dependencies": {
     "@openuji/journey-observer-docker": "workspace:*",
+    "@openuji/journey-observer-progress": "workspace:*",
     "@openuji/journey-executor-playwright": "workspace:*",
     "@openuji/journey-vendor-nextcloud": "workspace:*",
     "@openuji/journey-execution-model": "workspace:*",

@@ -50,7 +50,7 @@ the boundary contract that reporting reads.
 | Environment | Sets up a test's fixtures and verifies modeled effects |
 | Journey observer | Observes the runner's run and execution lifecycle |
 | Executor observer | Collects evidence through an executor's observation contract |
-| Runtime observer | Collects infrastructure diagnostics from typed lifecycle topics |
+| Runtime observer | Collects infrastructure diagnostics, and reports live progress, from typed lifecycle topics |
 | Report interpreter | Turns one observer's recorded evidence into report data |
 
 ## Invariants

@@ -1,0 +1,11 @@
+{
+  "name": "@openuji/journey-observer-progress",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": { ".": "./src/index.ts", "./plugin": "./src/plugin.ts" },
+  "dependencies": { "@openuji/journey-plugin": "workspace:*" },
+  "devDependencies": { "tsx": "^4.20.3" },
+  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit", "typecheck:test": "tsc -p tsconfig.test.json --noEmit", "test": "node --import tsx --test test/*.test.ts" }
+}

@@ -12,11 +12,13 @@ runtimeObservers:
   - use: "@openuji/journey-observer-docker/plugin"
     options:
       containerLogs: true
+      progress: true
       tail: 2000
       timeoutMs: 10000
       files:
         - name: nextcloud
           path: /var/www/html/data/nextcloud.log
+  - use: "@openuji/journey-observer-progress/plugin"
 services:
   web-stack:
     use: "@openuji/journey-vendor-nextcloud/stack/service"

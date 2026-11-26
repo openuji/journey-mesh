@@ -60,6 +60,19 @@ export async function runOwnedProcess(command: string, args: readonly string[], 
   }
 }
 
+/** Turns output chunks into whole, non-blank lines without terminal escape codes. `flush` delivers an unterminated last line. */
+export function lineReader(onLine: (line: string) => void): Readonly<{ write(chunk: string): void; flush(): void }> {
+  let rest = "";
+  const deliver = (raw: string) => {
+    const line = raw.replace(/\u001b\[[0-9;?]*[A-Za-z]/g, "").trimEnd();
+    if (line) onLine(line);
+  };
+  return Object.freeze({
+    write(chunk: string) { const lines = (rest + chunk).split(/\r?\n|\r/); rest = lines.pop()!; lines.forEach(deliver); },
+    flush() { deliver(rest); rest = ""; }
+  });
+}
+
 const errorCode = (error: unknown) => (error as NodeJS.ErrnoException).code;
 
 /** EPERM means the group exists but a member cannot be signalled (macOS reports this for a zombie member), so it counts as alive. */

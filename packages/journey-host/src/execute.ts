@@ -1,5 +1,5 @@
 import { sourceIdentity } from "@openuji/journey-plugin";
-import { startService, serviceOutputs } from "./services.js";
+import { releaseService, startService, serviceOutputs } from "./services.js";
 import type { ServiceOutputRef } from "./config/schema.js";
 import { immutableSnapshot, type JourneyObserverOutput } from "@openuji/journey-core";
 import type { JourneyArtifactStore, JourneyObserverComponent } from "@openuji/journey-plugin";
@@ -128,7 +128,7 @@ export async function executeSuite(prepared: PreparedSuite, options: ExecuteOpti
     }
   } catch (error) { errors.push(errorToJourneyRunError(error)); }
   finally {
-    for (const service of [...active].reverse()) try { await service.lease.release(); } catch (error) { errors.push(errorToJourneyRunError(error)); }
+    for (const service of [...active].reverse()) try { await releaseService(service, observation.observable.publisher(`services.${service.key}`)); } catch (error) { errors.push(errorToJourneyRunError(error)); }
     try { await observation.close(); } catch (error) { errors.push(errorToJourneyRunError(error)); }
   }
   // Service stores live below the run directory, so their hrefs are already run-relative.

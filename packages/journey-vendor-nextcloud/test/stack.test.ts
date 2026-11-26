@@ -53,6 +53,23 @@ test("configuration waits until the image's entrypoint has finished writing conf
   assert.equal(statusPolls.length, 2, "polls again while the entrypoint is still PID 1");
 });
 
+test("a service whose container exits during installation fails at once, naming that rather than its version", async () => {
+  const { options, ports, calls, execute } = await fixture();
+  const crashed: StackExecutor = async (command, args, context) => {
+    if (args.includes("--status")) return "container-1";
+    if (args.includes("status")) throw new Error("service is not running");
+    return execute(command, args, context);
+  };
+  await assert.rejects(nextcloudStackRuntime(options, ports, crashed).start({}), /first: its container exited before it was ready: Nextcloud is not installed/);
+  assert.ok(calls.some((call) => call.includes("down")));
+});
+
+test("readyTimeoutMs bounds the wait and says what was still missing", async () => {
+  const { options, ports, execute } = await fixture();
+  const runtime = nextcloudStackRuntime({ ...options, readyTimeoutMs: 20 }, ports, entrypointRunning(execute, Number.POSITIVE_INFINITY));
+  await assert.rejects(runtime.start({}), /first: not ready after 0s: the image's entrypoint script did not finish/);
+});
+
 test("a setting another config.php writer dropped is applied again, and one that never sticks fails startup", async () => {
   const flaky = await fixture();
   let dropped = false;

@@ -2,7 +2,7 @@ import { immutableSnapshot } from "@openuji/journey-core";
 import { dirname, resolve } from "node:path";
 import { serviceFilesPrefix } from "@openuji/journey-run-record";
 import { fileEvidenceStore } from "@openuji/journey-run-record/node";
-import { sourceIdentityContract, type JourneyArtifactStore, type StartedService, type ObservationPublisher } from "@openuji/journey-plugin";
+import { serviceLifecycle, sourceIdentityContract, type JourneyArtifactStore, type StartedService, type ObservationPublisher, type ServiceLifecycleObservation } from "@openuji/journey-plugin";
 import { loadSuiteConfig, JourneyConfigError, type LoadedSuiteConfig } from "./config/load.js";
 import type { ServiceConfig } from "./config/schema.js";
 import { resolveInputs, validateInputs, type ServiceValues } from "./inputs.js";
@@ -18,10 +18,24 @@ export function serviceContext(loaded: LoadedSuiteConfig, key: string, artifacts
 
 /** Acquires a handle; the caller registers it before inspecting outputs. */
 export async function startService(entry: LoadedService, loaded: LoadedSuiteConfig, values: ServiceValues, outputDir: string, signal?: AbortSignal, artifacts = fileEvidenceStore(outputDir, serviceFilesPrefix(entry.key)), observations?: ObservationPublisher): Promise<ActiveService> {
-  const service = await entry.component.create({ inputs: resolveInputs(entry.definition.inputs, values) }, serviceContext(loaded, entry.key, artifacts, observations));
+  await publishPhase(observations, "starting");
   let lease: StartedService;
-  try { lease = await service.start({ signal }); } catch (error) { throw new Error(`services.${entry.key}: ${error instanceof Error ? error.message : String(error)}`, { cause: error }); }
+  try {
+    const service = await entry.component.create({ inputs: resolveInputs(entry.definition.inputs, values) }, serviceContext(loaded, entry.key, artifacts, observations));
+    try { lease = await service.start({ signal }); } catch (error) { throw new Error(`services.${entry.key}: ${error instanceof Error ? error.message : String(error)}`, { cause: error }); }
+  } catch (error) { await publishPhase(observations, "failed"); throw error; }
+  await publishPhase(observations, "ready");
   return Object.freeze({ key: entry.key, lease, artifacts });
+}
+
+async function publishPhase(observations: ObservationPublisher | undefined, phase: ServiceLifecycleObservation["phase"]): Promise<void> {
+  await observations?.publish(serviceLifecycle, { phase });
+}
+
+export async function releaseService(service: ActiveService, observations?: ObservationPublisher): Promise<void> {
+  await publishPhase(observations, "releasing");
+  try { await service.lease.release(); } catch (error) { await publishPhase(observations, "failed"); throw error; }
+  await publishPhase(observations, "released");
 }
 
 export function serviceOutputs(entry: LoadedService, lease: StartedService): Readonly<Record<string, unknown>> {
