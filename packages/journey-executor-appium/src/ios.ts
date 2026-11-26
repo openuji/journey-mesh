@@ -379,7 +379,8 @@ class AppiumIosExecution implements JourneyExecutorSession {
         "appium:language": "en",
         "appium:locale": "en_US",
         "appium:newCommandTimeout": 300,
-        "appium:wdaLaunchTimeout": 120_000,
+        // The first launch compiles WebDriverAgent, which takes minutes on a slow Intel host.
+        "appium:wdaLaunchTimeout": 600_000,
         "appium:autoAcceptAlerts": true,
         "appium:settings[defaultActiveApplication]": "auto",
         "appium:settings[keyboardWaitTimeout]": 5000

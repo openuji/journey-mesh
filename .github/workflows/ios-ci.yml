@@ -113,6 +113,14 @@ jobs:
           pnpm build
           pnpm --filter @openuji/journey-executor-playwright exec playwright install chromium
           pnpm --filter @openuji/journey-executor-appium exec journey-executor-appium appium ensure-driver --driver xcuitest
+      # The driver ships @appium/coresim with an Apple Silicon binary only, and installing the driver does not compile
+      # it for Intel. Without it Appium reports every simulator as "Unknown device or simulator UDID". Listing the
+      # simulators proves the addon loads, before the slow part of the job starts.
+      - name: Compile the simulator addon for Intel
+        working-directory: .tmp/appium/node_modules/appium-xcuitest-driver/node_modules/@appium/coresim
+        run: |
+          npm run install
+          node --input-type=module -e 'const { NativeSimctl } = await import(process.cwd() + "/lib/src/index.js"); console.log((await new NativeSimctl().getDevices()).length, "simulators visible to coresim")'
       - name: Run mixed journey on iOS simulator
         run: |
           mkdir -p .tmp/ios-logs
@@ -153,5 +161,6 @@ jobs:
           path: |
             examples/nextcloud-filesharing/test-results
             examples/nextcloud-filesharing/.tmp/diagnostics
+            examples/nextcloud-filesharing/.tmp/appium-ios-runtime
             examples/nextcloud-filesharing/.runtime/builds/nextcloud-ios/work/*/xcodebuild.log
             .tmp/ios-logs

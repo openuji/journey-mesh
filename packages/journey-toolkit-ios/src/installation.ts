@@ -17,7 +17,8 @@ export const inspectInstalledIosApp: InstalledIosAppInspector = async (udid, bun
   const containerPath = (await runOwnedProcess("xcrun", ["simctl", "get_app_container", udid, bundleId, "app"], {
     signal,
     stdoutOnly: true,
-    timeoutMs: 30_000
+    // This follows the reboot that starts a session, while simctl can still be slow to answer.
+    timeoutMs: 300_000
   })).trim();
   if (!containerPath) throw new Error(`Expected installed app container for ${bundleId} on ${udid}`);
   const info = await readBundleInfoPlist(containerPath, { signal });

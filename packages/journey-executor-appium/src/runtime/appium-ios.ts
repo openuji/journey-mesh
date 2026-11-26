@@ -78,7 +78,8 @@ export async function appiumIosUp({
     await runOwnedProcess(command, args, { env, cwd: root, signal: abortSignal, onOutput: log });
   });
 
-  const simListRaw = (await capture("xcrun", ["simctl", "list", "devices", "--json"])).stdout;
+  // The simulator has just booted and simctl can still be slow to answer, as long as it is during the boot itself.
+  const simListRaw = (await capture("xcrun", ["simctl", "list", "devices", "--json"], { timeout: 300_000 })).stdout;
   const simList = JSON.parse(simListRaw) as { devices?: Record<string, Array<{ udid: string; state: string }>> };
   const bootedUdids = new Set(
     Object.values(simList.devices ?? {})

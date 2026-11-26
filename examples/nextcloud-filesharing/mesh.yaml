@@ -549,7 +549,7 @@ executors:
         service: ios
         output: devices
     options:
-      assertionTimeoutMs: 120000
+      assertionTimeoutMs: 1200000
       application:
         bundleId: it.twsweb.Nextcloud
       devices:

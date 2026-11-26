@@ -30,7 +30,7 @@ test("each service reports its start, a heartbeat while it lasts, and how long i
   await publish("services.stack", "starting");
   t.mock.timers.tick(125_000);
   await publish("services.stack", "ready");
-  t.mock.timers.tick(120_000);
+  t.mock.timers.tick(1_200_000);
   await publish("services.stack", "releasing");
   t.mock.timers.tick(5_000);
   await publish("services.stack", "released");

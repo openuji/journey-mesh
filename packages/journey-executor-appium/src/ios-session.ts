@@ -10,7 +10,8 @@ export const createIosWebdriverIoSession: IosAppiumSessionFactory = async (optio
     protocol: options.protocol ?? "http",
     logLevel: "error",
     connectionRetryCount: 0,
-    connectionRetryTimeout: 180_000,
+    // Limits every request. Creating a session is the longest: it erases and boots the simulator, then launches WebDriverAgent.
+    connectionRetryTimeout: 1_200_000,
     capabilities: { platformName: "iOS", "appium:automationName": "XCUITest", ...options.capabilities }
   });
   return {

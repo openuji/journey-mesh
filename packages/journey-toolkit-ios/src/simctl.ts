@@ -228,7 +228,8 @@ export async function iosUp({
     bootedByUs = true;
     await phase("requesting boot (simctl boot)", () => capture("xcrun", ["simctl", "boot", udid], { timeout: 300_000 }));
     await phase("waiting until the simulator is ready (simctl bootstatus)", () => capture("xcrun", ["simctl", "bootstatus", udid, "-b"], {
-      timeout: 600_000,
+      // A new simulator migrates its data on first boot, which has taken over 10 minutes on a hosted Intel runner.
+      timeout: 900_000,
       onOutput: (data) => { for (const line of data.split(/\r?\n/)) if (line.trim()) log(`[ios:up] bootstatus: ${line.trim()}`); }
     }));
     if (target.locale) {
