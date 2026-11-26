@@ -550,6 +550,9 @@ executors:
       devices:
         urn:touchpoint:nextcloud-b:
           device: default
+          capabilities:
+            # Appium otherwise restarts a simulator booted without a window, to show one. HEADLESS=false keeps the window.
+            appium:isHeadless: ${HEADLESS:-true}
     client:
       use: "@openuji/journey-vendor-nextcloud/ios/plugin"
       options:

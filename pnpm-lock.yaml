@@ -577,6 +577,9 @@ importers:
       '@openuji/journey-execution-model':
         specifier: workspace:*
         version: link:../journey-execution-model
+      '@openuji/journey-executor-appium':
+        specifier: workspace:*
+        version: link:../journey-executor-appium
       '@openuji/journey-executor-playwright':
         specifier: workspace:*
         version: link:../journey-executor-playwright
