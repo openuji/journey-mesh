@@ -235,8 +235,9 @@ export async function iosUp({
       const appleLocale = target.locale.replaceAll("-", "_");
       const language = target.locale.split(/[-_]/)[0]!;
       await phase(`setting the locale to ${target.locale}`, async () => {
-        await capture("xcrun", ["simctl", "spawn", udid, "defaults", "write", "NSGlobalDomain", "AppleLanguages", "-array", language]);
-        await capture("xcrun", ["simctl", "spawn", udid, "defaults", "write", "NSGlobalDomain", "AppleLocale", "-string", appleLocale]);
+        // A freshly booted simulator stays slow to spawn processes, so these need the boot's time limit.
+        await capture("xcrun", ["simctl", "spawn", udid, "defaults", "write", "NSGlobalDomain", "AppleLanguages", "-array", language], { timeout: 300_000 });
+        await capture("xcrun", ["simctl", "spawn", udid, "defaults", "write", "NSGlobalDomain", "AppleLocale", "-string", appleLocale], { timeout: 300_000 });
       });
     }
     log(`[ios:up] Ready: ${target.simulator} (${udid})`);
