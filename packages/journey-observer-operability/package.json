@@ -7,10 +7,13 @@
   "exports": {
     ".": "./src/index.ts",
     "./plugin": "./src/plugin.ts",
+    "./ios/plugin": "./src/ios-plugin.ts",
+    "./android/plugin": "./src/android-plugin.ts",
     "./evidence": "./src/evidence.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
+    "@openuji/journey-executor-appium": "workspace:*",
     "@openuji/journey-executor-playwright": "workspace:*",
     "@openuji/journey-core": "workspace:*",
     "@openuji/journey-execution-model": "workspace:*",

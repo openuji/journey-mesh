@@ -15,6 +15,8 @@ export type IosAppiumSession = {
   readonly id: string;
   findElements(xpath: string): Promise<readonly AppiumElement[]>;
   tap(elementId: string): Promise<void>;
+  /** Drags one finger downward from the center of the target element; requires vertical room below it. */
+  swipeDown(elementId: string): Promise<void>;
   setValue(elementId: string, value: string): Promise<void>;
   source(): Promise<string>;
   screenshot(): Promise<string>;

@@ -8,8 +8,8 @@ export const journeyMeshPlugin = defineExecutorObserverPlugin({
     knownOptions(options, ["id"]);
     return { id: requiredString(options.id, "id") };
   },
-  create(settings) {
-    const observer = operabilityObserver(settings);
+  create(settings, context) {
+    const observer = operabilityObserver({ ...settings, operationIds: context.operations.map((operation) => operation.id) });
     return { observer, output: ({ result }) => observer.output(result) };
   }
 });

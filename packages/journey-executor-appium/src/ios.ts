@@ -1,4 +1,5 @@
 import type { JourneyInputAction } from "@openuji/journey-core";
+import type { ResolvedTransitionMaterialization, TransitionPlanOperation } from "@openuji/journey-execution-model";
 import { type IosJourneyClient } from "@openuji/journey-platform-ios";
 import {
   executionDescriptor,
@@ -7,7 +8,7 @@ import {
   type JourneyExecutorSessionInput,
   type JourneyPlanOperation
 } from "@openuji/journey-runner";
-import type { AppiumConnection, AppiumDeviceConfig } from "./contracts.js";
+import type { AppiumConnection, AppiumDeviceConfig, AppiumElement } from "./contracts.js";
 import type {
   IosAppiumApplicationConfig,
   IosAppiumExecutionObserver,
@@ -17,13 +18,29 @@ import type {
 } from "./ios-contracts.js";
 import { appiumIosExecutorName } from "./name.js";
 import { appiumIosObservationContract } from "./observation-contract.js";
-import { appiumCommandForModality, appiumSupportsModality, touchTapInputModalityId, xpathLiteral } from "./queries.js";
+import {
+  appiumCommandForModality,
+  appiumSupportsModality,
+  swipeDownMoveKindId,
+  touchInputModalityId,
+  touchTapInputModalityId,
+  xpathLiteral
+} from "./queries.js";
 import { appiumIosLocatorQuery, appiumIosObservationQuery } from "./ios-queries.js";
 import { createIosWebdriverIoSession } from "./ios-session.js";
 import { appiumSessionKey } from "./index.js";
 
 export type * from "./ios-contracts.js";
-export { appiumIosObservationContract, appiumIosExecutorName, appiumIosLocatorQuery, appiumIosObservationQuery, touchTapInputModalityId, xpathLiteral };
+export {
+  appiumIosObservationContract,
+  appiumIosExecutorName,
+  appiumIosLocatorQuery,
+  appiumIosObservationQuery,
+  swipeDownMoveKindId,
+  touchInputModalityId,
+  touchTapInputModalityId,
+  xpathLiteral
+};
 
 export type IosAppiumLifecycleStatus = "created" | "starting" | "started" | "closing" | "closed";
 export type IosAppiumResource = Readonly<{
@@ -113,10 +130,40 @@ export function validateAppiumIosOperation(operation: JourneyPlanOperation): voi
     if (operation.activation.requiredInputModalityProfiles.length > 0) {
       appiumIosObservationQuery(operation.activation.bindings);
     }
-    for (const materialization of operation.materializations ?? []) {
-      if (appiumSupportsModality(materialization.modality.id)) {
+    const materializations = operation.materializations ?? [];
+    for (const materialization of materializations) {
+      if (materialization.modality.id === touchInputModalityId) {
+        validateIosTouchMaterialization(materialization);
+      } else if (appiumSupportsModality(materialization.modality.id)) {
         throw new Error(`Transition ${operation.transition.id}: Appium iOS does not perform TransitionMaterialization ${materialization.id} (${materialization.modality.id}) yet`);
       }
+    }
+    const allowsTouch = operation.activation.requiredInputModalityProfiles.some((profile) =>
+      profile.modalities.some((modality) => modality.id === touchInputModalityId)
+    );
+    if (allowsTouch && !materializations.some((materialization) => materialization.modality.id === touchInputModalityId)) {
+      throw new Error(`Transition ${operation.transition.id}: ${touchInputModalityId} requires a TransitionMaterialization`);
+    }
+  }
+}
+
+function validateIosTouchMaterialization(materialization: ResolvedTransitionMaterialization): void {
+  if (materialization.startLocator) {
+    throw new Error(`Materialization ${materialization.id}: Appium iOS does not support materializationStartLocatorRef (${materialization.startLocator.id})`);
+  }
+  if (materialization.steps.length === 0) {
+    throw new Error(`Materialization ${materialization.id}: at least one step is required`);
+  }
+  for (const step of materialization.steps) {
+    const where = `Materialization ${materialization.id} step ${step.id}`;
+    if (step.locator) appiumIosLocatorQuery(step.locator);
+    if (step.kind === "move") {
+      if (!step.moveKind) throw new Error(`${where}: a MoveStep without stepMoveKindRef cannot be performed`);
+      if (step.moveKind.id !== swipeDownMoveKindId) {
+        throw new Error(`${where}: Appium iOS does not support ${step.moveKind.id} through ${touchInputModalityId}`);
+      }
+    } else if (step.kind === "shortcut") {
+      throw new Error(`${where}: Appium iOS does not perform ShortcutSteps through ${touchInputModalityId}`);
     }
   }
 }
@@ -191,6 +238,19 @@ class AppiumIosExecution implements JourneyExecutorSession {
       await this.observe({ execution: this.execution, stage: "transition-completed", operation });
       return;
     }
+    if (decision.modality.id === touchInputModalityId) {
+      const materialization = decision.materialization;
+      if (!materialization || materialization.modality.id !== touchInputModalityId) {
+        throw new Error(`Transition ${operation.transition.id}: Appium iOS performs ${touchInputModalityId} only through a declared TransitionMaterialization`);
+      }
+      validateIosTouchMaterialization(materialization);
+      const query = appiumIosObservationQuery(operation.activation.bindings);
+      const session = await this.sessionForOperation(operation);
+      const targets = await this.assertCount(session, query, 1);
+      await this.observe({ execution: this.execution, stage: "transition-ready", operation, session, targets, decision, expectedMatchCount: 1 });
+      await this.performTouchMaterialization(session, operation, decision.modality.id, materialization, targets);
+      return;
+    }
     if (decision.materialization) {
       throw new Error(`Transition ${operation.transition.id}: Appium iOS does not perform TransitionMaterialization ${decision.materialization.id} yet`);
     }
@@ -200,32 +260,78 @@ class AppiumIosExecution implements JourneyExecutorSession {
     const targets = await this.assertCount(session, query, 1);
     await this.observe({ execution: this.execution, stage: "transition-ready", operation, session, targets, decision, expectedMatchCount: 1 });
     this.input.context.signal?.throwIfAborted();
+    const text = command === "type" ? this.options.client.resolveTransitionValue(operation) : undefined;
+    if (command === "type" && !text) throw new Error(`Transition ${operation.transition.id} requires a text value`);
+    const gesture = command === "tap" ? "tap" : "type";
+    await this.recordAction(operation, decision.modality.id, { command, gesture }, async () => {
+      if (command === "tap") await session.tap(targets[0]!.elementId);
+      else await session.setValue(targets[0]!.elementId, text!);
+    });
+    this.input.context.signal?.throwIfAborted();
+  }
+
+  private async performTouchMaterialization(
+    session: IosAppiumSession,
+    operation: TransitionPlanOperation,
+    modalityId: string,
+    materialization: ResolvedTransitionMaterialization,
+    activationTargets: readonly AppiumElement[]
+  ): Promise<void> {
+    for (const step of materialization.steps) {
+      this.input.context.signal?.throwIfAborted();
+      const stepTargets = step.locator
+        ? await this.assertCount(session, appiumIosLocatorQuery(step.locator), 1)
+        : activationTargets;
+      const command = step.kind === "move" ? "move" : "activate";
+      const gesture = step.kind === "move" ? "swipe-down" : "tap";
+      await this.recordAction(
+        operation,
+        modalityId,
+        { command, gesture, materializationId: materialization.id, stepId: step.id },
+        async () => {
+          if (step.kind === "move") await session.swipeDown(stepTargets[0]!.elementId);
+          else await session.tap(stepTargets[0]!.elementId);
+        }
+      );
+    }
+    this.input.context.signal?.throwIfAborted();
+  }
+
+  private async recordAction(
+    operation: TransitionPlanOperation,
+    modalityId: string,
+    meta: Readonly<{ command: string; gesture: string; materializationId?: string; stepId?: string }>,
+    work: () => Promise<void>
+  ): Promise<void> {
     const action: JourneyInputAction = Object.freeze({
       id: `${this.execution.executionId}/action/${this.actionSequence++}`,
       runId: this.execution.runId,
       executionId: this.execution.executionId,
       profileId: this.execution.profile.id,
       operationId: operation.id,
-      modalityId: decision.modality.id,
-      command,
+      modalityId,
+      command: meta.command,
+      ...(meta.materializationId ? { materializationId: meta.materializationId } : {}),
+      ...(meta.stepId ? { stepId: meta.stepId } : {}),
       unit: "adapter-command",
       status: "attempted"
     });
     const notify = async (event: JourneyInputAction) => {
       for (const observer of this.options.executionObservers ?? []) await observer.onAction?.(Object.freeze(event));
     };
-    const text = command === "type" ? this.options.client.resolveTransitionValue(operation) : undefined;
-    if (command === "type" && !text) throw new Error(`Transition ${operation.transition.id} requires a text value`);
     await notify(action);
     try {
-      if (command === "tap") await session.tap(targets[0]!.elementId);
-      else await session.setValue(targets[0]!.elementId, text!);
+      await work();
     } catch (error) {
-      await notify({ ...action, status: "failed", error: { name: error instanceof Error ? error.name : "Error", message: String(error) } });
+      await notify({
+        ...action,
+        gesture: meta.gesture,
+        status: "failed",
+        error: { name: error instanceof Error ? error.name : "Error", message: error instanceof Error ? error.message : String(error) }
+      });
       throw error;
     }
-    await notify({ ...action, status: "completed" });
-    this.input.context.signal?.throwIfAborted();
+    await notify({ ...action, gesture: meta.gesture, status: "completed" });
   }
 
   async recordControlFlow(operation: Parameters<JourneyExecutorSession["recordControlFlow"]>[0]): Promise<void> {

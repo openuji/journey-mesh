@@ -8,6 +8,8 @@ import {
   appiumIosLocatorQuery,
   initialIosAppiumLifecycleState,
   reduceIosAppiumLifecycle,
+  swipeDownMoveKindId,
+  touchInputModalityId,
   touchTapInputModalityId,
   type IosAppiumSession
 } from "../src/ios.js";
@@ -75,6 +77,9 @@ class Session implements IosAppiumSession {
   }
   async tap(_id: string) {
     this.calls.push("tap");
+  }
+  async swipeDown(id: string) {
+    this.calls.push(`swipe-down:${id}`);
   }
   async setValue(_id: string, value: string) {
     this.calls.push(`type:${value}`);
@@ -297,21 +302,101 @@ test("installation verification precedes modeled interaction and a mismatch clos
   assert.match(JSON.stringify(result.errors), /installed iOS app mismatch/);
 });
 
-test("declared materializations are refused on iOS, not tapped past", async () => {
-  const touch = {
-    id: "urn:material:touch",
+test("declared materializations are refused for unmaterialized modalities on iOS, while urn:openuji:input:touch validates and performs declared steps", async () => {
+  const touchTapMaterialization = {
+    id: "urn:material:touch-tap",
     transitionId: "serverAddress",
     modality: { id: touchTapInputModalityId },
     steps: [{ id: "urn:step:tap", kind: "activation" as const }]
   };
   const executor = appiumIosExecutor(options(new Session()));
   assert.throws(
-    () => executor.describeOperation!({ ...transition, materializations: [touch] }),
-    /Appium iOS does not perform TransitionMaterialization urn:material:touch \(urn:openuji:input:touch-tap\) yet/
+    () => executor.describeOperation!({ ...transition, materializations: [touchTapMaterialization] }),
+    /Appium iOS does not perform TransitionMaterialization urn:material:touch-tap \(urn:openuji:input:touch-tap\) yet/
   );
   assert.doesNotThrow(() =>
-    executor.describeOperation!({ ...transition, materializations: [{ ...touch, modality: { id: "observability:keyboard" } }] })
+    executor.describeOperation!({ ...transition, materializations: [{ ...touchTapMaterialization, modality: { id: "observability:keyboard" } }] })
   );
+
+  const touchModality = { id: touchInputModalityId, label: "Touch" };
+  const touchProfile = { id: "urn:input-modality-profile:touch", modalities: [touchModality] };
+  assert.throws(
+    () => executor.describeOperation!({
+      ...transition,
+      activation: { ...transition.activation, requiredInputModalityProfiles: [touchProfile] }
+    }),
+    /urn:openuji:input:touch requires a TransitionMaterialization/
+  );
+  assert.throws(
+    () => executor.describeOperation!({
+      ...transition,
+      materializations: [{ id: "urn:material:start", transitionId: "serverAddress", modality: touchModality, startLocator: locator, steps: [{ id: "urn:step:1", kind: "activation" }] }]
+    }),
+    /does not support materializationStartLocatorRef/
+  );
+  assert.throws(
+    () => executor.describeOperation!({
+      ...transition,
+      materializations: [{ id: "urn:material:shortcut", transitionId: "serverAddress", modality: touchModality, steps: [{ id: "urn:step:1", kind: "shortcut" }] }]
+    }),
+    /does not perform ShortcutSteps/
+  );
+  assert.throws(
+    () => executor.describeOperation!({
+      ...transition,
+      materializations: [{ id: "urn:material:move", transitionId: "serverAddress", modality: touchModality, steps: [{ id: "urn:step:1", kind: "move", moveKind: { id: "operability:nextPage", type: "move" } }] }]
+    }),
+    /does not support operability:nextPage through urn:openuji:input:touch/
+  );
+
+  const touchMaterialization = {
+    id: "urn:material:refresh:touch",
+    transitionId: "serverAddress",
+    modality: touchModality,
+    steps: [
+      { id: "urn:step:refresh:1", kind: "move" as const, moveKind: { id: swipeDownMoveKindId, type: "move" as const }, locator },
+      { id: "urn:step:refresh:2", kind: "activation" as const, locator }
+    ]
+  };
+  const touchOperation: TransitionPlanOperation = {
+    ...transition,
+    activation: { ...transition.activation, requiredInputModalityProfiles: [touchProfile] },
+    materializations: [touchMaterialization]
+  };
+  assert.doesNotThrow(() => executor.describeOperation!(touchOperation));
+
+  const touchSession = new Session();
+  const recordedActions: Array<{ command: string; gesture?: string; stepId?: string; status: string }> = [];
+  const touchResult = await runJourney({
+    plan: { id: "touch-plan", operations: [state, touchOperation] },
+    profiles: [{
+      id: "touch",
+      selectInputModality: () => ({
+        profileId: "touch",
+        inputModalityProfile: touchProfile,
+        modality: touchModality,
+        materialization: touchMaterialization
+      })
+    }],
+    executor: appiumIosExecutor({
+      ...options(touchSession),
+      executionObservers: [{
+        name: "actions",
+        onAction: (event) => {
+          recordedActions.push({ command: event.command, gesture: event.gesture, stepId: event.stepId, status: event.status });
+        }
+      }]
+    })
+  });
+  assert.equal(touchResult.ok, true, JSON.stringify(touchResult.errors));
+  assert.deepEqual(touchSession.calls.filter((call) => call.startsWith("swipe-down") || call === "tap"), ["swipe-down:target", "tap"]);
+  assert.deepEqual(recordedActions, [
+    { command: "move", gesture: undefined, stepId: "urn:step:refresh:1", status: "attempted" },
+    { command: "move", gesture: "swipe-down", stepId: "urn:step:refresh:1", status: "completed" },
+    { command: "activate", gesture: undefined, stepId: "urn:step:refresh:2", status: "attempted" },
+    { command: "activate", gesture: "tap", stepId: "urn:step:refresh:2", status: "completed" }
+  ]);
+
   const session = new Session();
   const result = await runJourney({
     plan: { id: "plan", operations: [state, transition] },
@@ -322,13 +407,13 @@ test("declared materializations are refused on iOS, not tapped past", async () =
           profileId: "selected",
           inputModalityProfile: inputProfile,
           modality: inputProfile.modalities[0]!,
-          materialization: { ...touch, modality: inputProfile.modalities[0]! }
+          materialization: { ...touchTapMaterialization, modality: inputProfile.modalities[0]! }
         })
       }
     ],
     executor: appiumIosExecutor(options(session))
   });
   assert.equal(result.ok, false);
-  assert.match(result.errors[0]!.message, /Appium iOS does not perform TransitionMaterialization urn:material:touch yet/);
+  assert.match(result.errors[0]!.message, /Appium iOS does not perform TransitionMaterialization urn:material:touch-tap yet/);
   assert.equal(session.calls.some((call) => call.startsWith("type:")), false, session.calls.join(","));
 });

@@ -14,7 +14,7 @@ runtimeObservers:
       containerLogs: true
       progress: true
       tail: 2000
-      timeoutMs: 10000
+      timeoutMs: 30000
       files:
         - name: nextcloud
           path: /var/www/html/data/nextcloud.log
@@ -568,6 +568,9 @@ executors:
           urn:transition:ios-enters-password:
             source: user.password
     observers:
+      - use: "@openuji/journey-observer-operability/ios/plugin"
+        options:
+          id: ios-input-steps
       - use: "@openuji/journey-observer-ios-accessibility/plugin"
         options:
           reportId: nextcloud-filesharing.ios-accessibility
@@ -588,9 +591,10 @@ profiles:
     use: "@openuji/journey-profiles/plugin"
     options:
       id: touch
-      # Native models declare no TransitionMaterialization; Appium taps the bound object.
+      # Unmaterialized touch-tap transitions tap the bound object; urn:openuji:input:touch transitions declare steps.
       requireMaterialization: false
       modalityPreference:
         - urn:openuji:input-modality:keyboard-text-entry
+        - urn:openuji:input:touch
         - urn:openuji:input:touch-tap
 kind: suite

@@ -1,5 +1,11 @@
-import { keyboardTextEntryInputModalityId } from "@openuji/journey-execution-model";
+import {
+  keyboardTextEntryInputModalityId,
+  swipeDownMoveKindId,
+  touchInputModalityId
+} from "@openuji/journey-execution-model";
 import type { ResolvedAccessibleLocator, ResolvedObservationBinding } from "@openuji/journey-runner";
+
+export { swipeDownMoveKindId, touchInputModalityId };
 
 /** These are model vocabulary identifiers explicitly supported by this executor. */
 const roles: Readonly<Record<string, readonly string[]>> = Object.freeze({

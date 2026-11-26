@@ -111,8 +111,11 @@ export function validateComposeConfiguration(options: Readonly<{ project: string
   for (const [key, value] of Object.entries(options.environment)) if (!/^[A-Z_][A-Z0-9_]*$/.test(key) || /[\r\n]/.test(value)) throw new Error("Invalid stack environment entry");
 }
 
-/** How long `untilReady` waits. Generous: it only bounds a hang, since an exited container fails at once. */
-export const defaultReadyTimeoutMs = 30 * 60_000;
+/**
+ * How long `untilReady` waits. Generous, because it only bounds a hang (an exited container fails at once) and an
+ * installation on a slow virtualized disk can take longer than half an hour.
+ */
+export const defaultReadyTimeoutMs = 60 * 60_000;
 const readyPollMs = 2000;
 
 const late = Symbol("late");
@@ -123,8 +126,17 @@ async function by<T>(deadline: number, work: Promise<T>): Promise<T | typeof lat
   finally { clearTimeout(timer); }
 }
 
-/** Compose repeats a layer's line for every step of a download or extraction; its state is the line without the counters. */
-export const composeProgressState = (line: string) => line.replace(/\s*\[[=> ]*\].*$/, "").replace(/\s+\d+(\.\d+)?\s*s\s*$/, "").replace(/\s+/g, " ").trim();
+/**
+ * Compose repeats a layer's line for every step of a download or extraction; its state is the line without the
+ * counters. Releases differ: a progress bar with sizes (2.x), a bare size such as `Extracting 390B` (5.x), or
+ * elapsed seconds.
+ */
+export const composeProgressState = (line: string) => line
+  .replace(/\s*\[[=> ]*\].*$/, "")
+  .replace(/(?:(?:\s+|\s*\/\s*)\d+(?:\.\d+)?\s*(?:[kKMGT]?i?B|s))+\s*$/, "")
+  .replace(/\s+/g, " ").trim();
+
+const reason = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 /**
  * Start one acquisition of a Compose stack. A failure after `up` publishes `before-release` and
@@ -189,7 +201,8 @@ export async function startComposeStack(
     const { outputs, provenance } = await hooks.bootstrap({ run, compose: docker, entrypointFinished, untilReady, signal });
     return startedService(outputs, provenance, release);
   } catch (error) {
-    try { await release(); } catch (cleanup) { throw new AggregateError([error, cleanup], `${stack.label} startup and cleanup failed`); }
+    // The message carries both causes: whoever records it keeps only the message, not the aggregated errors.
+    try { await release(); } catch (cleanup) { throw new AggregateError([error, cleanup], `${stack.label} startup and cleanup failed: ${reason(error)}; cleanup: ${reason(cleanup)}`); }
     throw error;
   }
 }

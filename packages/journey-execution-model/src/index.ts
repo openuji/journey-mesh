@@ -39,6 +39,7 @@ export const keyboardInputModalityId = "observability:keyboard" as const;
 /** Producer-defined text entry; RC4 Operability does not model value entry. */
 export const keyboardTextEntryInputModalityId = "urn:openuji:input-modality:keyboard-text-entry" as const;
 export const pointerInputModalityId = "observability:pointer" as const;
+export const touchInputModalityId = "urn:openuji:input:touch" as const;
 
 /** Operability move kinds that executors perform and that discovery reports. */
 export const nextStopMoveKindId = "operability:nextStop" as const;
@@ -48,12 +49,14 @@ export const lastItemMoveKindId = "operability:lastItem" as const;
 export const nextItemMoveKindId = "operability:nextItem" as const;
 export const previousItemMoveKindId = "operability:previousItem" as const;
 export const pointAtMoveKindId = "operability:pointAt" as const;
+export const swipeDownMoveKindId = "urn:openuji:move:swipe-down" as const;
 
 /** Built-in conveniences, not an exhaustive list of executable modalities. */
 export const journeyInputModalityIds = [
   keyboardTextEntryInputModalityId,
   keyboardInputModalityId,
-  pointerInputModalityId
+  pointerInputModalityId,
+  touchInputModalityId
 ] as const;
 
 /** @deprecated Use string; modality IDs are open model identifiers. */

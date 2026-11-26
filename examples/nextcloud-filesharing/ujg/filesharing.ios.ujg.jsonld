@@ -6,6 +6,7 @@
     "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/phase.context.jsonld",
     "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/l10n.context.jsonld",
     "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/observability.context.jsonld",
+    "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/operability.context.jsonld",
     "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/entry-binding.context.jsonld",
     "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/effect.context.jsonld",
     "https://ujg.specs.openuji.org/tr/1.0-rc4/ns/artifact.context.jsonld"
@@ -330,17 +331,11 @@
       "stateRefs": [
         "urn:state:bob-pending-share-offer-cleared",
         "urn:state:bob-files-navigation-ready",
-        "urn:state:bob-shares-navigation-open",
-        "urn:state:bob-files-refreshed",
-        "urn:state:bob-files-sort-menu-open",
         "urn:state:bob-shared-report-visible"
       ],
       "transitionRefs": [
         "urn:transition:bob-returns-to-files",
-        "urn:transition:bob-opens-shares-navigation",
-        "urn:transition:bob-opens-shares-overview",
-        "urn:transition:bob-opens-files-sort-menu",
-        "urn:transition:bob-sorts-files-descending"
+        "urn:transition:bob-refreshes-files"
       ]
     },
     {
@@ -363,27 +358,27 @@
     {
       "@type": "State",
       "@id": "urn:state:bob-shared-report-visible",
-      "label": "Bob sees file marked as shared"
+      "label": "Bob sees shared file"
     },
     {
       "@type": "Surface",
       "@id": "urn:surface:bob-shared-report-visible",
-      "label": "Bob shared report row",
+      "label": "Bob shared report in Recommended Files",
       "graphNodeRef": "urn:state:bob-shared-report-visible"
     },
     {
       "@type": "Transition",
-      "@id": "urn:transition:bob-opens-shares-overview",
-      "label": "Bob returns to the native iOS Files tab",
-      "from": "urn:state:bob-shares-navigation-open",
-      "to": "urn:state:bob-files-refreshed",
-      "commandRef": "urn:transition:bob-opens-shares-overview:command"
+      "@id": "urn:transition:bob-refreshes-files",
+      "label": "Bob pulls down to refresh Files",
+      "from": "urn:state:bob-files-navigation-ready",
+      "to": "urn:state:bob-shared-report-visible",
+      "commandRef": "urn:transition:bob-refreshes-files:command"
     },
     {
       "@type": "Surface",
-      "@id": "urn:surface:bob-opens-shares-overview",
-      "label": "Bob Shares overview link",
-      "graphNodeRef": "urn:transition:bob-opens-shares-overview:command"
+      "@id": "urn:surface:bob-refreshes-files",
+      "label": "Bob pulls down on the Files list",
+      "graphNodeRef": "urn:transition:bob-refreshes-files:command"
     },
     {
       "@type": "Transition",
@@ -507,12 +502,6 @@
       "defaultLocaleRef": "urn:locale:en"
     },
     {
-      "@type": "MessageMeta",
-      "@id": "urn:message:shares-overview",
-      "label": "Shares overview navigation",
-      "defaultLocaleRef": "urn:locale:en"
-    },
-    {
       "@type": "Message",
       "@id": "urn:message-value:sharing-panel:en",
       "messageMetaRef": "urn:message:sharing-panel",
@@ -569,13 +558,6 @@
       "value": "Shared"
     },
     {
-      "@type": "Message",
-      "@id": "urn:message-value:shares-overview:en",
-      "messageMetaRef": "urn:message:shares-overview",
-      "localeRef": "urn:locale:en",
-      "value": "Shares"
-    },
-    {
       "@type": "AccessibleFeature",
       "@id": "urn:feature:artifact-instance-key",
       "label": "Artifact instance key",
@@ -628,26 +610,12 @@
     {
       "@type": "AccessibleLocator",
       "@id": "urn:locator:bob-shared-report-file-row",
-      "label": "Native iOS mounted report filename",
+      "label": "Native iOS shared report in Recommended Files",
       "role": "text",
       "accessibleNameRef": "urn:message:report-file-basename",
-      "contextLocatorRefs": [
-        "urn:locator:ios-accessible-file-row"
+      "accessibleFeatureRefs": [
+        "urn:feature:ios-accessible-true"
       ]
-    },
-    {
-      "@type": "AccessibleLocator",
-      "@id": "urn:locator:bob-shared-report-status-row",
-      "label": "Bob shared report status row",
-      "role": "row",
-      "accessibleNameRef": "urn:message:report-pdf-shared-row"
-    },
-    {
-      "@type": "AccessibleLocator",
-      "@id": "urn:locator:shares-overview-link",
-      "label": "Native iOS Shares navigation",
-      "role": "button",
-      "accessibleNameRef": "urn:message:shares-overview"
     },
     {
       "@type": "AccessibleLocator",
@@ -930,12 +898,12 @@
     },
     {
       "@type": "ObservationBinding",
-      "@id": "urn:obs:bob-opens-shares-overview-activation",
-      "label": "Activate Bob Files tab refresh",
-      "observeSurfaceRef": "urn:surface:bob-opens-shares-overview",
+      "@id": "urn:obs:bob-refreshes-files-activation",
+      "label": "Pull down on Bob native iOS Files list",
+      "observeSurfaceRef": "urn:surface:bob-refreshes-files",
       "observationEventRef": "urn:observation-event:touch-activation",
       "locatorRefs": [
-        "urn:locator:ios-files-tab"
+        "urn:locator:ios-files-first-row"
       ]
     },
     {
@@ -1020,13 +988,6 @@
       "accessibleFeatureValue": "accountSwitcher"
     },
     {
-      "@type": "AccessibleFeature",
-      "@id": "urn:feature:ios-filename",
-      "label": "filename",
-      "accessibleFeatureName": "name",
-      "accessibleFeatureValue": "Cell/report.pdf"
-    },
-    {
       "@type": "AccessibleLocator",
       "@id": "urn:locator:ios-notification-entry",
       "label": "Open native iOS notifications",
@@ -1051,23 +1012,28 @@
     },
     {
       "@type": "InputModality",
-      "@id": "urn:openuji:input:touch-tap",
-      "label": "Touch tap"
+      "@id": "urn:openuji:input:touch",
+      "label": "Touch"
     },
     {
       "@type": "InputModalityProfile",
-      "@id": "urn:input-modality-profile:touch-tap",
-      "label": "Touch tap",
+      "@id": "urn:input-modality-profile:touch",
+      "label": "Touch",
       "inputModalityRefs": [
-        "urn:openuji:input:touch-tap"
+        "urn:openuji:input:touch"
       ]
+    },
+    {
+      "@type": "MoveKind",
+      "@id": "urn:openuji:move:swipe-down",
+      "label": "Swipe down"
     },
     {
       "@type": "ObservationEvent",
       "@id": "urn:observation-event:touch-activation",
       "label": "Touch activation",
       "requiredInputModalityProfileRefs": [
-        "urn:input-modality-profile:touch-tap"
+        "urn:input-modality-profile:touch"
       ]
     },
     {
@@ -1089,29 +1055,7 @@
       "observationEventRef": "urn:observation-event:presence",
       "expectedMatchCount": 1,
       "locatorRefs": [
-        "urn:locator:ios-favorites-tab"
-      ]
-    },
-    {
-      "@type": "State",
-      "@id": "urn:state:bob-shares-navigation-open",
-      "label": "Bob Favorites tab is open"
-    },
-    {
-      "@type": "Surface",
-      "@id": "urn:surface:bob-shares-navigation-open",
-      "label": "Bob sees native iOS Shares navigation",
-      "graphNodeRef": "urn:state:bob-shares-navigation-open"
-    },
-    {
-      "@type": "ObservationBinding",
-      "@id": "urn:obs:bob-shares-navigation-open-presence",
-      "label": "Bob Favorites tab is open",
-      "observeSurfaceRef": "urn:surface:bob-shares-navigation-open",
-      "observationEventRef": "urn:observation-event:presence",
-      "expectedMatchCount": 1,
-      "locatorRefs": [
-        "urn:locator:ios-favorites-navbar"
+        "urn:locator:ios-files-tab"
       ]
     },
     {
@@ -1136,30 +1080,6 @@
       "observationEventRef": "urn:observation-event:touch-activation",
       "locatorRefs": [
         "urn:locator:ios-navigate-back"
-      ]
-    },
-    {
-      "@type": "Transition",
-      "@id": "urn:transition:bob-opens-shares-navigation",
-      "label": "Bob switches away from Files to Favorites",
-      "from": "urn:state:bob-files-navigation-ready",
-      "to": "urn:state:bob-shares-navigation-open",
-      "commandRef": "urn:transition:bob-opens-shares-navigation:command"
-    },
-    {
-      "@type": "Surface",
-      "@id": "urn:surface:bob-opens-shares-navigation",
-      "label": "Bob opens the native iOS More tab",
-      "graphNodeRef": "urn:transition:bob-opens-shares-navigation:command"
-    },
-    {
-      "@type": "ObservationBinding",
-      "@id": "urn:obs:bob-opens-shares-navigation-activation",
-      "label": "Bob switches away from Files to Favorites",
-      "observeSurfaceRef": "urn:surface:bob-opens-shares-navigation",
-      "observationEventRef": "urn:observation-event:touch-activation",
-      "locatorRefs": [
-        "urn:locator:ios-favorites-tab"
       ]
     },
     {
@@ -1193,19 +1113,14 @@
       "label": "Bob accepts the remote share"
     },
     {
-      "@id": "urn:transition:bob-opens-shares-overview:command",
-      "@type": "Command",
-      "label": "Bob returns to the native iOS Files tab"
-    },
-    {
       "@id": "urn:transition:bob-returns-to-files:command",
       "@type": "Command",
       "label": "Bob closes Notifications"
     },
     {
-      "@id": "urn:transition:bob-opens-shares-navigation:command",
+      "@id": "urn:transition:bob-refreshes-files:command",
       "@type": "Command",
-      "label": "Bob switches away from Files to Favorites"
+      "label": "Bob pulls down to refresh Files"
     },
     {
       "@type": "MessageMeta",
@@ -1219,26 +1134,6 @@
       "messageMetaRef": "urn:message:native-notifications",
       "localeRef": "urn:locale:en",
       "value": "Notifications"
-    },
-    {
-      "@type": "MessageMeta",
-      "@id": "urn:message:native-more",
-      "label": "native-more",
-      "defaultLocaleRef": "urn:locale:en"
-    },
-    {
-      "@type": "Message",
-      "@id": "urn:message-value:native-more:en",
-      "messageMetaRef": "urn:message:native-more",
-      "localeRef": "urn:locale:en",
-      "value": "More"
-    },
-    {
-      "@type": "AccessibleLocator",
-      "@id": "urn:locator:ios-more-tab",
-      "label": "Open native iOS More tab",
-      "role": "button",
-      "accessibleNameRef": "urn:message:native-more"
     },
     {
       "@type": "MessageMeta",
@@ -1281,206 +1176,110 @@
     },
     {
       "@type": "AccessibleFeature",
-      "@id": "urn:feature:ios-nextcloud-navbar-name",
-      "label": "nextcloud-navbar-name",
-      "accessibleFeatureName": "name",
-      "accessibleFeatureValue": "Nextcloud"
-    },
-    {
-      "@type": "AccessibleLocator",
-      "@id": "urn:locator:ios-nextcloud-navbar",
-      "label": "Native iOS Nextcloud Navigation Bar",
-      "role": "navigation",
-      "accessibleFeatureRefs": [
-        "urn:feature:ios-nextcloud-navbar-name"
-      ]
-    },
-    {
-      "@type": "AccessibleFeature",
-      "@id": "urn:feature:ios-favorites-navbar-name",
-      "label": "favorites-navbar-name",
-      "accessibleFeatureName": "name",
-      "accessibleFeatureValue": "Favorites"
-    },
-    {
-      "@type": "AccessibleLocator",
-      "@id": "urn:locator:ios-favorites-navbar",
-      "label": "Native iOS Favorites Navigation Bar",
-      "role": "navigation",
-      "accessibleFeatureRefs": [
-        "urn:feature:ios-favorites-navbar-name"
-      ]
-    },
-    {
-      "@type": "MessageMeta",
-      "@id": "urn:message:native-favorites",
-      "label": "native-favorites",
-      "defaultLocaleRef": "urn:locale:en"
-    },
-    {
-      "@type": "Message",
-      "@id": "urn:message-value:native-favorites:en",
-      "messageMetaRef": "urn:message:native-favorites",
-      "localeRef": "urn:locale:en",
-      "value": "Favorites"
-    },
-    {
-      "@type": "AccessibleLocator",
-      "@id": "urn:locator:ios-favorites-tab",
-      "label": "Native iOS Favorites tab",
-      "role": "button",
-      "accessibleNameRef": "urn:message:native-favorites",
-      "contextLocatorRefs": [
-        "urn:locator:ios-tab-bar"
-      ]
-    },
-    {
-      "@type": "AccessibleLocator",
-      "@id": "urn:locator:ios-navbar-more-button",
-      "label": "Native iOS Files view options button",
-      "role": "button",
-      "accessibleNameRef": "urn:message:native-more",
-      "contextLocatorRefs": [
-        "urn:locator:ios-nextcloud-navbar"
-      ]
-    },
-    {
-      "@type": "MessageMeta",
-      "@id": "urn:message:native-sort-name",
-      "label": "native-sort-name",
-      "defaultLocaleRef": "urn:locale:en"
-    },
-    {
-      "@type": "Message",
-      "@id": "urn:message-value:native-sort-name:en",
-      "messageMetaRef": "urn:message:native-sort-name",
-      "localeRef": "urn:locale:en",
-      "value": "Name"
-    },
-    {
-      "@type": "AccessibleLocator",
-      "@id": "urn:locator:ios-sort-name-action",
-      "label": "Native iOS Sort by Name action",
-      "role": "button",
-      "accessibleNameRef": "urn:message:native-sort-name"
-    },
-    {
-      "@type": "AccessibleFeature",
       "@id": "urn:feature:ios-accessible-true",
       "label": "accessible-true",
       "accessibleFeatureName": "accessible",
       "accessibleFeatureValue": "true"
     },
     {
+      "@type": "AccessibleFeature",
+      "@id": "urn:feature:ios-files-collection-name",
+      "label": "files-collection-name",
+      "accessibleFeatureName": "name",
+      "accessibleFeatureValue": "NCCollectionViewCommon"
+    },
+    {
       "@type": "AccessibleLocator",
-      "@id": "urn:locator:ios-accessible-file-row",
-      "label": "Native iOS All files row container",
-      "role": "row",
+      "@id": "urn:locator:ios-files-collection",
+      "label": "Native iOS Files collection view",
+      "role": "list",
       "accessibleFeatureRefs": [
-        "urn:feature:ios-accessible-true"
+        "urn:feature:ios-files-collection-name"
       ]
     },
     {
-      "@type": "State",
-      "@id": "urn:state:bob-files-refreshed",
-      "label": "Bob refreshed native iOS Files list"
+      "@type": "MessageMeta",
+      "@id": "urn:message:native-documents",
+      "label": "native-documents",
+      "defaultLocaleRef": "urn:locale:en"
     },
     {
-      "@type": "Surface",
-      "@id": "urn:surface:bob-files-refreshed",
-      "label": "Bob refreshed native iOS Files list",
-      "graphNodeRef": "urn:state:bob-files-refreshed"
+      "@type": "Message",
+      "@id": "urn:message-value:native-documents:en",
+      "messageMetaRef": "urn:message:native-documents",
+      "localeRef": "urn:locale:en",
+      "value": "Documents"
     },
     {
-      "@type": "ObservationBinding",
-      "@id": "urn:obs:bob-files-refreshed-presence",
-      "label": "Bob refreshed native iOS Files list",
-      "observeSurfaceRef": "urn:surface:bob-files-refreshed",
-      "observationEventRef": "urn:observation-event:presence",
-      "expectedMatchCount": 1,
-      "locatorRefs": [
-        "urn:locator:ios-navbar-more-button"
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:ios-files-first-row",
+      "label": "Native iOS first folder in Files",
+      "role": "text",
+      "accessibleNameRef": "urn:message:native-documents",
+      "contextLocatorRefs": [
+        "urn:locator:ios-files-collection"
       ]
     },
     {
-      "@type": "State",
-      "@id": "urn:state:bob-files-sort-menu-open",
-      "label": "Bob Files options menu is open"
-    },
-    {
-      "@type": "Surface",
-      "@id": "urn:surface:bob-files-sort-menu-open",
-      "label": "Bob Files options menu is open",
-      "graphNodeRef": "urn:state:bob-files-sort-menu-open"
-    },
-    {
-      "@type": "ObservationBinding",
-      "@id": "urn:obs:bob-files-sort-menu-open-presence",
-      "label": "Bob Files options menu is open",
-      "observeSurfaceRef": "urn:surface:bob-files-sort-menu-open",
-      "observationEventRef": "urn:observation-event:presence",
-      "expectedMatchCount": 1,
-      "locatorRefs": [
-        "urn:locator:ios-sort-name-action"
+      "@type": "TransitionMaterialization",
+      "@id": "urn:materialization:bob-opens-native-notifications:touch",
+      "label": "Tap Notifications in the navigation bar",
+      "materializationTransitionRef": "urn:transition:bob-opens-native-notifications",
+      "materializationModalityRef": "urn:openuji:input:touch",
+      "materializationStepRefs": [
+        "urn:step:bob-opens-native-notifications:touch:1"
       ]
     },
     {
-      "@type": "Transition",
-      "@id": "urn:transition:bob-opens-files-sort-menu",
-      "label": "Bob opens Files view options",
-      "from": "urn:state:bob-files-refreshed",
-      "to": "urn:state:bob-files-sort-menu-open",
-      "commandRef": "urn:transition:bob-opens-files-sort-menu:command"
+      "@type": "ActivationStep",
+      "@id": "urn:step:bob-opens-native-notifications:touch:1",
+      "stepLocatorRef": "urn:locator:ios-notification-entry"
     },
     {
-      "@id": "urn:transition:bob-opens-files-sort-menu:command",
-      "@type": "Command",
-      "label": "Bob opens Files view options"
-    },
-    {
-      "@type": "Surface",
-      "@id": "urn:surface:bob-opens-files-sort-menu",
-      "label": "Bob opens Files view options",
-      "graphNodeRef": "urn:transition:bob-opens-files-sort-menu:command"
-    },
-    {
-      "@type": "ObservationBinding",
-      "@id": "urn:obs:bob-opens-files-sort-menu-activation",
-      "label": "Bob opens Files view options",
-      "observeSurfaceRef": "urn:surface:bob-opens-files-sort-menu",
-      "observationEventRef": "urn:observation-event:touch-activation",
-      "locatorRefs": [
-        "urn:locator:ios-navbar-more-button"
+      "@type": "TransitionMaterialization",
+      "@id": "urn:materialization:bob-accepts-share:touch",
+      "label": "Tap Accept on the incoming share notification",
+      "materializationTransitionRef": "urn:transition:bob-accepts-share",
+      "materializationModalityRef": "urn:openuji:input:touch",
+      "materializationStepRefs": [
+        "urn:step:bob-accepts-share:touch:1"
       ]
     },
     {
-      "@type": "Transition",
-      "@id": "urn:transition:bob-sorts-files-descending",
-      "label": "Bob reverses Files sort order",
-      "from": "urn:state:bob-files-sort-menu-open",
-      "to": "urn:state:bob-shared-report-visible",
-      "commandRef": "urn:transition:bob-sorts-files-descending:command"
+      "@type": "ActivationStep",
+      "@id": "urn:step:bob-accepts-share:touch:1",
+      "stepLocatorRef": "urn:locator:bob-accept-share-button"
     },
     {
-      "@id": "urn:transition:bob-sorts-files-descending:command",
-      "@type": "Command",
-      "label": "Bob reverses Files sort order"
-    },
-    {
-      "@type": "Surface",
-      "@id": "urn:surface:bob-sorts-files-descending",
-      "label": "Bob reverses Files sort order",
-      "graphNodeRef": "urn:transition:bob-sorts-files-descending:command"
-    },
-    {
-      "@type": "ObservationBinding",
-      "@id": "urn:obs:bob-sorts-files-descending-activation",
-      "label": "Bob reverses Files sort order",
-      "observeSurfaceRef": "urn:surface:bob-sorts-files-descending",
-      "observationEventRef": "urn:observation-event:touch-activation",
-      "locatorRefs": [
-        "urn:locator:ios-sort-name-action"
+      "@type": "TransitionMaterialization",
+      "@id": "urn:materialization:bob-returns-to-files:touch",
+      "label": "Tap Close to leave Notifications",
+      "materializationTransitionRef": "urn:transition:bob-returns-to-files",
+      "materializationModalityRef": "urn:openuji:input:touch",
+      "materializationStepRefs": [
+        "urn:step:bob-returns-to-files:touch:1"
       ]
+    },
+    {
+      "@type": "ActivationStep",
+      "@id": "urn:step:bob-returns-to-files:touch:1",
+      "stepLocatorRef": "urn:locator:ios-navigate-back"
+    },
+    {
+      "@type": "TransitionMaterialization",
+      "@id": "urn:materialization:bob-refreshes-files:touch",
+      "label": "Swipe down on the Files list to refresh",
+      "materializationTransitionRef": "urn:transition:bob-refreshes-files",
+      "materializationModalityRef": "urn:openuji:input:touch",
+      "materializationStepRefs": [
+        "urn:step:bob-refreshes-files:touch:1"
+      ]
+    },
+    {
+      "@type": "MoveStep",
+      "@id": "urn:step:bob-refreshes-files:touch:1",
+      "stepMoveKindRef": "urn:openuji:move:swipe-down",
+      "stepLocatorRef": "urn:locator:ios-files-first-row"
     }
   ]
 }

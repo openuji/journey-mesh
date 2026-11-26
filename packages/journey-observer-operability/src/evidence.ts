@@ -27,6 +27,8 @@ export type OperabilityDecisionRecord = Readonly<{
 export type OperabilityEvidence = Readonly<{
   format: typeof operabilityEvidenceFormat;
   version: 1;
+  /** Operations owned by this observer's executor; when set, reports omit transitions of other executors. */
+  operationIds?: readonly string[];
   decisions: readonly OperabilityDecisionRecord[];
   /** One entry per executor command, with its final status, in the order the commands were attempted. */
   actions: readonly JourneyInputAction[];
@@ -42,6 +44,7 @@ export function isOperabilityOutput(output: JourneyObserverOutput): output is Op
   return output.kind === operabilityObserverKind
     && evidence?.format === operabilityEvidenceFormat
     && evidence.version === 1
+    && (evidence.operationIds === undefined || (Array.isArray(evidence.operationIds) && evidence.operationIds.every((id) => typeof id === "string")))
     && Array.isArray(evidence.decisions)
     && Array.isArray(evidence.actions);
 }

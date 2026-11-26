@@ -39,6 +39,29 @@ export const createIosWebdriverIoSession: IosAppiumSessionFactory = async (optio
       }
       await client.elementClick(id);
     },
+    async swipeDown(id) {
+      const [rect, window] = await Promise.all([client.getElementRect(id), client.getWindowRect()]);
+      const x = Math.round(rect.x + rect.width / 2);
+      const fromY = Math.round(rect.y + rect.height / 2);
+      // Drag far enough to cross UIRefreshControl's threshold while staying clear of the bottom tab bar.
+      const toY = Math.round(Math.min(fromY + window.height * 0.35, window.height * 0.8));
+      if (toY - fromY < 100) {
+        throw new Error("iOS swipe down requires at least 100 points of vertical room below the target element");
+      }
+      // Begin moving immediately after pointerDown so XCUITest does not interpret the press as a long press.
+      await client.performActions([{
+        type: "pointer",
+        id: "finger",
+        parameters: { pointerType: "touch" },
+        actions: [
+          { type: "pointerMove", duration: 0, x, y: fromY },
+          { type: "pointerDown", button: 0 },
+          { type: "pointerMove", duration: 600, x, y: toY },
+          { type: "pointerUp", button: 0 }
+        ]
+      }]);
+      await client.releaseActions();
+    },
     async setValue(id, value) {
       const placeholder = await client.getElementAttribute(id, "placeholderValue").catch(() => undefined);
       const isFilled = (actual: string | null | undefined): boolean =>

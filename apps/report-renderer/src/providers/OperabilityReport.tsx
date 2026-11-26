@@ -4,12 +4,20 @@ import { MetadataTable } from "../ui.js";
 const kinds: Readonly<Record<string, string>> = { move: "Move", activation: "Activate", shortcut: "Shortcut", "text-entry": "Type text" };
 const statuses: Readonly<Record<string, string>> = { completed: "Done", failed: "Failed", attempted: "Started, no result", "not-performed": "Not performed" };
 const outcomes: Readonly<Record<string, string>> = { passed: "Passed", failed: "Failed", "not-executed": "Not reached" };
-const pointerGestures: Readonly<Record<string, string>> = { "pointer-move": "Pointer move", "pointer-press": "Pointer press", type: "Typing" };
+const namedGestures: Readonly<Record<string, string>> = {
+  "pointer-move": "Pointer move",
+  "pointer-press": "Pointer press",
+  tap: "Touch tap",
+  "swipe-down": "Touch swipe down",
+  type: "Typing"
+};
 
-/** `operability:nextStop` → `next stop`; producer IRIs stay as they are. */
+/** `operability:nextStop` → `next stop`, `urn:openuji:move:swipe-down` → `swipe down`; other IRIs stay as they are. */
 const moveKind = (id: string) => id.startsWith("operability:")
   ? id.slice("operability:".length).replace(/([A-Z])/g, " $1").toLowerCase()
-  : id;
+  : id.startsWith("urn:openuji:move:")
+    ? id.slice("urn:openuji:move:".length).replace(/-/g, " ")
+    : id;
 
 function Step({ step }: { step: OperabilityStepReport }) {
   const target = step.locator ? [step.locator.role, step.locator.name && `“${step.locator.name}”`].filter(Boolean).join(" ") || step.locator.id : "";
@@ -17,7 +25,7 @@ function Step({ step }: { step: OperabilityStepReport }) {
     <td>{step.position}</td>
     <td>{kinds[step.kind] ?? step.kind}{step.moveKindId && <> · {moveKind(step.moveKindId)}</>}{step.label && <small>{step.label}</small>}</td>
     <td>{target}</td>
-    <td>{step.gesture && (pointerGestures[step.gesture] ?? <kbd>{step.gesture}</kbd>)}</td>
+    <td>{step.gesture && (namedGestures[step.gesture] ?? <kbd>{step.gesture}</kbd>)}</td>
     <td>{statuses[step.status] ?? step.status}{step.error && <small role="note">{step.error}</small>}</td>
   </tr>;
 }
@@ -33,7 +41,7 @@ function Transition({ transition }: { transition: OperabilityTransitionReport })
       : transition.outcome === "not-executed" ? "Not reached." : "No input declared."}</p>
     {transition.error && transition.outcome === "failed" && <p role="note">{transition.error}</p>}
     {transition.steps.length > 0 && <div className="table-scroll"><table className="input-steps">
-      <thead><tr><th scope="col">#</th><th scope="col">Step</th><th scope="col">Target</th><th scope="col">Key or pointer</th><th scope="col">Result</th></tr></thead>
+      <thead><tr><th scope="col">#</th><th scope="col">Step</th><th scope="col">Target</th><th scope="col">Key, pointer or touch</th><th scope="col">Result</th></tr></thead>
       <tbody>{transition.steps.map((step) => <Step key={step.position} step={step} />)}</tbody>
     </table></div>}
   </article>;

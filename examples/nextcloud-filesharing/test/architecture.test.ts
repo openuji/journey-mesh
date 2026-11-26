@@ -42,6 +42,16 @@ test("native Android and iOS scenarios enter Files explicitly and model notifica
     assert.ok(plan.operations.some((operation) => operation.source?.references?.graphNodeId === "urn:transition:bob-opens-native-notifications"));
     assert.ok(Object.isFrozen(plan.operations));
   }
+  const iosPlan = await compileUjgJourneyPlan(new URL("../ujg/filesharing.ios.ujg.jsonld", import.meta.url), {
+    journeyId: "urn:journey:bob-remote-share"
+  });
+  const iosNodes = iosPlan.operations.map((operation) => operation.source?.references?.graphNodeId);
+  assert.equal(iosNodes.includes("urn:state:bob-shares-navigation-open"), false);
+  assert.ok(iosNodes.includes("urn:transition:bob-refreshes-files"));
+  const refresh = iosPlan.operations.find((operation) => operation.kind === "transition" && operation.transition.id === "urn:transition:bob-refreshes-files");
+  assert.equal(refresh?.kind, "transition");
+  assert.equal(refresh?.materializations?.[0]?.modality.id, "urn:openuji:input:touch");
+  assert.equal(refresh?.materializations?.[0]?.steps[0]?.moveKind?.id, "urn:openuji:move:swipe-down");
 });
 
 test("browser selection validates without Android or iOS device or app configuration", async () => {

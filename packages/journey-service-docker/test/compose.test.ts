@@ -60,7 +60,7 @@ test("a failed bootstrap is compensated, and a failed compensation names the sta
   assert.ok(failed.calls.some((call) => call.includes("down")));
   const both = await fixture((args) => args.includes("down") ? (() => { throw new Error("down failed"); })() : undefined);
   await assert.rejects(startComposeStack(both.stack, { bootstrap: async () => { throw new Error("install failed"); } }, both, { execute: both.execute }),
-    (error: unknown) => error instanceof AggregateError && error.message === "Moodle startup and cleanup failed");
+    (error: unknown) => error instanceof AggregateError && error.message === "Moodle startup and cleanup failed: install failed; cleanup: down failed");
 });
 
 test("an explicit release leaves a project alone once it no longer holds only this acquisition's containers", async () => {
@@ -89,6 +89,22 @@ test("startup output is published once per state a layer or container reaches, b
   assert.deepEqual(published, ["821d9dafb26d Pulling fs layer", "821d9dafb26d Downloading", "821d9dafb26d Download complete",
     "821d9dafb26d Extracting", "821d9dafb26d Pull complete", "Container moodle-1 Started", "allocated"]);
   assert.equal(composeProgressState(" abc Extracting [==>   ]  2MB/9MB"), "abc Extracting");
+});
+
+test("a progress state drops the counters of every Compose release", () => {
+  /** As Compose 5.5.0 printed them on a hosted runner. */
+  const states = [
+    [" 6cfa3c1603d5 Pulling fs layer 0B", "6cfa3c1603d5 Pulling fs layer"],
+    [" 7a36a4ed4172 Downloading 171B", "7a36a4ed4172 Downloading"],
+    [" 2bf13d043bf5 Downloading 1.049MB", "2bf13d043bf5 Downloading"],
+    [" 59b353deb50e Downloading 901.1kB", "59b353deb50e Downloading"],
+    [" 6cfa3c1603d5 Extracting 390B", "6cfa3c1603d5 Extracting"],
+    [" 6cfa3c1603d5 Download complete 0B", "6cfa3c1603d5 Download complete"],
+    [" 6cfa3c1603d5 Downloading 1.049MB / 1.896MB", "6cfa3c1603d5 Downloading"],
+    [" Image postgres:16-alpine Pulled ", "Image postgres:16-alpine Pulled"],
+    [" Container moodle-stack-app-1  Started", "Container moodle-stack-app-1 Started"]
+  ] as const;
+  for (const [line, state] of states) assert.equal(composeProgressState(line), state);
 });
 
 /** Runs `bootstrap` against a started stack whose `ps --status exited` answers `exited`. */

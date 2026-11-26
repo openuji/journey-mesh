@@ -1,10 +1,9 @@
 /**
  * Records how each transition was performed: the input decision a profile made and every executor
- * command, one per declared materialization step. It observes only; it never acts on the page.
+ * command, one per declared materialization step. It observes only; it never acts on the page or device.
  */
-import type { PlaywrightExecutionObserver } from "@openuji/journey-executor-playwright/observation";
 import { immutableSnapshot, type JourneyInputAction } from "@openuji/journey-core";
-import type { RunResult } from "@openuji/journey-runner";
+import type { InputModalityDecision, JourneyExecutionDescriptor, RunResult } from "@openuji/journey-runner";
 import {
   operabilityEvidenceFormat,
   operabilityObserverKind,
@@ -17,14 +16,30 @@ export * from "./evidence.js";
 export type OperabilityObserverOptions = Readonly<{
   /** Output ID; report data of this observer is written below it. */
   id: string;
+  /** Operations owned by the executor this observer is attached to. */
+  operationIds?: readonly string[];
 }>;
+
+export type OperabilityOperationObservation = Readonly<{
+  stage: string;
+  execution: JourneyExecutionDescriptor;
+  operation: Readonly<{ id: string }>;
+  decision?: InputModalityDecision;
+}>;
+
+export type OperabilityExecutionObserver = {
+  readonly name: string;
+  onAction?(action: JourneyInputAction): Promise<void> | void;
+  observeOperation?(observation: OperabilityOperationObservation): Promise<void> | void;
+};
 
 export const operabilityObserverName = "@openuji/journey-observer-operability";
 
-export function operabilityObserver(options: OperabilityObserverOptions): PlaywrightExecutionObserver & {
+export function operabilityObserver(options: OperabilityObserverOptions): OperabilityExecutionObserver & {
   output(result: RunResult): OperabilityObserverOutput;
 } {
   const id = options.id;
+  const operationIds = options.operationIds ? Object.freeze([...options.operationIds]) : undefined;
   let decisions: readonly OperabilityDecisionRecord[] = Object.freeze([]);
   let actions: readonly JourneyInputAction[] = Object.freeze([]);
   return Object.freeze({
@@ -32,8 +47,8 @@ export function operabilityObserver(options: OperabilityObserverOptions): Playwr
     onAction(action: JourneyInputAction) {
       actions = Object.freeze([...actions, immutableSnapshot(action)]);
     },
-    observeOperation(observation: Parameters<NonNullable<PlaywrightExecutionObserver["observeOperation"]>>[0]) {
-      if (observation.stage !== "transition-ready") return;
+    observeOperation(observation: OperabilityOperationObservation) {
+      if (observation.stage !== "transition-ready" || !observation.decision) return;
       const { decision, execution, operation } = observation;
       decisions = Object.freeze([...decisions, immutableSnapshot({
         runId: execution.runId,
@@ -51,6 +66,7 @@ export function operabilityObserver(options: OperabilityObserverOptions): Playwr
         id, kind: operabilityObserverKind, measurements: [], errors: [],
         evidence: {
           format: operabilityEvidenceFormat, version: 1,
+          ...(operationIds ? { operationIds } : {}),
           decisions: decisions.filter((decision) => decision.runId === result.runId),
           actions: latestActions(actions.filter((action) => action.runId === result.runId))
         }
