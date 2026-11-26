@@ -6,6 +6,7 @@ import type { TestConfig } from "./config/schema.js";
 import { segmentOf, type CompiledTest } from "./compile.js";
 import { resolveInputs, type ServiceValues } from "./inputs.js";
 import { discoveryInput, undiscoverableExecutor, type SuiteDiscovery } from "./discovery.js";
+import { isolateObserver, type IsolatedObserverComponent } from "./executor-observers.js";
 import { pluginContext } from "./plugins/context.js";
 import type { PluginLoader } from "./plugins/loader.js";
 
@@ -17,7 +18,7 @@ export type AssembledTest = Readonly<{
   executor: JourneyExecutor;
   profiles: readonly JourneyProfile[];
   environment?: JourneyEnvironment;
-  observers: readonly JourneyObserverComponent[];
+  observers: readonly IsolatedObserverComponent[];
   /** Listed services and those the test's executor inputs reference. */
   services: readonly string[];
   artifacts: JourneyArtifactStore;
@@ -44,7 +45,7 @@ function compatible(executor: ExecutorPlugin, child: ClientPlugin | ExecutorObse
 /** One executor instance per executor name and test, with its client and observers, scoped to its own segments. */
 async function assembleExecutors(compiled: CompiledTest, test: TestConfig, { loaded, load, artifacts, values, observations, discovery }: AssemblyInput) {
   const executors = new Map<string, JourneyExecutor>();
-  const observers: JourneyObserverComponent[] = [];
+  const observers: IsolatedObserverComponent[] = [];
 
   for (const name of new Set(test.journeys.map((item) => item.executor))) {
     const operations = compiled.plan.operations.filter((operation) => segmentOf(compiled, operation).executor === name);
@@ -56,11 +57,12 @@ async function assembleExecutors(compiled: CompiledTest, test: TestConfig, { loa
     const client = definition.client
       ? await (await load("client", definition.client, clientLabel, context, (plugin) => compatible(executor.plugin, plugin, clientLabel))).create()
       : undefined;
-    const components: JourneyObserverComponent[] = [];
+    const components: IsolatedObserverComponent[] = [];
     // A discovery run measures paths, not the journey: executor observers are not attached.
     if (!discovery) for (const [index, entry] of definition.observers.entries()) {
       const label = `executors.${name}.observers[${index}]`;
-      components.push(await (await load("executor-observer", entry, label, context, (plugin) => compatible(executor.plugin, plugin, label))).create());
+      const component: JourneyObserverComponent = await (await load("executor-observer", entry, label, context, (plugin) => compatible(executor.plugin, plugin, label))).create();
+      components.push(isolateObserver(component, label));
     }
     observers.push(...components);
     const dependencies = { client, observers: components.map((component) => component.observer), inputs: resolveInputs(definition.inputs, values) };

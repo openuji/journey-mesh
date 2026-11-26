@@ -13,8 +13,9 @@ import type {
 } from "./executors/contracts.js";
 import type { JourneyEnvironment } from "./environment/contracts.js";
 import { errorToJourneyRunError } from "./errors.js";
+import { MaterializationFailedError, fallbackApplies } from "./executors/materialization.js";
 import { componentDescriptor, executionDescriptor, profileDescriptor } from "./observers/contracts.js";
-import type { JourneyComponentDescriptor, JourneyExecutionDescriptor, JourneyObserver } from "./observers/contracts.js";
+import type { JourneyComponentDescriptor, JourneyObserver } from "./observers/contracts.js";
 import { JourneyObserverDispatcher } from "./observers/journey-observer-dispatcher.js";
 import type { JourneyProgressSink } from "./progress/contracts.js";
 import { JourneyProgressDispatcher } from "./progress/progress-dispatcher.js";
@@ -92,26 +93,25 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
   const assessments = Object.freeze(candidates.map((candidate) => candidate.assessment));
   await progress.publish({ type: "profiles-assessed", runId, assessments });
 
-  const runStartError = await observerDispatcher.runStarted({
+  const runStartErrors = await observerDispatcher.runStarted({
     executor: componentDescriptor(options.executor),
     plan: options.plan,
     profiles: Object.freeze(options.profiles.map(profileDescriptor)),
     assessments,
     runId
   });
-  const outcomes = runStartError ? Object.freeze([]) :
-    await candidates.reduce<Promise<readonly ProfileExecutionOutcome[]>>(async (pending, candidate) => {
-      const previous = await pending;
-      if (candidate.assessment.kind !== "applicable") return previous;
-      const outcome = await runProfileExecution({
-        executor: options.executor,
-        context: candidate.context,
-        environment: options.environment,
-        observerDispatcher,
-        progress
-      });
-      return Object.freeze([...previous, outcome]);
-    }, Promise.resolve(Object.freeze([])));
+  const outcomes = await candidates.reduce<Promise<readonly ProfileExecutionOutcome[]>>(async (pending, candidate) => {
+    const previous = await pending;
+    if (candidate.assessment.kind !== "applicable") return previous;
+    const outcome = await runProfileExecution({
+      executor: options.executor,
+      context: candidate.context,
+      environment: options.environment,
+      observerDispatcher,
+      progress
+    });
+    return Object.freeze([...previous, outcome]);
+  }, Promise.resolve(Object.freeze([])));
 
   const completed = {
     assessments,
@@ -119,7 +119,7 @@ export async function runJourney(options: RunJourneyOptions): Promise<RunResult>
     executions: outcomes.map((outcome) => outcome.execution),
     plan: options.plan,
     runId,
-    runErrors: runStartError ? [runStartError] : []
+    runErrors: runStartErrors
   };
   const resultBeforeRunCompletion = buildResult(completed);
   const completionError = await observerDispatcher.runCompleted(resultBeforeRunCompletion);
@@ -146,11 +146,17 @@ async function runProfileExecution(input: ProfileExecutionInput): Promise<Profil
     profileId: context.profile.id
   });
   const executionStartedAt = performance.now();
-  const batch = await runProfileBody(input, descriptor);
-  const beforeObserver = executionResult(context, batch.outcome);
+  const startErrors = context.signal?.aborted ? [] : await observerDispatcher.executionStarted(descriptor);
+  const batch = await runProfileBody(input);
+  // An observer that failed fails the execution; the profile ran as it would have without it.
+  const outcome = startErrors.reduce(
+    (previous, error) => combineOutcomes(previous, failedOutcome(error), "execution observer"),
+    batch.outcome
+  );
+  const beforeObserver = executionResult(context, outcome);
   const completionError = await observerDispatcher.executionCompleted(descriptor, beforeObserver);
   const execution = completionError
-    ? executionResult(context, combineOutcomes(batch.outcome, failedOutcome(completionError), "execution observer"))
+    ? executionResult(context, combineOutcomes(outcome, failedOutcome(completionError), "execution observer"))
     : beforeObserver;
 
   await progress.publish({
@@ -168,13 +174,9 @@ async function runProfileExecution(input: ProfileExecutionInput): Promise<Profil
   });
 }
 
-async function runProfileBody(
-  input: ProfileExecutionInput,
-  descriptor: JourneyExecutionDescriptor
-): Promise<ExecutionBatch> {
+async function runProfileBody(input: ProfileExecutionInput): Promise<ExecutionBatch> {
   try {
     input.context.signal?.throwIfAborted();
-    await input.observerDispatcher.executionStarted(descriptor);
     // Routing is resolved before shared fixture setup can change service state.
     const executors = new Map(input.context.plan.operations.map((operation) => [
       operation,
@@ -304,9 +306,9 @@ async function executeOperation(
 }
 
 /**
- * Performs the transition as decided, and through the decision's fallback when that fails. Returns the
- * decision that took the transition and, after a fallback, the failure it got past. A failing
- * fallback fails the operation.
+ * Performs the transition as decided, and through the decision's fallback when a check of its
+ * materialization failed and `fallbackApplies`. Returns the decision that took the transition and, after
+ * a fallback, the failure it got past. A failing fallback fails the operation with both errors.
  */
 async function performTransition(
   session: JourneyExecutorSession,
@@ -318,11 +320,18 @@ async function performTransition(
     await session.performTransition(operation, decision);
     return { performed: decision };
   } catch (error) {
-    if (!decision?.fallback || signal?.aborted) throw error;
+    if (!decision?.fallback || signal?.aborted || !MaterializationFailedError.is(error)) throw error;
     const { fallback, ...chosen } = decision;
+    if (!fallbackApplies(fallback, error.sentInput)) {
+      throw new MaterializationFailedError(`${error.message} (${fallback.id} was not performed: input had been sent, and it names no start)`, error.sentInput, { cause: error });
+    }
     const performed = Object.freeze({ ...chosen, materialization: fallback });
-    await session.performTransition(operation, performed);
-    const missed = new Error(`${errorToJourneyRunError(error).message} (the transition was then taken through ${fallback.id})`, { cause: error });
+    try {
+      await session.performTransition(operation, performed);
+    } catch (second) {
+      throw new AggregateError([error, second], `${error.message}; ${fallback.id} failed too: ${errorToJourneyRunError(second).message}`);
+    }
+    const missed = new Error(`${error.message} (the transition was then taken through ${fallback.id})`, { cause: error });
     return { performed, missed };
   }
 }

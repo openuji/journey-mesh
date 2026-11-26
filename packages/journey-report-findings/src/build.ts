@@ -96,7 +96,8 @@ export function buildFindingsReport(input: BuildFindingsInput): FindingsReport {
       return immutableSnapshot({
         id, test: test.id, failureClass, ...text,
         operationId: failure.operationId,
-        executions: items.map((item) => item.execution),
+        // An operation can fail the same way twice in one execution: its canonical path, then the fallback.
+        executions: [...new Map(items.map((item) => [item.execution.executionId, item.execution])).values()],
         frames,
         reproduce: reproduce(execution.executionId, failure.operationId, failure.stepId),
         ...(failure.snapshot.path ? { path: failure.snapshot.path } : {}),

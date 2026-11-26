@@ -396,8 +396,10 @@ test("the executor runs a selected materialization end to end and records each s
  * Runs home → (transition) → `to` on the tabs page and returns the result with every failure observers saw.
  * With `canonical`, those steps are the canonical materialization and `steps` its fallback.
  */
-async function runTabsJourney({ steps, canonical, binding = tab("Drafts"), to = "drafts", roving = true, observers = [] }: {
+async function runTabsJourney({ steps, canonical, canonicalStart, start, binding = tab("Drafts"), to = "drafts", roving = true, observers = [] }: {
   steps: ResolvedMaterializationStep[]; canonical?: ResolvedMaterializationStep[]; binding?: ResolvedAccessibleLocator; to?: string; roving?: boolean;
+  /** The start locators of the canonical materialization and of `steps`. */
+  canonicalStart?: ResolvedAccessibleLocator; start?: ResolvedAccessibleLocator;
   observers?: PlaywrightExecutionObserver[];
 }) {
   const directory = await mkdtemp(join(tmpdir(), "playwright-failures-"));
@@ -405,8 +407,8 @@ async function runTabsJourney({ steps, canonical, binding = tab("Drafts"), to = 
   const file = join(directory, "tabs.html");
   await writeFile(file, tabsPage({ roving }));
   const client = Object.freeze({ name: "client", resolveEntry: () => Object.freeze({ kind: "url" as const, url: pathToFileURL(file).href }), resolveTransitionValue: () => undefined });
-  const path = materialization(keyboard, steps);
-  const expected = canonical && { ...materialization(keyboard, canonical), extensions: { [canonicalMaterializationExtension]: {} } };
+  const path = materialization(keyboard, steps, start);
+  const expected = canonical && { ...materialization(keyboard, canonical, canonicalStart), extensions: { [canonicalMaterializationExtension]: {} } };
   const profiles = [{ id: keyboard, modalities: [{ id: keyboard }] }];
   const transition = {
     ...state("home", 1), id: "select", kind: "transition", transition: { id: "urn:transition", from: "urn:state:home", to: `urn:state:${to}` },
@@ -471,16 +473,6 @@ test("an observer that throws at a failure never replaces the operation's own er
   assert.deepEqual(result.errors.map((error) => error.message), ["Expected locator count 1; last value: count:0"]);
 });
 
-test("an operation that an observer failed is not observed as an application failure", async () => {
-  for (const stage of ["state-asserted", "transition-ready"] as const) {
-    const throwing: PlaywrightExecutionObserver = { name: "strict", observeOperation(observation) { if (observation.stage === stage) throw new Error(`observer rejected ${stage}`); } };
-    const { result, failures } = await runTabsJourney({ steps: toDrafts(), observers: [throwing] });
-    assert.equal(result.ok, false, stage);
-    assert.deepEqual(result.errors.map((error) => error.message), [`observer rejected ${stage}`]);
-    assert.deepEqual(failures, [], `${stage}: the application did not fail`);
-  }
-});
-
 test("a canonical materialization that fails is observed, and its fallback takes the transition", async () => {
   const actions: JourneyInputAction[] = [];
   // The canonical path expects focus on the tab already; nothing has focus on the freshly opened page.
@@ -508,4 +500,39 @@ test("a canonical materialization that works never runs its fallback", async () 
   assert.equal(result.ok, true, JSON.stringify(result.errors));
   assert.deepEqual(failures, []);
   assert.ok(actions.every((action) => action.materializationId === expected!.id));
+});
+
+// The canonical path expects the first Tab to reach the tab list, but it reaches the button before it.
+const tabFirst = () => [move("operability:nextStop", tab("Home")), move("operability:nextItem", tab("Drafts")), activate(tab("Drafts"))];
+const performed = (actions: readonly JourneyInputAction[]) => [...new Set(actions.map((action) => action.materializationId))];
+
+test("after the canonical path sent input, a fallback that names no start is not performed", async () => {
+  const actions: JourneyInputAction[] = [];
+  const { result, failures, expected, path } = await runTabsJourney({
+    canonical: tabFirst(), steps: toDrafts(), observers: [{ name: "actions", onAction(action) { actions.push(action); } }]
+  });
+  assert.deepEqual(result.evidence.executions[0]!.operations.map((operation) => operation.outcome.kind), ["passed", "failed"]);
+  assert.match(result.errors[0]!.message, /focus is at button "Before".*was not performed: input had been sent, and it names no start/);
+  assert.deepEqual(performed(actions), [expected!.id], `${path.id} sent nothing`);
+  assert.equal(failures.length, 1);
+});
+
+test("after the canonical path sent input, a fallback performs from the start it names", async () => {
+  const { result, failures } = await runTabsJourney({ canonical: tabFirst(), steps: tabFirst(), start: locator("urn:locator:before", "button", "Before") });
+  assert.deepEqual(result.evidence.executions[0]!.operations.map((operation) => operation.outcome.kind), ["passed", "failed", "passed"]);
+  assert.match(result.errors[0]!.message, /the transition was then taken through/);
+  assert.equal(failures.length, 1);
+});
+
+test("a canonical path whose start does not hold sent nothing, so its fallback is performed", async () => {
+  const { result } = await runTabsJourney({ canonical: [move("operability:nextItem", tab("Drafts"))], canonicalStart: tab("Home"), steps: toDrafts() });
+  assert.deepEqual(result.evidence.executions[0]!.operations.map((operation) => operation.outcome.kind), ["passed", "failed", "passed"]);
+  assert.match(result.errors[0]!.message, /the user must start at urn:locator:home-tab.*the transition was then taken through/);
+});
+
+test("a canonical path that fails without a failed check, here for want of a key, has no fallback", async () => {
+  const { result } = await runTabsJourney({ canonical: [move("operability:nextItem", tab("Drafts"))], steps: toDrafts() });
+  assert.deepEqual(result.evidence.executions[0]!.operations.map((operation) => operation.outcome.kind), ["passed", "failed"]);
+  assert.match(result.errors[0]!.message, /^Materialization .*: no key for moves\["operability:nextItem"\]/);
+  assert.doesNotMatch(result.errors[0]!.message, /taken through|not performed/);
 });

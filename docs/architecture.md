@@ -111,18 +111,24 @@ the executor ([`second-vendor.test.ts`](../packages/journey-host/test/second-ven
   performed through its modality, at most one per transition and modality. A
   run performs it first, whatever the profile prefers
   ([`profiles.test.ts`](../packages/journey-profiles/test/profiles.test.ts)).
-  Another declared materialization beside it is the fallback: the runner
-  performs it only after the canonical one failed, and a findings observer sees
-  that failure first
-  ([`materialization-browser.test.mts`](../packages/journey-executor-playwright/test/materialization-browser.test.mts)).
+  Another declared materialization beside it is the fallback. The runner
+  performs it only after a start or step check of the canonical one failed, and
+  a findings observer sees that failure first. If the canonical one had sent
+  input, the fallback is performed only if it names its start
+  (`materializationStartLocatorRef`), which is checked before its steps. When
+  both fail, the run record keeps both errors
+  ([`integration.test.ts`](../packages/journey-runner/test/integration.test.ts),
+  [`materialization-browser.test.mts`](../packages/journey-executor-playwright/test/materialization-browser.test.mts)).
   Discovery never replaces a canonical materialization, and measures a path
-  beside one only if it failed before sending input
+  beside one only if a check of it failed before it sent input
   ([`discovery-browser.test.mts`](../packages/journey-executor-playwright/test/discovery-browser.test.mts),
   [`materializations.test.ts`](../packages/journey-model-ujg/test/materializations.test.ts)).
-- **Observers only observe.** They own no session and start no interaction.
-  They affect a verdict only through `errors` in their output (for example a
-  strict accessibility policy). An observer that sees a failed operation never
-  replaces its error ([`materialization-browser.test.mts`](../packages/journey-executor-playwright/test/materialization-browser.test.mts)).
+- **Observers only observe.** They own no session, start no interaction and
+  never change what a run does. They affect a verdict only through errors: those
+  in their output (for example a strict accessibility policy), and those they
+  throw, which are recorded
+  ([`executor-observers.test.ts`](../packages/journey-host/test/executor-observers.test.ts),
+  [`integration.test.ts`](../packages/journey-runner/test/integration.test.ts)).
 - **Effects are verified by the environment**, not by observers, and effect
   checks never mutate the application.
 - **Services own their effects.** Effects start at `start()`, which returns
@@ -163,8 +169,8 @@ the executor ([`second-vendor.test.ts`](../packages/journey-host/test/second-ven
   app; run directories are never split.
 - A finding is an operation that failed against what the model declares,
   captured with its page before the error propagates; nothing is declared next
-  to the model. A failure an observer caused, or one in an excluded phase, is
-  not a finding. A finding bundle is written only from what the run captured
+  to the model. A failure in an excluded phase is not a finding. A finding
+  bundle is written only from what the run captured
   ([`bundle-browser.test.mts`](../apps/finding-reporter/test/bundle-browser.test.mts)).
 
 ### Command-line contract

@@ -84,7 +84,7 @@ export async function assertPlaywrightLocator(
 
 export async function pollUntil(
   check: () => Promise<string>,
-  options: { message: string; timeoutMs: number; signal?: AbortSignal }
+  options: { message: string; timeoutMs: number; signal?: AbortSignal; failure?: (message: string) => Error }
 ): Promise<void> {
   const startedAt = Date.now();
   let lastValue = "not-run";
@@ -95,7 +95,8 @@ export async function pollUntil(
     if (lastValue === "ok") return;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  throw new Error(`${options.message}; last value: ${lastValue}`);
+  const message = `${options.message}; last value: ${lastValue}`;
+  throw options.failure?.(message) ?? new Error(message);
 }
 
 function expandedOption(locator: ResolvedAccessibleLocator): boolean | undefined {

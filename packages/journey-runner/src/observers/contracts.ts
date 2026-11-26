@@ -19,6 +19,10 @@ export type JourneyExecutionDescriptor = {
   readonly plan: JourneyPlan;
 };
 
+/**
+ * Observes the run and execution lifecycle, and only observes: what a method throws fails the result,
+ * and never changes what runs.
+ */
 export type JourneyObserver = {
   readonly name: string;
   readonly version?: string;

@@ -30,7 +30,10 @@ export type TestRecord = Readonly<{
   plan: JourneyPlan;
   result: RunResult;
   observers: readonly JourneyObserverOutput[];
-  /** Observer outputs that failed or were invalid; their evidence is missing from `observers`. */
+  /**
+   * Observer outputs that failed or were invalid (their evidence is missing from `observers`), and what
+   * observers threw while the test ran.
+   */
   observerErrors: readonly JourneyRunError[];
   files: readonly EvidenceFile[];
 }>;

@@ -30,11 +30,15 @@ export function axeObserver(options: AxeObserverOptions): AxeObserver {
       const evidence = journal.snapshot();
       const measurements: JourneyMeasurement[] = [];
       for (const execution of result.evidence.executions) {
+        const audits = evidence.flatMap((fact) => fact.kind === "operation-observed" && fact.evidence.runId === result.runId && fact.evidence.executionId === execution.executionId && "audit" in fact.evidence ? [fact.evidence] : []);
         // One scan per operation counts, as in the report: a transition retried through its fallback is observed twice.
-        const reports = [...new Map(evidence.flatMap((fact) => fact.kind === "operation-observed" && fact.evidence.runId === result.runId && fact.evidence.executionId === execution.executionId && "audit" in fact.evidence && fact.evidence.audit.kind === "completed" ? [[fact.evidence.operation.id, fact.evidence.audit.report] as const] : [])).values()];
-        const complete = result.executions.find((item) => item.executionId === execution.executionId)?.outcome.kind === "passed";
+        const scanned = new Map(audits.flatMap((item) => item.audit.kind === "completed" ? [[item.operation.id, item.audit.report] as const] : []));
+        const reports = [...scanned.values()];
+        // A failed audit does not stop the execution, so the counts say themselves that a scan is missing.
+        const missing = audits.some((item) => item.audit.kind === "failed" && !scanned.has(item.operation.id));
+        const complete = !missing && result.executions.find((item) => item.executionId === execution.executionId)?.outcome.kind === "passed";
         for (const scan of ["pageState", "matchedSurface"] as const) for (const category of ["violations", "incomplete"] as const) {
-          measurements.push({ id: `axe/${scan}/${category}`, label: `${scan === "pageState" ? "Page" : "Scoped"} axe ${category} across scans`, method: `axe-rule-results/${scan}/${(config.tags ?? wcag22Tags).join(",")}`, unit: "rule-result", aggregation: "sum-across-scans", scope: { runId: result.runId, executionId: execution.executionId, profileId: execution.profileId, operationIds: execution.operations.map((op) => op.operationId) }, status: !reports.length ? "unavailable" : complete ? "available" : "partial", value: reports.length ? reports.reduce((sum, report) => sum + report.scans[scan][category].length, 0) : null, ...(!reports.length ? { reason: "No completed axe scans." } : !complete ? { reason: "Execution ended before all scans completed." } : {}) });
+          measurements.push({ id: `axe/${scan}/${category}`, label: `${scan === "pageState" ? "Page" : "Scoped"} axe ${category} across scans`, method: `axe-rule-results/${scan}/${(config.tags ?? wcag22Tags).join(",")}`, unit: "rule-result", aggregation: "sum-across-scans", scope: { runId: result.runId, executionId: execution.executionId, profileId: execution.profileId, operationIds: execution.operations.map((op) => op.operationId) }, status: !reports.length ? "unavailable" : complete ? "available" : "partial", value: reports.length ? reports.reduce((sum, report) => sum + report.scans[scan][category].length, 0) : null, ...(!reports.length ? { reason: "No completed axe scans." } : missing ? { reason: "An axe audit did not complete." } : !complete ? { reason: "Execution ended before all scans completed." } : {}) });
         }
       }
       const recorded = { reportId: config.reportId, createdAt: (config.now ?? (() => new Date().toISOString()))(), wcagTags: [...(config.tags ?? wcag22Tags)],

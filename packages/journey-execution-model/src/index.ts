@@ -177,7 +177,8 @@ export type ResolvedTransitionMaterialization = LabeledRef & {
  * The `extensions` key that marks the TransitionMaterialization saying how its transition is expected
  * to be performed through its modality. Its presence marks it; UJG requires the value to be an object,
  * `{}`. A Journey Mesh convention until UJG specifies it. A run performs the canonical one first;
- * another materialization of the transition through the same modality is only the way on after it failed.
+ * another materialization of the transition through the same modality is only the way on after a check of
+ * it failed.
  */
 export const canonicalMaterializationExtension = "urn:openuji:journey-mesh:canonical";
 
@@ -293,8 +294,8 @@ export type InputModalityDecision = {
    */
   materialization?: ResolvedTransitionMaterialization;
   /**
-   * Set only beside a canonical `materialization`: the runner performs this one when that fails, and
-   * records the operation as failed.
+   * Set only beside a canonical `materialization`: the runner performs this one when a check of that one
+   * fails and the user is at this one's start, and records the operation as failed.
    */
   fallback?: ResolvedTransitionMaterialization;
 };

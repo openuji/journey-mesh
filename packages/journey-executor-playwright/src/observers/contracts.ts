@@ -44,8 +44,7 @@ export type PlaywrightOperationObservation =
 
 /**
  * An operation failed while its page was open, observed before the error propagates. The executor
- * ignores observer errors here: the operation's own error is what fails. A failure that an observer
- * caused (by throwing from `observeOperation`) is not observed as one.
+ * ignores observer errors here: the operation's own error is what fails.
  */
 export type PlaywrightFailureObservation = {
   readonly stage: "operation-failed";

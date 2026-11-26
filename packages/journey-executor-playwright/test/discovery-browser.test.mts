@@ -247,8 +247,13 @@ test("in discovery mode the executor reaches an undeclared transition, takes it,
   assert.equal(measured.run.ok, false, "the canonical path failed");
   assert.deepEqual(measured.records.map((record) => [record.status, record.replaces, record.steps]), [["found", "urn:material:stale", steps]]);
 
-  // After a canonical path changed the page, the fallback is performed as declared, not measured.
-  const kept = await beside(moved, { fallback: stale, rediscover: true });
+  // After a canonical path changed the page, a fallback that names no start is not performed, and nothing is measured.
+  const left = await beside(moved, { fallback: stale, rediscover: true });
+  assert.deepEqual(left.records.map((record) => record.status), ["not-found"]);
+  assert.match(left.run.errors[0]!.message, /urn:material:stale was not performed/);
+
+  // One that names the start the user is at is performed as declared, not measured.
+  const kept = await beside(moved, { fallback: { ...stale, startLocator: button("Before") }, rediscover: true });
   assert.deepEqual(kept.records.map((record) => [record.status, record.replaces, record.steps]), [["declared", undefined, undefined]], "the fallback was performed as declared, not measured");
 
   // A canonical path that works is declared, never replaced, and nothing else is measured.

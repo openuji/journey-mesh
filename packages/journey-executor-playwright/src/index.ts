@@ -14,7 +14,9 @@ import {
 import { type WebJourneyClient } from "@openuji/journey-platform-web";
 import { isCanonical, keyboardTextEntryInputModalityId } from "@openuji/journey-execution-model";
 import {
+  MaterializationFailedError,
   executionDescriptor,
+  fallbackApplies,
   type InputModalityDecision,
   type JourneyExecutor,
   type JourneyExecutorCloseInput,
@@ -34,6 +36,7 @@ import { type PlaywrightTransientUi } from "./transient.js";
 import { PlaywrightPathFinder, discoverTransition, type PlaywrightDiscovery } from "./discovery.js";
 import { assertPlaywrightLocator, toPlaywrightObservationLocator, validatePlaywrightBindings } from "./locators.js";
 import {
+  PlaywrightCheckError,
   PlaywrightStepPerformer,
   playwrightPerformsModality,
   validatePlaywrightMaterializations,
@@ -353,15 +356,17 @@ class PlaywrightExecutorSession implements JourneyExecutorSession {
     try {
       if (declared) await performer.perform(declared);
       if (textEntry) await performer.typeAtFocus(locator, text!, `Transition ${operation.transition.id}`, declared?.id);
-    } catch (error) {
-      if (!discovery || !declared || !isCanonical(declared) || this.context.signal?.aborted) throw error;
-      const changed = this.inputsSent !== sentBefore;
-      if (changed) this.changedOperationId = operation.id;
-      // A declared materialization beside the canonical one is the runner's to perform.
-      if (decision.fallback) throw error;
-      if (changed) {
-        const message = error instanceof Error ? error.message : String(error);
-        await discovery.record({ ...finding!, status: "not-found", note: `the canonical materialization ${declared.id} failed after it sent input, so no path can be measured from here: ${message}` });
+    } catch (thrown) {
+      // Only a failed check fails the materialization; the runner needs to know whether input was sent.
+      const error = declared && thrown instanceof PlaywrightCheckError
+        ? new MaterializationFailedError(thrown.message, this.inputsSent !== sentBefore, { cause: thrown })
+        : thrown;
+      if (!discovery || !declared || !isCanonical(declared) || !MaterializationFailedError.is(error) || this.context.signal?.aborted) throw error;
+      if (error.sentInput) this.changedOperationId = operation.id;
+      // A declared materialization beside the canonical one is the runner's to perform, where it may.
+      if (decision.fallback && fallbackApplies(decision.fallback, error.sentInput)) throw error;
+      if (error.sentInput) {
+        await discovery.record({ ...finding!, status: "not-found", note: `the canonical materialization ${declared.id} failed after it sent input, so no path can be measured from here: ${error.message}` });
         throw error;
       }
       await discover(discovery);
@@ -417,7 +422,7 @@ class PlaywrightExecutorSession implements JourneyExecutorSession {
       stage: "operation-failed", execution: this.execution, operation, page,
       error: Object.freeze({ name: error instanceof Error ? error.name : "Error", message: error instanceof Error ? error.message : String(error) }),
       ...(action ? { action } : {})
-    }, error);
+    });
   }
 
   private pointerState(page: Page): PlaywrightPointerState {

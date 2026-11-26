@@ -90,6 +90,12 @@ export function validatePlaywrightMaterializations(operation: TransitionPlanOper
   }
 }
 
+/**
+ * A start or step check of a materialization failed (Operability §7): the page is not as declared. The
+ * session reports it to the runner. A missing key or a browser error is not one.
+ */
+export class PlaywrightCheckError extends Error {}
+
 export class PlaywrightStepPerformer {
   private readonly focus: PlaywrightFocus;
 
@@ -118,7 +124,7 @@ export class PlaywrightStepPerformer {
   /** Type at the focused object, which must be the transition's bound field. Never moves focus itself. */
   async typeAtFocus(field: Locator, text: string, where: string, materializationId?: string): Promise<void> {
     await this.options.record({ command: "text-entry", ...(materializationId ? { materializationId } : {}) }, async (gesture) => {
-      await this.poll(
+      await this.check(
         `${where}: text entry types at the focused object, which must match the transition's ObservationBinding; declare focus moves that reach the field`,
         async () => await this.focus.focusMatches(field, "dom") ? "ok" : `focus is at ${await this.focus.describeFocus("dom")}`
       );
@@ -147,7 +153,7 @@ export class PlaywrightStepPerformer {
     const first = materialization.steps[0];
     const pointer = first ? stepPosition(materialization, first) === "pointer" : materialization.modality.id === pointerInputModalityId;
     const target = await toPlaywrightLocator(this.options.page, start);
-    await this.poll(`Materialization ${materialization.id}: the user must start at ${start.id}`, async () => pointer
+    await this.check(`Materialization ${materialization.id}: the user must start at ${start.id}`, async () => pointer
       ? await this.pointerMatches(target) ? "ok" : `pointer is at ${await this.describePointer()}`
       : await this.focus.focusMatches(target) ? "ok" : `focus is at ${await this.focus.describeFocus()}`);
   }
@@ -162,7 +168,7 @@ export class PlaywrightStepPerformer {
     try {
       await page.keyboard.press(key);
       const target = step.locator ? await toPlaywrightLocator(page, step.locator) : undefined;
-      await this.poll(`${where} (MoveStep ${kind} via ${key} from ${from})`, async () => {
+      await this.check(`${where} (MoveStep ${kind} via ${key} from ${from})`, async () => {
         if (await this.focus.focusIs(before)) return "focus did not move";
         if (!target) return "ok";
         return await this.focus.focusMatches(target) ? "ok" : `focus is at ${await this.focus.describeFocus()}, expected ${step.locator!.id}`;
@@ -175,9 +181,9 @@ export class PlaywrightStepPerformer {
   private async keyboardActivate(step: ResolvedMaterializationStep, where: string, gesture: (value: string) => void): Promise<void> {
     if (step.locator) {
       const target = await toPlaywrightLocator(this.options.page, step.locator);
-      await this.poll(`${where} (ActivationStep): the user must be at ${step.locator.id}`, async () => await this.focus.focusMatches(target) ? "ok" : `focus is at ${await this.focus.describeFocus()}`);
+      await this.check(`${where} (ActivationStep): the user must be at ${step.locator.id}`, async () => await this.focus.focusMatches(target) ? "ok" : `focus is at ${await this.focus.describeFocus()}`);
     } else if (!await this.focus.hasFocus()) {
-      throw new Error(`${where} (ActivationStep): no object has focus`);
+      throw new PlaywrightCheckError(`${where} (ActivationStep): no object has focus`);
     }
     const key = await this.focus.keyFor(this.options.keyboard.activation, "activation", where);
     gesture(key);
@@ -188,25 +194,25 @@ export class PlaywrightStepPerformer {
     const { page, pointer } = this.options;
     const locator = step.locator!;
     const target = await toPlaywrightLocator(page, locator);
-    await this.poll(`${where} (MoveStep ${pointAtMoveKindId}): ${locator.id} must match exactly one object`, async () => {
+    await this.check(`${where} (MoveStep ${pointAtMoveKindId}): ${locator.id} must match exactly one object`, async () => {
       const count = await target.count();
       return count === 1 ? "ok" : `${count} objects match; the runner never chooses one`;
     });
     await target.scrollIntoViewIfNeeded({ timeout: this.options.timeoutMs });
     const box = await target.boundingBox({ timeout: this.options.timeoutMs });
-    if (!box) throw new Error(`${where} (MoveStep ${pointAtMoveKindId}): ${locator.id} has no box to point at`);
+    if (!box) throw new PlaywrightCheckError(`${where} (MoveStep ${pointAtMoveKindId}): ${locator.id} has no box to point at`);
     const position = Object.freeze({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
     gesture("pointer-move");
     await page.mouse.move(position.x, position.y);
     pointer.position = position;
-    await this.poll(`${where} (MoveStep ${pointAtMoveKindId}): the pointer must be at ${locator.id}`, async () => await this.pointerMatches(target) ? "ok" : `pointer is at ${await this.describePointer()}`);
+    await this.check(`${where} (MoveStep ${pointAtMoveKindId}): the pointer must be at ${locator.id}`, async () => await this.pointerMatches(target) ? "ok" : `pointer is at ${await this.describePointer()}`);
   }
 
   private async pointerActivate(step: ResolvedMaterializationStep, where: string, gesture: (value: string) => void): Promise<void> {
-    if (!this.options.pointer.position) throw new Error(`${where} (ActivationStep): the pointer position is unknown; reach the object with an operability:pointAt MoveStep first`);
+    if (!this.options.pointer.position) throw new PlaywrightCheckError(`${where} (ActivationStep): the pointer position is unknown; reach the object with an operability:pointAt MoveStep first`);
     if (step.locator) {
       const target = await toPlaywrightLocator(this.options.page, step.locator);
-      await this.poll(`${where} (ActivationStep): the pointer must be at ${step.locator.id}`, async () => await this.pointerMatches(target) ? "ok" : `pointer is at ${await this.describePointer()}`);
+      await this.check(`${where} (ActivationStep): the pointer must be at ${step.locator.id}`, async () => await this.pointerMatches(target) ? "ok" : `pointer is at ${await this.describePointer()}`);
     }
     gesture("pointer-press");
     await this.options.page.mouse.down();
@@ -217,14 +223,14 @@ export class PlaywrightStepPerformer {
     let keys = shortcutHint(step, where);
     if (step.locator) {
       const target = await toPlaywrightLocator(this.options.page, step.locator);
-      await this.poll(`${where} (ShortcutStep): ${step.locator.id} must match exactly one object`, async () => {
+      await this.check(`${where} (ShortcutStep): ${step.locator.id} must match exactly one object`, async () => {
         const count = await target.count();
         return count === 1 ? "ok" : `${count} objects match`;
       });
       // aria-keyshortcuts lists alternatives separated by spaces; the first is performed.
       keys ??= (await target.getAttribute("aria-keyshortcuts", { timeout: this.options.timeoutMs }))?.trim().split(/\s+/)[0] || undefined;
     }
-    if (!keys) throw new Error(`${where} (ShortcutStep): ${step.locator?.id ?? "the step"} exposes no aria-keyshortcuts and the step has no ${playwrightShortcutExtension} extension`);
+    if (!keys) throw new PlaywrightCheckError(`${where} (ShortcutStep): ${step.locator?.id ?? "the step"} exposes no aria-keyshortcuts and the step has no ${playwrightShortcutExtension} extension`);
     gesture(keys);
     await this.options.page.keyboard.press(keys);
   }
@@ -263,8 +269,14 @@ export class PlaywrightStepPerformer {
     finally { await hit.dispose(); }
   }
 
-  private async poll(message: string, check: () => Promise<string>): Promise<void> {
-    await pollUntil(check, { message, timeoutMs: this.options.timeoutMs, signal: this.options.signal });
+  /** Wait for something that is no check of the materialization. */
+  private async poll(message: string, check: () => Promise<string>, failure?: (message: string) => Error): Promise<void> {
+    await pollUntil(check, { message, timeoutMs: this.options.timeoutMs, signal: this.options.signal, ...(failure ? { failure } : {}) });
+  }
+
+  /** A start or step check: when it does not come to hold, the materialization failed. */
+  private async check(message: string, check: () => Promise<string>): Promise<void> {
+    await this.poll(message, check, (text) => new PlaywrightCheckError(text));
   }
 }
 

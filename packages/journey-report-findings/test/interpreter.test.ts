@@ -209,3 +209,9 @@ test("steps to reproduce stop at the failed step, without what a fallback presse
     [{ label: "Open Page actions", keys: "Tab, Space" }, { label: "Save details" }]
   ]);
 });
+
+test("an execution whose canonical path and fallback failed the same way is listed once", () => {
+  const twice = [...targetMissing("r8"), ...targetMissing("r8")];
+  const finding = byId(build("r8", twice).findings, "page-arrange--form");
+  assert.deepEqual(finding.executions.map((execution) => execution.profileId), ["keyboard-only", "default"]);
+});

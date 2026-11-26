@@ -46,6 +46,8 @@ export type JourneyExecutorSessionInput = {
  * in plan order. A missing decision denotes a transition with no declared input;
  * it must not be replaced with a default UI action. Shared fixtures and service
  * effect verification can be supplied through the runner's environment hooks.
+ * `performTransition` throws `MaterializationFailedError` when a check of the
+ * decision's materialization fails.
  */
 export type JourneyExecutorSession = {
   start(): Promise<void> | void;

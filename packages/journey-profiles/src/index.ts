@@ -151,7 +151,7 @@ export function selectMaterialization(
   );
 }
 
-/** Beside a canonical materialization, the declared one to perform when it fails. */
+/** Beside a canonical materialization, the declared one that may be performed when a check of it fails. */
 function selectFallback(
   profileId: string,
   operation: TransitionPlanOperation,

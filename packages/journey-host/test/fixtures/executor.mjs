@@ -26,6 +26,7 @@ export const journeyMeshPlugin = {
           openEntry(operation) { return log("entry", operation.segment); },
           async assertState(operation) {
             await log("state", operation.segment);
+            for (const observer of dependencies.observers ?? []) await observer.observeOperation?.({ operationId: operation.id });
             if (options.delay) await new Promise((resolve) => setTimeout(resolve, options.delay));
             execution.signal?.throwIfAborted();
             if (options.fail === operation.state.id) throw new Error("Fixture state failure");

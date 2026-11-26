@@ -5,6 +5,7 @@ export {
 } from "./observers/contracts.js";
 export { errorToJourneyRunError } from "./errors.js";
 export { runJourney } from "./run-journey.js";
+export { MaterializationFailedError, fallbackApplies } from "./executors/materialization.js";
 export { routedExecutor } from "./executors/routed-executor.js";
 export { touchpointExecutor } from "./executors/touchpoint-executor.js";
 export { executionPassed } from "./results/outcomes.js";

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  MaterializationFailedError,
   routedExecutor,
   runJourney,
   type JourneyExecutor,
@@ -122,13 +123,40 @@ test("routed executors allocate only used children and close them in reverse ord
   assert.deepEqual(calls, ["start:first", "start:second", "state:first", "state:second", "close:second", "close:first"]);
 });
 
-const fallbackDecision = () => ({ profileId: "profile", inputModalityProfile: modalityProfile, modality, materialization: { id: "urn:test:expected", transitionId: "urn:test:transition", modality, steps: [] }, fallback: { id: "urn:test:around", transitionId: "urn:test:transition", modality, steps: [] } });
+test("a journey observer that throws fails the result and changes nothing that runs", async () => {
+  const calls: string[] = [];
+  const result = await runJourney({
+    plan: plan(state),
+    profiles: [{ id: "profile" }],
+    executor: {
+      name: "observed",
+      createSession: () => ({
+        start() {}, openEntry() {}, assertState() { calls.push("state"); },
+        performTransition() {}, recordControlFlow() {}, close({ executionFailed }) { calls.push(`close:${executionFailed}`); }
+      })
+    },
+    observers: [
+      { name: "broken", onRunStarted() { throw new Error("run observer broke"); }, onExecutionStarted() { throw new Error("execution observer broke"); } },
+      { name: "other", onRunStarted() { calls.push("other:run"); }, onExecutionStarted() { calls.push("other:execution"); } }
+    ]
+  });
+  assert.deepEqual(calls, ["other:run", "other:execution", "state", "close:false"]);
+  assert.deepEqual(result.evidence.executions[0]!.operations.map((operation) => operation.outcome.kind), ["passed"]);
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.errors.map((error) => error.message), ["run observer broke", "execution observer broke"]);
+});
 
-async function runWithFallback(failing: readonly string[]) {
+const fallbackDecision = (startLocator?: { id: string; features: []; contexts: [] }) => ({ profileId: "profile", inputModalityProfile: modalityProfile, modality, materialization: { id: "urn:test:expected", transitionId: "urn:test:transition", modality, steps: [] }, fallback: { id: "urn:test:around", transitionId: "urn:test:transition", modality, steps: [], ...(startLocator ? { startLocator } : {}) } });
+
+const start = { id: "urn:test:start", features: [] as [], contexts: [] as [] };
+const checkFailed = (id: string, sentInput = false) => new MaterializationFailedError(`${id} failed`, sentInput);
+
+/** Runs a transition whose materializations throw what `failing` names for them. */
+async function runWithFallback(failing: Readonly<Record<string, Error>>, startLocator?: typeof start) {
   const calls: string[] = [];
   const result = await runJourney({
     plan: plan(state, transition, { ...state, id: "after", sequence: 2 }),
-    profiles: [{ id: "profile", selectInputModality: fallbackDecision }],
+    profiles: [{ id: "profile", selectInputModality: () => fallbackDecision(startLocator) }],
     executor: {
       name: "fallback",
       createSession: () => ({
@@ -137,7 +165,7 @@ async function runWithFallback(failing: readonly string[]) {
         performTransition(_operation, decision) {
           const id = decision!.materialization!.id;
           calls.push(`perform:${id}${decision!.fallback ? " (has fallback)" : ""}`);
-          if (failing.includes(id)) throw new Error(`${id} failed`);
+          if (failing[id]) throw failing[id];
         },
         recordControlFlow() {}, close({ executionFailed }) { calls.push(`close:${executionFailed}`); }
       })
@@ -147,9 +175,12 @@ async function runWithFallback(failing: readonly string[]) {
   return { result, calls, operations: result.evidence.executions[0]!.operations };
 }
 
+const takenThroughFallback = ["state:state", "perform:urn:test:expected (has fallback)", "perform:urn:test:around", "effect:urn:test:around", "state:after", "close:true"];
+const stoppedAtExpected = ["state:state", "perform:urn:test:expected (has fallback)", "close:true"];
+
 test("a transition taken through its fallback fails its operation and the execution, and the journey goes on", async () => {
-  const { result, calls, operations } = await runWithFallback(["urn:test:expected"]);
-  assert.deepEqual(calls, ["state:state", "perform:urn:test:expected (has fallback)", "perform:urn:test:around", "effect:urn:test:around", "state:after", "close:true"]);
+  const { result, calls, operations } = await runWithFallback({ "urn:test:expected": checkFailed("urn:test:expected") });
+  assert.deepEqual(calls, takenThroughFallback);
   assert.equal(result.ok, false);
   assert.deepEqual(operations.map((operation) => operation.outcome.kind), ["passed", "failed", "passed"]);
   const failed = operations[1]!.outcome;
@@ -158,16 +189,31 @@ test("a transition taken through its fallback fails its operation and the execut
   assert.equal(result.errors[0]!.message, failed.error.message);
 });
 
-test("a fallback that fails too stops the profile", async () => {
-  const { result, calls, operations } = await runWithFallback(["urn:test:expected", "urn:test:around"]);
+test("after input was sent, a fallback is performed only if it names its start", async () => {
+  const failing = { "urn:test:expected": checkFailed("urn:test:expected", true) };
+  assert.deepEqual((await runWithFallback(failing, start)).calls, takenThroughFallback);
+  const { result, calls } = await runWithFallback(failing);
+  assert.deepEqual(calls, stoppedAtExpected);
+  assert.deepEqual(result.errors.map((error) => error.message),
+    ["urn:test:expected failed (urn:test:around was not performed: input had been sent, and it names no start)"]);
+});
+
+test("only a failed check of the canonical materialization runs its fallback", async () => {
+  const { result, calls } = await runWithFallback({ "urn:test:expected": new Error("browser closed") }, start);
+  assert.deepEqual(calls, stoppedAtExpected);
+  assert.deepEqual(result.errors.map((error) => error.message), ["browser closed"]);
+});
+
+test("a fallback that fails too stops the profile, and both errors are kept", async () => {
+  const { result, calls, operations } = await runWithFallback({ "urn:test:expected": checkFailed("urn:test:expected"), "urn:test:around": checkFailed("urn:test:around") });
   assert.deepEqual(calls, ["state:state", "perform:urn:test:expected (has fallback)", "perform:urn:test:around", "close:true"]);
   assert.equal(result.ok, false);
   assert.deepEqual(operations.map((operation) => operation.outcome.kind), ["passed", "failed"]);
-  assert.equal(result.errors[0]!.message, "urn:test:around failed");
+  assert.equal(result.errors[0]!.message, "urn:test:expected failed; urn:test:around failed too: urn:test:around failed");
 });
 
 test("a canonical materialization that passes never runs its fallback", async () => {
-  const { result, calls } = await runWithFallback([]);
+  const { result, calls } = await runWithFallback({});
   assert.deepEqual(calls, ["state:state", "perform:urn:test:expected (has fallback)", "effect:urn:test:expected", "state:after", "close:false"]);
   assert.equal(result.ok, true);
 });
