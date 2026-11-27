@@ -1,14 +1,16 @@
 name: Nextcloud iOS CI
 
 on:
-  pull_request:
+  # Nightly rather than per pull request: a run takes hours on a hosted runner. Scheduled runs use the default branch.
+  schedule:
+    - cron: "17 2 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: nextcloud-ios-${{ github.event.pull_request.number || github.ref }}
+  group: nextcloud-ios-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
