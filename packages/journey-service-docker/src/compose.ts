@@ -10,11 +10,11 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { contract, startedService, type ObservationPublisher, type StartedService } from "@openuji/journey-plugin";
-import { readJsonRecord, removeOwnership, runOwnedProcess, writeJsonRecord } from "@openuji/journey-plugin/node";
-import { composeLifecycle, type ComposeResource } from "./observations.js";
+import { lineReader, readJsonRecord, removeOwnership, runOwnedProcess, writeJsonRecord } from "@openuji/journey-plugin/node";
+import { composeLifecycle, composeProgress, type ComposeResource } from "./observations.js";
 
-/** Runs a command and returns its stdout; stderr is retained in the error on failure. */
-export type ComposeExecutor = (command: string, args: readonly string[], options: { cwd: string; env: Record<string, string | undefined>; signal?: AbortSignal }) => Promise<string>;
+/** Runs a command and returns its stdout; stderr is retained in the error on failure. `onOutput` sees both as they arrive. */
+export type ComposeExecutor = (command: string, args: readonly string[], options: { cwd: string; env: Record<string, string | undefined>; signal?: AbortSignal; onOutput?: (data: string) => void }) => Promise<string>;
 export const executeComposeCommand: ComposeExecutor = (command, args, options) => runOwnedProcess(command, args, { ...options, stdoutOnly: true });
 
 /**
@@ -62,6 +62,12 @@ export type ComposeProjectTools = ComposeTools & Readonly<{
    * service only once this is true. An image that does not run `script` counts as finished.
    */
   entrypointFinished(service: string, script: string): Promise<boolean>;
+  /**
+   * Waits until `pending` reports nothing left to wait for; otherwise it returns what is still missing, e.g.
+   * "the application is not installed". Fails as soon as the service's container has exited, or after `timeoutMs`
+   * (default `defaultReadyTimeoutMs`), also while a `pending` call hangs.
+   */
+  untilReady(service: string, pending: () => Promise<string | undefined>, options?: Readonly<{ timeoutMs?: number }>): Promise<void>;
 }>;
 
 export type ComposeStackHooks = Readonly<{
@@ -106,6 +112,33 @@ export function validateComposeConfiguration(options: Readonly<{ project: string
 }
 
 /**
+ * How long `untilReady` waits. Generous, because it only bounds a hang (an exited container fails at once) and an
+ * installation on a slow virtualized disk can take longer than half an hour.
+ */
+export const defaultReadyTimeoutMs = 60 * 60_000;
+const readyPollMs = 2000;
+
+const late = Symbol("late");
+/** `work`, or `late` if it has not settled by `deadline`. Releasing the stack ends a command left running. */
+async function by<T>(deadline: number, work: Promise<T>): Promise<T | typeof late> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try { return await Promise.race([work, new Promise<typeof late>((accept) => { timer = setTimeout(() => accept(late), Math.max(0, deadline - Date.now())); })]); }
+  finally { clearTimeout(timer); }
+}
+
+/**
+ * Compose repeats a layer's line for every step of a download or extraction; its state is the line without the
+ * counters. Releases differ: a progress bar with sizes (2.x), a bare size such as `Extracting 390B` (5.x), or
+ * elapsed seconds.
+ */
+export const composeProgressState = (line: string) => line
+  .replace(/\s*\[[=> ]*\].*$/, "")
+  .replace(/(?:(?:\s+|\s*\/\s*)\d+(?:\.\d+)?\s*(?:[kKMGT]?i?B|s))+\s*$/, "")
+  .replace(/\s+/g, " ").trim();
+
+const reason = (error: unknown) => error instanceof Error ? error.message : String(error);
+
+/**
  * Start one acquisition of a Compose stack. A failure after `up` publishes `before-release` and
  * releases what this acquisition started before rethrowing; a failure before `up` leaves nothing behind.
  */
@@ -135,16 +168,41 @@ export async function startComposeStack(
   const release = () => releaseComposeStack(stack.ownershipFile, { envFileVariable: stack.envFileVariable, expectedToken: token, execute,
     beforeRelease: () => observations.publish(composeLifecycle, { phase: "before-release", resource }) });
   try {
-    await docker("up", "-d");
+    const seen = new Set<string>();
+    let delivered = Promise.resolve();
+    const progress = lineReader((line) => {
+      const state = composeProgressState(line);
+      if (!state || seen.has(state)) return;
+      seen.add(state);
+      delivered = delivered.then(() => observations.publish(composeProgress, { project: stack.project, line: state }));
+    });
+    try { await execute("docker", [...compose, "up", "-d"], { cwd: stack.directory, env, signal, onOutput: progress.write }); }
+    finally { progress.flush(); await delivered; }
     const containers = (await docker("ps", "--all", "--quiet")).split(/\s+/).filter(Boolean);
     await writeJsonRecord(stack.ownershipFile, { ...owned, containers });
     await observations.publish(composeLifecycle, { phase: "allocated", resource });
     const entrypointFinished = (service: string, script: string) =>
       docker("exec", "-T", service, "cat", "/proc/1/cmdline").then((cmdline) => !cmdline.includes(script), () => false);
-    const { outputs, provenance } = await hooks.bootstrap({ run, compose: docker, entrypointFinished, signal });
+    const untilReady: ComposeProjectTools["untilReady"] = async (service, pending, { timeoutMs = defaultReadyTimeoutMs } = {}) => {
+      const deadline = Date.now() + timeoutMs;
+      let missing = "it has not answered";
+      for (;;) {
+        signal?.throwIfAborted();
+        const answer = await by(deadline, pending());
+        signal?.throwIfAborted();
+        if (answer === undefined) return;
+        if (answer !== late) missing = answer;
+        const exited = await by(deadline, docker("ps", "--all", "--quiet", "--status", "exited", service).catch(() => ""));
+        if (exited !== late && exited.trim()) throw new Error(`${service}: its container exited before it was ready: ${missing}`);
+        if (Date.now() >= deadline) throw new Error(`${service}: not ready after ${Math.round(timeoutMs / 1000)}s: ${missing}`);
+        await new Promise<void>((accept) => setTimeout(accept, Math.min(readyPollMs, deadline - Date.now())));
+      }
+    };
+    const { outputs, provenance } = await hooks.bootstrap({ run, compose: docker, entrypointFinished, untilReady, signal });
     return startedService(outputs, provenance, release);
   } catch (error) {
-    try { await release(); } catch (cleanup) { throw new AggregateError([error, cleanup], `${stack.label} startup and cleanup failed`); }
+    // The message carries both causes: whoever records it keeps only the message, not the aggregated errors.
+    try { await release(); } catch (cleanup) { throw new AggregateError([error, cleanup], `${stack.label} startup and cleanup failed: ${reason(error)}; cleanup: ${reason(cleanup)}`); }
     throw error;
   }
 }

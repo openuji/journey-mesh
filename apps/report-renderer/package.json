@@ -29,6 +29,8 @@
     "vite": "^7.3.0",
     "@openuji/journey-report-android": "workspace:*",
     "@openuji/journey-observer-android-accessibility": "workspace:*",
+    "@openuji/journey-report-ios": "workspace:*",
+    "@openuji/journey-observer-ios-accessibility": "workspace:*",
     "@openuji/journey-report-operability": "workspace:*",
     "@openuji/journey-observer-operability": "workspace:*"
   },

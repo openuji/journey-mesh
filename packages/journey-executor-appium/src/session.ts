@@ -10,7 +10,7 @@ export const createWebdriverIoSession: AppiumSessionFactory = async (options) =>
     protocol: options.protocol ?? "http",
     logLevel: "error",
     connectionRetryCount: 0,
-    connectionRetryTimeout: 120_000,
+    connectionRetryTimeout: 1_200_000,
     capabilities: { platformName: "Android", "appium:automationName": "UiAutomator2", ...options.capabilities }
   });
   return {

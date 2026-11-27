@@ -21,6 +21,11 @@ export type StackOptions = Readonly<{
   systemConfig?: Readonly<Record<string, string | boolean | number>>;
   build?: StackBuild;
   sourceIdentity?: SourceIdentity;
+  /**
+   * How long each service may take to install Nextcloud and finish its entrypoint; an exited container fails
+   * at once. Defaults to the Compose lifecycle's `defaultReadyTimeoutMs`.
+   */
+  readyTimeoutMs?: number;
 }>;
 export type StackExecutor = ComposeExecutor;
 export const executeStackCommand: StackExecutor = executeComposeCommand;
@@ -129,7 +134,7 @@ export function nextcloudStackRuntime(options: StackOptions, { artifacts, observ
           return { NEXTCLOUD_IMAGE: image };
         },
         /** Install, configure and verify every Nextcloud service of the running stack, then record its identity. */
-        async bootstrap({ run, compose: docker, entrypointFinished, signal: activeSignal }) {
+        async bootstrap({ run, compose: docker, entrypointFinished, untilReady }) {
           const occ = (service: string, ...args: string[]) => docker("exec", "-T", "-u", "www-data", service, "php", "occ", ...args);
           /**
            * The image's entrypoint keeps writing config.php (one `occ config:system:set` per trusted domain) after
@@ -140,15 +145,13 @@ export function nextcloudStackRuntime(options: StackOptions, { artifacts, observ
           const services: unknown[] = [];
           for (const [service, account] of Object.entries(options.services)) {
             let status: { installed?: boolean; versionstring?: string } | undefined;
-            let ready = false;
-            for (let attempt = 0; attempt < 120; attempt++) {
-              activeSignal?.throwIfAborted();
+            await untilReady(service, async () => {
               status = await occ(service, "status", "--output=json").then((text) => JSON.parse(text)).catch(() => undefined);
-              if (status?.installed && (ready = await started(service))) break;
-              await new Promise<void>((accept) => setTimeout(accept, 2000));
-            }
-            if (!status?.installed || !(status.versionstring === expectedVersion || status.versionstring?.startsWith(`${expectedVersion} `))) throw new Error(`${service}: installed version does not match ${expectedVersion}`);
-            if (!ready) throw new Error(`${service}: the image's entrypoint script did not finish`);
+              if (!status?.installed) return "Nextcloud is not installed";
+              return await started(service) ? undefined : "the image's entrypoint script did not finish";
+            }, { timeoutMs: options.readyTimeoutMs });
+            const version = status?.versionstring;
+            if (!(version === expectedVersion || version?.startsWith(`${expectedVersion} `))) throw new Error(`${service}: installed version does not match ${expectedVersion}: found ${version}`);
             const url = new URL(account.baseURL);
             for (const app of ["federation", "files_sharing", ...options.enabledApps]) await occ(service, "app:enable", app);
             await occ(service, "app:disable", "firstrunwizard").catch(() => {});
@@ -186,7 +189,7 @@ export function nextcloudStackRuntime(options: StackOptions, { artifacts, observ
             const imageId = await run("docker", ["inspect", "--format", "{{.Image}}", container]);
             const expectedImageId = await run("docker", ["image", "inspect", "--format", "{{.Id}}", image]);
             if (imageId !== expectedImageId) throw new Error(`${service}: installed image mismatch`);
-            services.push({ service, version: status.versionstring, imageId, sourceSha, apps: Object.fromEntries(options.enabledApps.map((app) => [app, apps.enabled[app]])) });
+            services.push({ service, version, imageId, sourceSha, apps: Object.fromEntries(options.enabledApps.map((app) => [app, apps.enabled[app]])) });
           }
           const identity = { project: options.project, image, ...(pullRequest === null ? {} : { pullRequest }), verifiedAt: new Date().toISOString(), services };
           await artifacts.write({ name: `${options.project}.identity.json`, data: JSON.stringify(identity, null, 2), contentType: "application/json" });

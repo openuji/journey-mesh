@@ -1,0 +1,30 @@
+{
+  "name": "@openuji/journey-observer-ios-accessibility",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./plugin": "./src/plugin.ts",
+    "./evidence": "./src/evidence-entry.ts"
+  },
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@openuji/journey-runner": "workspace:*",
+    "@openuji/journey-executor-appium": "workspace:*",
+    "fast-xml-parser": "5.3.0",
+    "@openuji/journey-core": "workspace:*",
+    "@openuji/journey-plugin": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3",
+    "@openuji/journey-run-record": "workspace:*"
+  }
+}

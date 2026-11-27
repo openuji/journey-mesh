@@ -50,7 +50,7 @@ the boundary contract that reporting reads.
 | Environment | Sets up a test's fixtures and verifies modeled effects |
 | Journey observer | Observes the runner's run and execution lifecycle |
 | Executor observer | Collects evidence through an executor's observation contract |
-| Runtime observer | Collects infrastructure diagnostics from typed lifecycle topics |
+| Runtime observer | Collects infrastructure diagnostics, and reports live progress, from typed lifecycle topics |
 | Report interpreter | Turns one observer's recorded evidence into report data |
 
 ## Invariants
@@ -161,7 +161,7 @@ the help documents.
 
 | Topic | Source of truth |
 | --- | --- |
-| CLIs | `--help`, committed as `contract/*.help.txt` in [`journey-cli`](../packages/journey-cli/contract), [`journey-executor-appium`](../packages/journey-executor-appium/contract), [`journey-service-android`](../packages/journey-service-android/contract), [`report-renderer`](../apps/report-renderer/contract) |
+| CLIs | `--help`, committed as `contract/*.help.txt` in [`journey-cli`](../packages/journey-cli/contract), [`journey-executor-appium`](../packages/journey-executor-appium/contract), [`journey-service-android`](../packages/journey-service-android/contract), [`journey-service-ios`](../packages/journey-service-ios/contract), [`report-renderer`](../apps/report-renderer/contract) |
 | Suite configuration | [`journey-host/src/config/schema.ts`](../packages/journey-host/src/config/schema.ts) |
 | Plugin kinds and contracts | [`journey-plugin/src/plugins.ts`](../packages/journey-plugin/src/plugins.ts) |
 | Run record format | [`journey-run-record/src/types.ts`](../packages/journey-run-record/src/types.ts), [`paths.ts`](../packages/journey-run-record/src/paths.ts) |

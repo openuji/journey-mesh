@@ -17,7 +17,13 @@
       "path": "../journey-platform-android/tsconfig.json"
     },
     {
+      "path": "../journey-platform-ios/tsconfig.json"
+    },
+    {
       "path": "../journey-toolkit-android/tsconfig.json"
+    },
+    {
+      "path": "../journey-toolkit-ios/tsconfig.json"
     },
     {
       "path": "../journey-runner/tsconfig.json"

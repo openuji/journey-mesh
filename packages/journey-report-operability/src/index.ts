@@ -87,8 +87,11 @@ export function buildOperabilityReport(input: Readonly<{
   excludedPhaseIds: readonly string[];
 }>): OperabilityReport {
   const { test, evidence, excludedPhaseIds } = input;
+  const owned = evidence.operationIds ? new Set(evidence.operationIds) : undefined;
   const transitions = test.plan.operations.filter((operation): operation is TransitionPlanOperation =>
-    operation.kind === "transition" && !excludedPhaseIds.includes(phaseOf(operation) ?? ""));
+    operation.kind === "transition"
+    && (!owned || owned.has(operation.id))
+    && !excludedPhaseIds.includes(phaseOf(operation) ?? ""));
   const executions = test.result.executions.map((execution): OperabilityExecutionReport => {
     const outcomes = test.result.evidence.executions.find((item) => item.executionId === execution.executionId)?.operations ?? [];
     return {

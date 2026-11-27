@@ -21,6 +21,9 @@
       "path": "../journey-platform-android/tsconfig.json"
     },
     {
+      "path": "../journey-platform-ios/tsconfig.json"
+    },
+    {
       "path": "../journey-execution-model/tsconfig.json"
     },
     {

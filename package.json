@@ -18,9 +18,11 @@
     "@openuji/journey-vendor-nextcloud": "workspace:*",
     "@openuji/journey-platform-web": "workspace:*",
     "@openuji/journey-platform-android": "workspace:*",
+    "@openuji/journey-platform-ios": "workspace:*",
     "@openuji/journey-execution-model": "workspace:*",
     "@openuji/journey-model-ujg": "workspace:*",
     "@openuji/journey-observer-android-accessibility": "workspace:*",
+    "@openuji/journey-observer-ios-accessibility": "workspace:*",
     "@openuji/journey-observer-axe": "workspace:*",
     "@openuji/journey-profiles": "workspace:*",
     "@openuji/journey-runner": "workspace:*",
@@ -39,8 +41,11 @@
     "@openuji/journey-run-record": "workspace:*",
     "@openuji/journey-report-axe": "workspace:*",
     "@openuji/journey-report-android": "workspace:*",
+    "@openuji/journey-report-ios": "workspace:*",
     "@openuji/journey-toolkit-android": "workspace:*",
     "@openuji/journey-service-android": "workspace:*",
+    "@openuji/journey-toolkit-ios": "workspace:*",
+    "@openuji/journey-service-ios": "workspace:*",
     "@openuji/journey-vendor-moodle": "workspace:*"
   }
 }

@@ -7,6 +7,7 @@ import {
   appiumLocatorQuery,
   initialAppiumLifecycleState,
   reduceAppiumLifecycle,
+  touchInputModalityId,
   touchTapInputModalityId,
   type AppiumSession
 } from "../src/index.js";
@@ -284,6 +285,13 @@ test("declared materializations are refused, not tapped past", async () => {
   const touch = { id: "urn:material:touch", transitionId: "username", modality: { id: touchTapInputModalityId }, steps: [{ id: "urn:step:tap", kind: "activation" as const }] };
   const executor = appiumExecutor(options(new Session()));
   assert.throws(() => executor.describeOperation!({ ...transition, materializations: [touch] }), /Appium does not perform TransitionMaterialization urn:material:touch \(urn:openuji:input:touch-tap\) yet/);
+  assert.throws(
+    () => executor.describeOperation!({
+      ...transition,
+      activation: { ...transition.activation, requiredInputModalityProfiles: [{ id: "touch", modalities: [{ id: touchInputModalityId }] }] }
+    }),
+    /Appium does not perform urn:openuji:input:touch yet/
+  );
   assert.doesNotThrow(() => executor.describeOperation!({ ...transition, materializations: [{ ...touch, modality: { id: "observability:keyboard" } }] }));
   const session = new Session();
   const result = await runJourney({

@@ -10,9 +10,9 @@ import test from "node:test";
 const exec = promisify(execFile);
 const bin = fileURLToPath(new URL("../bin/journey-executor-appium.mjs", import.meta.url));
 const contract = fileURLToPath(new URL("../contract/journey-executor-appium.help.txt", import.meta.url));
-const fails = (args: readonly string[], stderr: RegExp) => assert.rejects(exec(process.execPath, [bin, ...args]), (error: unknown) => {
+const fails = (args: readonly string[], stderr: RegExp, code = 2) => assert.rejects(exec(process.execPath, [bin, ...args]), (error: unknown) => {
   const failure = error as { code: number; stderr: string };
-  assert.equal(failure.code, 2);
+  assert.equal(failure.code, code);
   assert.match(failure.stderr, stderr);
   return true;
 });
@@ -29,4 +29,12 @@ test("exit 2: argument errors name the problem before starting anything", async 
   await fails(["appium", "serve", "--prot", "4723"], /^Unknown option --prot for appium serve\./);
   await fails(["appium", "serve", "--port"], /^Missing value for --port\./);
   await fails(["appium", "ensure-driver", "--force"], /^Unknown option --force for appium ensure-driver\./);
+});
+
+test("ensure-driver defaults to uiautomator2; an unsupported driver exits 1 before installing anything", async () => {
+  const { stdout } = await exec(process.execPath, [bin, "--help"]);
+  assert.match(stdout, /--driver <uiautomator2\|xcuitest>/);
+  assert.match(stdout, /Defaults: --driver uiautomator2\./);
+  await fails(["appium", "ensure-driver", "--driver"], /^Missing value for --driver\./);
+  await fails(["appium", "ensure-driver", "--driver", "espresso"], /^Unsupported Appium driver espresso; expected uiautomator2 or xcuitest/, 1);
 });

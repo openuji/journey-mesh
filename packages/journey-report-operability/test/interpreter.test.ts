@@ -106,3 +106,65 @@ test("the interpreter publishes one labelled data document and no node metrics",
   assert.deepEqual(interpretation.data?.map((item) => [item.name, item.format, item.label]), [["operability.json", operabilityReportFormat, "Input steps"]]);
   await assert.rejects(async () => journeyMeshInterpreter.interpret({ test: { plan, result } as never, output: { ...output, evidence: {} }, excludedPhaseIds: [], read: async () => new Uint8Array(), readJson: async () => ({}) as never }, undefined), /has no recorded operability evidence/);
 });
+
+test("executor-scoped operationIds omit transitions of other executors and preserve touch move IRIs", () => {
+  const touch = { id: "urn:openuji:input:touch", label: "Touch" };
+  const row = { id: "urn:locator:ios-files-first-row", role: "text", accessibleName: "Documents", features: [], contexts: [] };
+  const refresh = transition("bob-refreshes-files", 4, "urn:phase:pages", [{
+    id: "urn:materialization:bob-refreshes-files:touch",
+    label: "Swipe down on the Files list to refresh",
+    transitionId: "urn:transition:bob-refreshes-files",
+    modality: touch,
+    steps: [{ id: "urn:step:refresh:1", kind: "move", moveKind: { id: "urn:openuji:move:swipe-down", type: "move" }, locator: row }]
+  }]);
+  const mixedPlan = { id: "plan", operations: [...(plan as { operations: JourneyPlanOperation[] }).operations, refresh] } as never;
+  const mixedResult = {
+    runId: "run",
+    executions: [{ executionId: "touch-01", profileId: "default-web-touch-ios" }],
+    evidence: {
+      executions: [{
+        executionId: "touch-01",
+        profileId: "default-web-touch-ios",
+        operations: [
+          { operationId: "select-drafts", operationKind: "transition", outcome: { kind: "passed" } },
+          { operationId: "bob-refreshes-files", operationKind: "transition", outcome: { kind: "passed" } }
+        ]
+      }]
+    }
+  } as never;
+  const iosEvidence = {
+    format: operabilityEvidenceFormat as typeof operabilityEvidenceFormat,
+    version: 1 as const,
+    operationIds: ["bob-refreshes-files"],
+    decisions: [{
+      runId: "run",
+      executionId: "touch-01",
+      profileId: "default-web-touch-ios",
+      operationId: "bob-refreshes-files",
+      inputModalityProfileId: "urn:input-modality-profile:touch",
+      modalityId: touch.id,
+      modalityLabel: "Touch",
+      materializationId: "urn:materialization:bob-refreshes-files:touch"
+    }],
+    actions: [
+      action("touch-01", "bob-refreshes-files", "i/0", "completed", {
+        modalityId: touch.id,
+        materializationId: "urn:materialization:bob-refreshes-files:touch",
+        stepId: "urn:step:refresh:1",
+        gesture: "swipe-down"
+      })
+    ]
+  };
+  const report = buildOperabilityReport({ observerId: "ios-input-steps", test: { plan: mixedPlan, result: mixedResult }, evidence: iosEvidence, excludedPhaseIds: ["urn:phase:setup"] });
+  assert.deepEqual(report.executions[0]!.transitions.map((item) => item.operationId), ["bob-refreshes-files"]);
+  assert.deepEqual(report.executions[0]!.transitions[0]!.steps, [{
+    position: 1,
+    stepId: "urn:step:refresh:1",
+    kind: "move",
+    moveKindId: "urn:openuji:move:swipe-down",
+    locator: { id: "urn:locator:ios-files-first-row", role: "text", name: "Documents" },
+    gesture: "swipe-down",
+    status: "completed"
+  }]);
+  assert.deepEqual(report.summary, { transitions: 1, materialized: 1, steps: 1, failedSteps: 0 });
+});

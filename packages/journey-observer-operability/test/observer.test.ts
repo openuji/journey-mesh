@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { JourneyInputAction } from "@openuji/journey-core";
 import { isOperabilityOutput, operabilityObserver } from "../src/index.js";
+import { journeyMeshPlugin as androidPlugin } from "../src/android-plugin.js";
+import { journeyMeshPlugin as iosPlugin } from "../src/ios-plugin.js";
 import { journeyMeshPlugin } from "../src/plugin.js";
 
 const execution = (runId: string) => ({ runId, executionId: `${runId}/keyboard`, profile: { id: "keyboard-only" }, executor: { name: "playwright" } });
@@ -45,7 +47,70 @@ test("the guard rejects other kinds and malformed evidence", () => {
 });
 
 test("the plugin requires an output id and accepts no other options", () => {
-  assert.deepEqual(journeyMeshPlugin.parse({ id: "input-steps" }, {} as never), { id: "input-steps" });
-  assert.throws(() => journeyMeshPlugin.parse({}, {} as never), /id must be a nonempty string/);
-  assert.throws(() => journeyMeshPlugin.parse({ id: "x", strict: true }, {} as never), /Unknown option strict/);
+  for (const plugin of [journeyMeshPlugin, iosPlugin, androidPlugin]) {
+    assert.deepEqual(plugin.parse({ id: "input-steps" }, {} as never), { id: "input-steps" });
+    assert.throws(() => plugin.parse({}, {} as never), /id must be a nonempty string/);
+    assert.throws(() => plugin.parse({ id: "x", strict: true }, {} as never), /Unknown option strict/);
+  }
+});
+
+test("iOS operability plugin records executor-scoped operationIds and touch swipe-down materialization actions", async () => {
+  const touch = { id: "urn:openuji:input:touch", label: "Touch" };
+  const materialization = {
+    id: "urn:materialization:bob-refreshes-files:touch",
+    transitionId: "urn:transition:bob-refreshes-files",
+    modality: touch,
+    steps: [{ id: "urn:step:bob-refreshes-files:touch:1", kind: "move" as const, moveKind: { id: "urn:openuji:move:swipe-down", type: "move" as const } }]
+  };
+  const component = await iosPlugin.create(
+    { id: "ios-input-steps" },
+    { operations: [{ id: "bob-refresh" }] } as never
+  );
+  await component.observer.observeOperation!({
+    stage: "transition-ready",
+    execution: { runId: "run-ios", executionId: "touch-01", plan: { id: "plan", operations: [] }, profile: { id: "touch" } },
+    operation: { id: "bob-refresh" } as never,
+    session: {} as never,
+    targets: [],
+    expectedMatchCount: 1,
+    decision: {
+      profileId: "touch",
+      inputModalityProfile: { id: "urn:input-modality-profile:touch", modalities: [touch] },
+      modality: touch,
+      materialization
+    }
+  });
+  await component.observer.onAction!({
+    id: "touch-01/action/0",
+    runId: "run-ios",
+    executionId: "touch-01",
+    profileId: "touch",
+    operationId: "bob-refresh",
+    modalityId: touch.id,
+    command: "move",
+    materializationId: materialization.id,
+    stepId: "urn:step:bob-refreshes-files:touch:1",
+    unit: "adapter-command",
+    status: "attempted"
+  });
+  await component.observer.onAction!({
+    id: "touch-01/action/0",
+    runId: "run-ios",
+    executionId: "touch-01",
+    profileId: "touch",
+    operationId: "bob-refresh",
+    modalityId: touch.id,
+    command: "move",
+    materializationId: materialization.id,
+    stepId: "urn:step:bob-refreshes-files:touch:1",
+    gesture: "swipe-down",
+    unit: "adapter-command",
+    status: "completed"
+  });
+  const output = await component.output({ result: { runId: "run-ios" } as never });
+  assert.ok(isOperabilityOutput(output));
+  assert.deepEqual(output.evidence.operationIds, ["bob-refresh"]);
+  assert.equal(output.evidence.decisions[0]?.modalityId, "urn:openuji:input:touch");
+  assert.equal(output.evidence.decisions[0]?.materializationId, materialization.id);
+  assert.equal(output.evidence.actions[0]?.gesture, "swipe-down");
 });

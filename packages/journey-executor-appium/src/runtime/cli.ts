@@ -1,6 +1,9 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
-import { ensureUiAutomator2Driver, ownAutomationVersions, resolveAppiumEntry } from "./appium-server.js";
+import {
+  ensureUiAutomator2Driver, ensureXcuitestDriver,
+  ownAutomationVersions, ownXcuitestAutomationVersions, resolveAppiumEntry
+} from "./appium-server.js";
 import { defaultCapture, defaultForeground } from "./process.js";
 import { runCommand, type CliDefinition } from "@openuji/journey-plugin/cli";
 
@@ -13,8 +16,8 @@ export const cli: CliDefinition = {
       description: ["Run the Appium server in the foreground, for a caller that owns its process lifecycle, such as CI. With --log, debug output goes to that file."]
     },
     "appium ensure-driver": {
-      arguments: [],
-      description: ["Install the pinned UiAutomator2 driver into APPIUM_HOME (default: a version-keyed directory under .tmp/) if it is missing."]
+      arguments: [], options: { "--driver": { value: "<uiautomator2|xcuitest>", default: "uiautomator2" } },
+      description: ["Install the pinned UiAutomator2 or XCUITest driver into APPIUM_HOME (default: a driver-specific, version-keyed directory under .tmp/) if it is missing."]
     }
   },
   notes: ["To keep Appium running across tests, use the configured service instead:", "  journey-mesh services up|down <config.yaml> --service appium"],
@@ -28,11 +31,6 @@ async function serve(options: Readonly<Record<string, string>>): Promise<void> {
   const args = [appium, "--address", address, "--port", port, "--log-level", options["--log"] ? "warn:debug" : "warn", ...(options["--log"] ? ["--log", options["--log"]] : [])];
   await new Promise<void>((done, reject) => {
     const child = spawn(process.execPath, args, { stdio: "inherit", env: process.env });
-    // This wrapper is itself a spawned Node process (via tsx), not the
-    // appium server directly — a caller like run-ci.sh signals *this*
-    // process (its `$!`), which by default would exit without the deeper
-    // appium process ever seeing the signal. Forward it explicitly, and
-    // treat an exit we requested as success regardless of its code/signal.
     let stopping = false;
     const forward = (signal: NodeJS.Signals) => { stopping = true; child.kill(signal); };
     process.once("SIGTERM", () => forward("SIGTERM"));
@@ -42,17 +40,23 @@ async function serve(options: Readonly<Record<string, string>>): Promise<void> {
   });
 }
 
-async function ensureDriver(): Promise<void> {
-  const appiumHome = process.env.APPIUM_HOME ?? await defaultAppiumHome();
+async function ensureDriver(options: Readonly<Record<string, string>>): Promise<void> {
+  const driver = options["--driver"];
+  if (driver !== "uiautomator2" && driver !== "xcuitest") {
+    throw new Error(`Unsupported Appium driver ${driver}; expected uiautomator2 or xcuitest`);
+  }
+  const appiumHome = process.env.APPIUM_HOME ?? await defaultAppiumHome(driver);
   const env = { ...process.env, APPIUM_HOME: appiumHome };
-  await ensureUiAutomator2Driver({
-    appiumHome,
-    capture: defaultCapture(env, process.cwd()),
-    foreground: defaultForeground(env, process.cwd())
-  });
+  const ports = { appiumHome, capture: defaultCapture(env, process.cwd()), foreground: defaultForeground(env, process.cwd()) };
+  if (driver === "xcuitest") await ensureXcuitestDriver(ports);
+  else await ensureUiAutomator2Driver(ports);
 }
 
-async function defaultAppiumHome(): Promise<string> {
+async function defaultAppiumHome(driver: "uiautomator2" | "xcuitest"): Promise<string> {
+  if (driver === "xcuitest") {
+    const { appium, xcuitest } = await ownXcuitestAutomationVersions();
+    return resolve(process.cwd(), `.tmp/appium-${appium}-xcuitest-${xcuitest}`);
+  }
   const { appium, uiautomator2 } = await ownAutomationVersions();
   return resolve(process.cwd(), `.tmp/appium-${appium}-${uiautomator2}`);
 }
@@ -60,6 +64,6 @@ async function defaultAppiumHome(): Promise<string> {
 export async function main(args: readonly string[]): Promise<number> {
   return runCommand(cli, args, async ({ name, options }) => {
     if (name === "appium serve") await serve(options);
-    else await ensureDriver();
+    else await ensureDriver(options);
   });
 }

@@ -25,7 +25,7 @@ function TouchpointChip({ label, platforms }: { label: string; platforms: readon
   </span>;
 }
 
-const platformLabel = (executor: string) => executor.charAt(0).toUpperCase() + executor.slice(1);
+const platformLabel = (executor: string) => executor === "ios" ? "iOS" : executor.charAt(0).toUpperCase() + executor.slice(1);
 
 /** `block` is injected by `ResponsiveJourneyPath` below its breakpoint. */
 function JourneyDocument({ registry, map, states, touchpointLabels, report, label, profile, block = false }: {
@@ -98,7 +98,7 @@ export function MetricsLegend({ kinds }: { kinds: ReadonlySet<string> }) {
         </dl>
       </div>}
       {kinds.has("native") && <div className="metric-legend-group">
-        <strong>Android · native hierarchy</strong>
+        <strong>Native · hierarchy</strong>
         <dl>
           <div><dt><span className="metric-legend-token metric-legend-review">F</span></dt><dd>Hierarchy findings that require manual review.</dd></div>
           <div><dt><span className="metric-legend-token metric-legend-pass">P</span></dt><dd>Passed native hierarchy checks. Here P means passes, not page.</dd></div>

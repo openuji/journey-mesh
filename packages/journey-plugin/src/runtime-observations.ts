@@ -1,5 +1,5 @@
 import type { Immutable } from "@openuji/journey-core";
-import type { Contract } from "./plugins.js";
+import { contract, type Contract } from "./plugins.js";
 
 export type RuntimeObservation<T> = Readonly<{ topic: string; source: string; timestamp: string; value: Immutable<T> }>;
 export type ObservationPublisher = {
@@ -16,7 +16,14 @@ export type RuntimeObservationSource = {
     options: Readonly<{ name: string; timeoutMs?: number }>): () => void;
 };
 
-/** Capture infrastructure evidence independently of journey assessment and policy observers. */
+/**
+ * Published by the host for every service a run starts, under the source `services.<key>`.
+ * `failed` ends whichever of starting or releasing was under way.
+ */
+export type ServiceLifecycleObservation = Readonly<{ phase: "starting" | "ready" | "failed" | "releasing" | "released" }>;
+export const serviceLifecycle = contract<ServiceLifecycleObservation>("@openuji/service-lifecycle/v1");
+
+/** Capture infrastructure evidence and report progress, independently of journey assessment and policy observers. */
 export type RuntimeObserver = {
   start(source: RuntimeObservationSource): Promise<void> | void;
   close(): Promise<void> | void;

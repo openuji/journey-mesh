@@ -20,7 +20,8 @@ export { booleanOption, knownOptions, noOptions, optionalString, optionsObject, 
 
 export { sourceCheckoutContract, sourceIdentityContract, sourceIdentity } from "./services.js";
 export type { SourceIdentity, SourceCheckout } from "./services.js";
-export type { ObservationPublisher, RuntimeObservation, RuntimeObservationSource, RuntimeObserver } from "./runtime-observations.js";
+export { serviceLifecycle } from "./runtime-observations.js";
+export type { ObservationPublisher, RuntimeObservation, RuntimeObservationSource, RuntimeObserver, ServiceLifecycleObservation } from "./runtime-observations.js";
 export type {
   ExecutorDiscoveryInput, DeclaredMaterializations, DiscoveredMaterialization, DiscoveredMaterializationStep, DiscoveryFinding, DiscoveryFindings,
   JourneyRunMode, MaterializationWrite

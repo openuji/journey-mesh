@@ -122,6 +122,18 @@
     },
     {
       "@type": "MessageMeta",
+      "@id": "urn:message:toggle-sensitive",
+      "defaultLocaleRef": "urn:locale:en"
+    },
+    {
+      "@type": "Message",
+      "@id": "urn:message-value:toggle-sensitive:en",
+      "messageMetaRef": "urn:message:toggle-sensitive",
+      "localeRef": "urn:locale:en",
+      "value": "Toggle sensitive"
+    },
+    {
+      "@type": "MessageMeta",
       "@id": "urn:message:dashboard",
       "defaultLocaleRef": "urn:locale:en"
     },
@@ -203,6 +215,15 @@
       "@id": "urn:locator:log-in",
       "role": "button",
       "accessibleNameRef": "urn:message:log-in",
+      "accessibleFeatureRefs": [
+        "urn:feature:exact-name"
+      ]
+    },
+    {
+      "@type": "AccessibleLocator",
+      "@id": "urn:locator:password-toggle",
+      "role": "button",
+      "accessibleNameRef": "urn:message:toggle-sensitive",
       "accessibleFeatureRefs": [
         "urn:feature:exact-name"
       ]
@@ -349,7 +370,7 @@
       "observationEventRef": "urn:observation-event:presence",
       "expectedMatchCount": 1,
       "locatorRefs": [
-        "urn:locator:username"
+        "urn:locator:password-toggle"
       ]
     },
     {

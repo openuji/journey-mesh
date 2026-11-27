@@ -5,8 +5,9 @@ import { createDockerRuntimeObserver, type DockerObservationOptions } from "./in
 export const journeyMeshPlugin = defineRuntimeObserverPlugin({
   kind: "runtime-observer",
   parse(options): DockerObservationOptions {
-    knownOptions(options, ["containerLogs", "tail", "timeoutMs", "files"]);
+    knownOptions(options, ["containerLogs", "tail", "timeoutMs", "files", "progress"]);
     if (options.containerLogs !== undefined && typeof options.containerLogs !== "boolean") throw new Error("containerLogs must be a boolean");
+    if (options.progress !== undefined && typeof options.progress !== "boolean") throw new Error("progress must be a boolean");
     const tail = positiveNumber(options.tail, 2000);
     if (!Number.isSafeInteger(tail)) throw new Error("tail must be an integer");
     if (options.files !== undefined && !Array.isArray(options.files)) throw new Error("files must be an array");
@@ -19,7 +20,7 @@ export const journeyMeshPlugin = defineRuntimeObserverPlugin({
       if (!isAbsolute(path)) throw new Error("Capture paths must be absolute container paths");
       names.add(name); return { name, path };
     });
-    return { containerLogs: options.containerLogs !== false, tail, timeoutMs: positiveNumber(options.timeoutMs, 10_000), files };
+    return { containerLogs: options.containerLogs !== false, tail, timeoutMs: positiveNumber(options.timeoutMs, 10_000), files, progress: options.progress === true };
   },
   create(options, context) { return createDockerRuntimeObserver(options, context.artifacts); }
 });

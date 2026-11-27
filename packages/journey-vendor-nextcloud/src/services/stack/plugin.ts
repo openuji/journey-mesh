@@ -1,11 +1,12 @@
 import { ownershipPath } from "@openuji/journey-plugin/node";
 import { managedStackContract, serverBuildContract, type ServerBuild } from "../contracts.js";
 import { sourceIdentityContract } from "@openuji/journey-plugin";
-import { defineServicePlugin, knownOptions, optionsObject, requiredString } from "@openuji/journey-plugin";
+import { defineServicePlugin, knownOptions, optionsObject, positiveNumber, requiredString } from "@openuji/journey-plugin";
+import { defaultReadyTimeoutMs } from "@openuji/journey-service-docker/compose";
 import { nextcloudStackRuntime, stopNextcloudStack, validateStackConfiguration, validateStackOptions, type StackBuild, type StackOptions, type PinnedSource } from "./stack.js";
 
 function settings(options: Record<string, unknown>, resolvePath: (path: string) => string, built = false): Omit<StackOptions, "image"> & { image?: string } {
-  knownOptions(options, ["project", "composeFiles", "image", "expectedVersion", "environment", "directory", "services", "enabledApps", "systemConfig", "build"]);
+  knownOptions(options, ["project", "composeFiles", "image", "expectedVersion", "environment", "directory", "services", "enabledApps", "systemConfig", "build", "readyTimeoutMs"]);
   const strings = (value: unknown, name: string): string[] => {
     if (!Array.isArray(value)) throw new Error(`${name} must be an array`);
     return value.map((entry) => requiredString(entry, name));
@@ -34,6 +35,7 @@ function settings(options: Record<string, unknown>, resolvePath: (path: string) 
     })),
     enabledApps: strings(options.enabledApps ?? [], "enabledApps"),
     ...(options.systemConfig === undefined ? {} : { systemConfig: optionsObject(options.systemConfig, "systemConfig") as Record<string, string | boolean | number> }),
+    ...(options.readyTimeoutMs === undefined ? {} : { readyTimeoutMs: positiveNumber(options.readyTimeoutMs, defaultReadyTimeoutMs) }),
     ...(build ? { build: { ...source(build), directory: resolvePath(requiredString(build.directory, "build.directory")), dockerfile: resolvePath(requiredString(build.dockerfile, "build.dockerfile")), apps: ((build.apps ?? []) as unknown[]).map((raw) => { const app = optionsObject(raw, "app"); knownOptions(app, ["id", "version", "repository", "sha"]); return { ...pin(app), id: requiredString(app.id, "app.id"), version: requiredString(app.version, "app.version") }; }) } satisfies StackBuild } : {})
   };
   validateStackConfiguration(config);

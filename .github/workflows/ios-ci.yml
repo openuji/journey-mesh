@@ -1,0 +1,168 @@
+name: Nextcloud iOS CI
+
+on:
+  # Nightly rather than per pull request: a run takes hours on a hosted runner. Scheduled runs use the default branch.
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nextcloud-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    name: Alice web / Bob iOS
+    # macos-26-intel provides Xcode 26 + iOS 26 Simulator and nested virtualization
+    # required by Colima/Docker for the Nextcloud Compose stack (Apple Silicon hosted
+    # runners reject nested virtualization with HV_UNSUPPORTED).
+    runs-on: macos-26-intel
+    timeout-minutes: 180
+    env:
+      APPIUM_HOME: ${{ github.workspace }}/.tmp/appium
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Select Xcode 26 and available iOS simulator target
+        run: |
+          if ! xcodebuild -version | head -n 1 | grep -Eq '^Xcode 2[6-9]\.'; then
+            xcode_app=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)
+            if [ -n "$xcode_app" ]; then
+              sudo xcode-select -s "$xcode_app/Contents/Developer"
+            fi
+          fi
+          xcodebuild -version
+          node -e '
+            const { execFileSync } = require("node:child_process");
+            const fs = require("node:fs");
+            const list = JSON.parse(execFileSync("xcrun", ["simctl", "list", "--json"], { encoding: "utf8" }));
+            const runtimes = (list.runtimes ?? []).filter((r) => r.isAvailable !== false && /^iOS\b/i.test(r.name ?? ""));
+            if (!runtimes.length) throw new Error("No available iOS simulator runtimes on runner");
+            const defaultRuntime = process.env.IOS_RUNTIME || "26.4";
+            const matchedRuntime = runtimes.find((r) => r.version === defaultRuntime)
+              ?? runtimes.filter((r) => String(r.version).startsWith("26.")).at(-1)
+              ?? runtimes.at(-1);
+            const devices = (list.devicetypes ?? []).filter((d) => /^iPhone\b/.test(d.name ?? ""));
+            const defaultDevice = process.env.IOS_DEVICE_TYPE || "iPhone 17";
+            const matchedDevice = devices.find((d) => d.name === defaultDevice)
+              ?? devices.find((d) => /^iPhone 1[67]\b/.test(d.name))
+              ?? devices.at(-1);
+            if (!matchedDevice) throw new Error("No available iPhone simulator device types on runner");
+            const lines = [];
+            if (matchedRuntime.version !== defaultRuntime) lines.push("IOS_RUNTIME=" + matchedRuntime.version);
+            if (matchedDevice.name !== defaultDevice) lines.push("IOS_DEVICE_TYPE=" + matchedDevice.name);
+            if (lines.length) fs.appendFileSync(process.env.GITHUB_ENV, lines.join("\n") + "\n");
+            console.log("Selected simulator target:", matchedDevice.name, "iOS", matchedRuntime.version);
+          '
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check iOS runtime target
+        id: ios-runtime
+        run: pnpm --filter @openuji/example-nextcloud-filesharing ios:check --github-output
+      # A fresh simulator's first boot migrates its data and is slow on a hosted runner. Do that while the runner
+      # is idle, where a failure costs minutes, not an hour. Then shut it down: a running simulator competes with
+      # the Docker VM. The journey run boots it again when it needs it.
+      - name: Prepare iOS simulator
+        timeout-minutes: 20
+        run: |
+          pnpm --filter @openuji/example-nextcloud-filesharing ios:up
+          pnpm --filter @openuji/example-nextcloud-filesharing ios:down
+          xcrun simctl list devices booted
+      - name: Restore Nextcloud iOS build
+        id: ios-build-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: examples/nextcloud-filesharing/.runtime/builds/nextcloud-ios
+          key: ${{ runner.os }}-${{ runner.arch }}-nextcloud-ios-${{ steps.ios-runtime.outputs.runtime }}-${{ hashFiles('examples/nextcloud-filesharing/mesh.yaml', 'examples/nextcloud-filesharing/deployment/fixtures/mock-GoogleService-Info.plist') }}
+          # An older build is only a starting point: the build service reuses it only when its own inputs match.
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-nextcloud-ios-${{ steps.ios-runtime.outputs.runtime }}-
+      - name: Start Docker runtime
+        run: |
+          if ! command -v colima >/dev/null 2>&1 || ! command -v docker >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install colima docker docker-compose
+          elif ! docker compose version >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install docker-compose
+          fi
+          if [ -x "$(brew --prefix)/opt/docker-compose/bin/docker-compose" ]; then
+            mkdir -p ~/.docker/cli-plugins
+            ln -sf "$(brew --prefix)/opt/docker-compose/bin/docker-compose" ~/.docker/cli-plugins/docker-compose
+          fi
+          colima start --runtime docker --cpu 2 --memory 4
+          docker version
+          docker compose version
+          grep -q 'host.docker.internal' /etc/hosts || echo '127.0.0.1 host.docker.internal' | sudo tee -a /etc/hosts >/dev/null
+      # Unpacking the images onto the Docker VM's disk is slow here. Do it while nothing else competes for the
+      # runner; the stack then finds the images locally.
+      - name: Pull Nextcloud stack images
+        working-directory: examples/nextcloud-filesharing
+        run: |
+          nextcloud_image=$(sed -n 's/.*&nextcloud-image *//p' mesh.yaml)
+          postgres_image=$(sed -n 's/^ *image: *\(postgres:.*\)$/\1/p' deployment/compose.yaml)
+          docker pull "${nextcloud_image:?no &nextcloud-image anchor in mesh.yaml}"
+          docker pull "${postgres_image:?no postgres image in deployment/compose.yaml}"
+      - name: Build and prepare tooling
+        run: |
+          pnpm build
+          pnpm --filter @openuji/journey-executor-playwright exec playwright install chromium
+          pnpm --filter @openuji/journey-executor-appium exec journey-executor-appium appium ensure-driver --driver xcuitest
+      # The driver ships @appium/coresim with an Apple Silicon binary only, and installing the driver does not compile
+      # it for Intel. Without it Appium reports every simulator as "Unknown device or simulator UDID". Listing the
+      # simulators proves the addon loads, before the slow part of the job starts.
+      - name: Compile the simulator addon for Intel
+        working-directory: .tmp/appium/node_modules/appium-xcuitest-driver/node_modules/@appium/coresim
+        run: |
+          npm run install
+          node --input-type=module -e 'const { NativeSimctl } = await import(process.cwd() + "/lib/src/index.js"); console.log((await new NativeSimctl().getDevices()).length, "simulators visible to coresim")'
+      - name: Run mixed journey on iOS simulator
+        run: |
+          mkdir -p .tmp/ios-logs
+          (while true; do date -u +"=== %Y-%m-%dT%H:%M:%SZ ==="; vm_stat; df -h /; sleep 15; done) > .tmp/ios-logs/resources.log 2>&1 &
+          resource_pid=$!
+          trap 'kill "$resource_pid" 2>/dev/null || true' EXIT
+          pnpm --filter @openuji/example-nextcloud-filesharing e2e:ios
+      - name: Check for a usable iOS build
+        id: ios-app
+        if: always()
+        run: |
+          if node -e 'process.exit(require("./examples/nextcloud-filesharing/test-results/run.json").provenance?.["ios-app"] ? 0 : 1)' 2>/dev/null; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      # The build is the slowest step on a hosted runner, so keep it even when the journey fails. A build restored
+      # from an older key is saved under the new key only after the run has shown that it is usable.
+      - name: Save Nextcloud iOS build
+        if: always() && steps.ios-build-cache.outputs.cache-hit != 'true' && (steps.ios-build-cache.outputs.cache-matched-key == '' || steps.ios-app.outputs.ready == 'true')
+        uses: actions/cache/save@v4
+        with:
+          path: examples/nextcloud-filesharing/.runtime/builds/nextcloud-ios
+          key: ${{ runner.os }}-${{ runner.arch }}-nextcloud-ios-${{ steps.ios-runtime.outputs.runtime }}-${{ hashFiles('examples/nextcloud-filesharing/mesh.yaml', 'examples/nextcloud-filesharing/deployment/fixtures/mock-GoogleService-Info.plist') }}
+      - name: Capture runner diagnostics
+        if: always()
+        run: |
+          mkdir -p .tmp/ios-logs
+          xcrun simctl list > .tmp/ios-logs/simctl-list.txt 2>&1 || true
+          cp -R ~/Library/Logs/CoreSimulator .tmp/ios-logs/CoreSimulator 2>/dev/null || true
+          vm_stat > .tmp/ios-logs/memory-after.txt 2>&1 || true
+          df -h > .tmp/ios-logs/disk-after.txt 2>&1 || true
+          colima stop >/dev/null 2>&1 || true
+      - name: Upload evidence and logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nextcloud-filesharing-ios
+          if-no-files-found: warn
+          path: |
+            examples/nextcloud-filesharing/test-results
+            examples/nextcloud-filesharing/.tmp/diagnostics
+            examples/nextcloud-filesharing/.tmp/appium-ios-runtime
+            examples/nextcloud-filesharing/.runtime/builds/nextcloud-ios/work/*/xcodebuild.log
+            .tmp/ios-logs

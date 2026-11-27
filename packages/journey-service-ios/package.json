@@ -1,0 +1,29 @@
+{
+  "name": "@openuji/journey-service-ios",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./simulator/service": "./src/simulator/plugin.ts",
+    "./app-build/service": "./src/app-build/plugin.ts"
+  },
+  "bin": {
+    "journey-service-ios": "./bin/journey-service-ios.mjs"
+  },
+  "dependencies": {
+    "@openuji/journey-host": "workspace:*",
+    "@openuji/journey-platform-ios": "workspace:*",
+    "@openuji/journey-plugin": "workspace:*",
+    "@openuji/journey-toolkit-ios": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3"
+  }
+}

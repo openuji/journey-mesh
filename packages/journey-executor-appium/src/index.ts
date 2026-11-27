@@ -17,7 +17,12 @@ import type {
   AppiumSession,
   AppiumSessionFactory
 } from "./contracts.js";
-import { appiumCommandForModality, appiumObservationQuery, appiumSupportsModality } from "./queries.js";
+import {
+  appiumCommandForModality,
+  appiumObservationQuery,
+  appiumSupportsModality,
+  touchInputModalityId
+} from "./queries.js";
 import { createWebdriverIoSession } from "./session.js";
 import {
   initialAppiumLifecycleState,
@@ -29,7 +34,15 @@ import {
 export type * from "./contracts.js";
 export { appiumAndroidObservationContract } from "./observation-contract.js";
 export { appiumServerContract, type AppiumServer } from "./server.js";
-export { appiumCommandForModality, appiumLocatorQuery, appiumObservationQuery, touchTapInputModalityId, xpathLiteral } from "./queries.js";
+export {
+  appiumCommandForModality,
+  appiumLocatorQuery,
+  appiumObservationQuery,
+  swipeDownMoveKindId,
+  touchInputModalityId,
+  touchTapInputModalityId,
+  xpathLiteral
+} from "./queries.js";
 export type { AppiumInteractionCommand } from "./queries.js";
 export { initialAppiumLifecycleState, reduceAppiumLifecycle } from "./lifecycle.js";
 export type { AppiumLifecycleEvent, AppiumLifecycleState, AppiumLifecycleStatus, AppiumResource } from "./lifecycle.js";
@@ -56,10 +69,18 @@ export function validateAppiumOperation(operation: JourneyPlanOperation): void {
     if (!Number.isInteger(operation.target.expectedMatchCount) || operation.target.expectedMatchCount < 0) throw new Error(`Invalid native match count ${operation.target.expectedMatchCount}`);
     appiumObservationQuery(operation.target.bindings);
   } else if (operation.kind === "transition") {
-    if (operation.activation.requiredInputModalityProfiles.length > 0) appiumObservationQuery(operation.activation.bindings);
-    // Declared step chains are not performed natively yet; refuse them rather than tap past them.
+    if (operation.activation.requiredInputModalityProfiles.length > 0) {
+      appiumObservationQuery(operation.activation.bindings);
+      const allTouchOnly = operation.activation.requiredInputModalityProfiles.every((profile) =>
+        profile.modalities.every((modality) => modality.id === touchInputModalityId)
+      );
+      if (allTouchOnly) {
+        throw new Error(`Transition ${operation.transition.id}: Appium does not perform ${touchInputModalityId} yet`);
+      }
+    }
+    // Declared step chains are not performed natively on Android yet; refuse them rather than tap past them.
     for (const materialization of operation.materializations ?? []) {
-      if (appiumSupportsModality(materialization.modality.id)) {
+      if (appiumSupportsModality(materialization.modality.id) || materialization.modality.id === touchInputModalityId) {
         throw new Error(`Transition ${operation.transition.id}: Appium does not perform TransitionMaterialization ${materialization.id} (${materialization.modality.id}) yet`);
       }
     }

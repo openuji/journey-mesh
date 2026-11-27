@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../journey-core" },
+    { "path": "../journey-plugin" },
+    { "path": "../journey-runner" },
+    { "path": "../journey-run-record" },
+    { "path": "../journey-reporter" },
+    { "path": "../journey-observer-ios-accessibility" }
+  ]
+}

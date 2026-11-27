@@ -3,6 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 import { nextcloudAndroidClient } from "../src/android/client.js";
 import { createNextcloudFederatedSharingEnvironment } from "../src/environments/federated-sharing/environment.js";
+import { nextcloudIosClient } from "../src/ios/client.js";
 import { nextcloudWebClient } from "../src/web/client.js";
 import type { JourneyPlanOperation, TransitionPlanOperation } from "@openuji/journey-execution-model";
 
@@ -29,7 +30,7 @@ const transition = {
   effects: []
 } satisfies TransitionPlanOperation;
 
-test("web and Android Nextcloud clients are deterministic pure resolvers", () => {
+test("web, Android, and iOS Nextcloud clients are deterministic pure resolvers", () => {
   const options = {
     touchpoints: { touchpoint: { baseURL: "https://cloud.example.test/base/" } },
     users: { actor: { username: "alice", password: "secret" } },
@@ -49,6 +50,20 @@ test("web and Android Nextcloud clients are deterministic pure resolvers", () =>
   assert.deepEqual(android.resolveEntry(operation), { kind: "application" });
   assert.ok(Object.isFrozen(android.resolveEntry(operation)));
   assert.equal(android.resolveTransitionValue(transition), "alice");
+
+  const iosApp = nextcloudIosClient({ ...options, entries: { files: "application" as const } });
+  assert.deepEqual(iosApp.resolveEntry(operation), { kind: "application" });
+  assert.ok(Object.isFrozen(iosApp.resolveEntry(operation)));
+  assert.equal(iosApp.resolveTransitionValue(transition), "alice");
+
+  const iosDeepLink = nextcloudIosClient({
+    ...options,
+    entries: { files: { kind: "deep-link" as const, route: "nextcloud://open-file?path=/report.pdf" } }
+  });
+  assert.deepEqual(iosDeepLink.resolveEntry(operation), {
+    kind: "deep-link",
+    url: "nextcloud://open-file?path=/report.pdf"
+  });
 });
 
 test("client configuration is copied and deeply frozen from caller mutation", () => {
@@ -109,7 +124,7 @@ test("Nextcloud package has no automation runtime dependency or mutable client s
   assert.ok(!dependencyNames.some((name) => /playwright|appium|webdriverio/.test(name)));
   // Client code: the platform clients and the binding resolution they share. Services and environments own resources.
   const sources: string[] = [];
-  for (const directory of ["shared", "web", "android"]) {
+  for (const directory of ["shared", "web", "android", "ios"]) {
     const sourceDirectory = new URL(`../src/${directory}/`, import.meta.url);
     const names = (await readdir(sourceDirectory)).filter((name) => name.endsWith(".ts"));
     assert.ok(names.length, `src/${directory} has client sources`);

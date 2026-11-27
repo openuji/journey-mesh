@@ -5,17 +5,20 @@ report:
   interpreters:
     - use: "@openuji/journey-report-axe"
     - use: "@openuji/journey-report-android"
+    - use: "@openuji/journey-report-ios"
     - use: "@openuji/journey-report-operability"
 outputDir: ./test-results
 runtimeObservers:
   - use: "@openuji/journey-observer-docker/plugin"
     options:
       containerLogs: true
+      progress: true
       tail: 2000
-      timeoutMs: 10000
+      timeoutMs: 30000
       files:
         - name: nextcloud
           path: /var/www/html/data/nextcloud.log
+  - use: "@openuji/journey-observer-progress/plugin"
 services:
   web-stack:
     use: "@openuji/journey-vendor-nextcloud/stack/service"
@@ -92,6 +95,42 @@ services:
           username: *bob-username
           password: *bob-password
       enabledApps: *enabled-apps
+  ios-stack:
+    use: "@openuji/journey-vendor-nextcloud/stack/service"
+    options:
+      project: ${NEXTCLOUD_IOS_STACK_PROJECT:-journey-mesh-filesharing-ios}
+      composeFiles: *compose-files
+      directory: ./.runtime/stacks/ios
+      image: *nextcloud-image
+      expectedVersion: *nextcloud-version
+      environment:
+        POSTGRES_DB: ${POSTGRES_DB}
+        POSTGRES_USER: ${POSTGRES_USER}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+        NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER}
+        NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD}
+        NEXTCLOUD_ALICE_HOST: ${NEXTCLOUD_IOS_STACK_HOST:-host.docker.internal}
+        NEXTCLOUD_ALICE_PORT: ${NEXTCLOUD_IOS_ALICE_PORT:-18085}
+        NEXTCLOUD_ALICE_URL: &ios-alice-url http://${NEXTCLOUD_IOS_STACK_HOST:-host.docker.internal}:${NEXTCLOUD_IOS_ALICE_PORT:-18085}
+        NEXTCLOUD_ALICE_DB: ${NEXTCLOUD_ALICE_DB}
+        NEXTCLOUD_ALICE_DB_USER: ${NEXTCLOUD_ALICE_DB_USER}
+        NEXTCLOUD_ALICE_DB_PASSWORD: ${NEXTCLOUD_ALICE_DB_PASSWORD}
+        NEXTCLOUD_BOB_HOST: ${NEXTCLOUD_IOS_STACK_HOST:-host.docker.internal}
+        NEXTCLOUD_BOB_PORT: ${NEXTCLOUD_IOS_BOB_PORT:-18086}
+        NEXTCLOUD_BOB_URL: &ios-bob-url http://${NEXTCLOUD_IOS_STACK_HOST:-host.docker.internal}:${NEXTCLOUD_IOS_BOB_PORT:-18086}
+        NEXTCLOUD_BOB_DB: ${NEXTCLOUD_BOB_DB}
+        NEXTCLOUD_BOB_DB_USER: ${NEXTCLOUD_BOB_DB_USER}
+        NEXTCLOUD_BOB_DB_PASSWORD: ${NEXTCLOUD_BOB_DB_PASSWORD}
+      services:
+        alice:
+          baseURL: *ios-alice-url
+          username: *alice-username
+          password: *alice-password
+        bob:
+          baseURL: *ios-bob-url
+          username: *bob-username
+          password: *bob-password
+      enabledApps: *enabled-apps
   android:
     use: "@openuji/journey-service-android/emulator/service"
     options:
@@ -112,6 +151,42 @@ services:
       - android
     options:
       port: ${APPIUM_PORT:-4723}
+  ios-source:
+    use: "@openuji/journey-service-git/plugin"
+    options:
+      repository: https://github.com/nextcloud/ios.git
+      directory: ./.runtime/sources/nextcloud-ios
+      sha: ${NEXTCLOUD_IOS_SHA:-8104883d62b98f078b34479d9ebecdfa16b56cd7}
+  ios-app:
+    use: "@openuji/journey-service-ios/app-build/service"
+    inputs:
+      source:
+        service: ios-source
+        output: source
+    options:
+      directory: ./.runtime/builds/nextcloud-ios
+      project: Nextcloud.xcodeproj
+      scheme: Nextcloud
+      configuration: Debug
+      destination: platform=iOS Simulator,name=${IOS_DEVICE_TYPE:-iPhone 17},OS=${IOS_RUNTIME:-26.4}
+      output: Build/Products/Debug-iphonesimulator/Nextcloud.app
+      files:
+        GoogleService-Info.plist: ./deployment/fixtures/mock-GoogleService-Info.plist
+  ios:
+    use: "@openuji/journey-service-ios/simulator/service"
+    options:
+      simulator: ${IOS_SIMULATOR_NAME:-journey-mesh-ios}
+      deviceType: ${IOS_DEVICE_TYPE:-iPhone 17}
+      runtime: ${IOS_RUNTIME:-26.4}
+      locale: en-US
+  appium-ios:
+    use: "@openuji/journey-executor-appium/ios/service"
+    inputs:
+      devices:
+        service: ios
+        output: devices
+    options:
+      port: ${APPIUM_IOS_PORT:-4725}
 envFiles:
   - ./deployment/.env.example
   - path: ./deployment/.env
@@ -120,13 +195,17 @@ envFiles:
     optional: true
   - path: ./.runtime/appium.env
     optional: true
+  - path: ./.runtime/ios.env
+    optional: true
+  - path: ./.runtime/appium-ios.env
+    optional: true
 model:
   use: "@openuji/journey-model-ujg/plugin"
 tests:
   browser-sharing:
     services:
       - web-stack
-    timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-600000}
+    timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-900000}
     journeys:
       - id: alice-setup
         source: ./ujg/setup.web.ujg.jsonld
@@ -181,7 +260,7 @@ tests:
   native-recipient-sharing:
     services:
       - android-stack
-    timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-600000}
+    timeoutMs: ${UJG_EXAMPLE_TIMEOUT_MS:-900000}
     environment:
       use: "@openuji/journey-vendor-nextcloud/federated-sharing/plugin"
       options:
@@ -222,6 +301,58 @@ tests:
           alice-offers: default
           bob-accepts: touch
       - id: keyboard-only-web-touch-android
+        journeys:
+          alice-setup: keyboard
+          bob-setup: touch
+          alice-offers: keyboard
+          bob-accepts: touch
+  ios-recipient-sharing:
+    services:
+      - ios-stack
+    # Fixed, because .env.example sets UJG_EXAMPLE_TIMEOUT_MS to 15 minutes. Both profiles share this limit.
+    timeoutMs: 3600000
+    environment:
+      use: "@openuji/journey-vendor-nextcloud/federated-sharing/plugin"
+      options:
+        sharerTouchpoint: &ios-alice
+          baseURL: *ios-alice-url
+        recipientTouchpoint: &ios-bob
+          baseURL: *ios-bob-url
+        sharerUser: *alice-user
+        recipientUser: *bob-user
+        fixturePath: ./deployment/fixtures/report.pdf
+        fixtureFileName: report.pdf
+        effectIds:
+          shareCreated: urn:effect:alice-confirm-share
+          shareAccepted: urn:effect:bob-accept-share
+        preserveFixtures: ${NEXTCLOUD_PRESERVE_FIXTURES:-false}
+        # Limits the cleanup after each profile.
+        timeoutMs: 180000
+    journeys:
+      - id: alice-setup
+        source: ./ujg/setup.web.ujg.jsonld
+        select: urn:journey:alice-web-setup
+        executor: web-ios
+      - id: bob-setup
+        source: ./ujg/setup.ios.ujg.jsonld
+        select: urn:journey:bob-ios-setup
+        executor: ios
+      - id: alice-offers
+        source: ./ujg/filesharing.ujg.jsonld
+        select: urn:journey:alice-federated-sharing
+        executor: web-ios
+      - id: bob-accepts
+        source: ./ujg/filesharing.ios.ujg.jsonld
+        select: urn:journey:bob-remote-share
+        executor: ios
+    profiles:
+      - id: default-web-touch-ios
+        journeys:
+          alice-setup: default
+          bob-setup: touch
+          alice-offers: default
+          bob-accepts: touch
+      - id: keyboard-only-web-touch-ios
         journeys:
           alice-setup: keyboard
           bob-setup: touch
@@ -318,6 +449,50 @@ executors:
             fullPage: true
           excludedPhaseIds:
             - urn:phase:setup
+  web-ios:
+    use: "@openuji/journey-executor-playwright/plugin"
+    options:
+      browser: chromium
+      headless: ${HEADLESS:-true}
+      # Nextcloud shares a hosted runner with the iOS simulator and can take more than 30s to answer.
+      assertionTimeoutMs: 180000
+      actionTimeoutMs: 180000
+      navigationTimeoutMs: 180000
+      contextOptions: *sharing-browser-context
+    client:
+      use: "@openuji/journey-vendor-nextcloud/web/plugin"
+      options:
+        touchpoints: &ios-touchpoints
+          urn:touchpoint:nextcloud-a: *ios-alice
+          urn:touchpoint:nextcloud-b: *ios-bob
+        users: *users
+        entries:
+          nextcloud.login: /login
+          nextcloud.files: /apps/files/
+          nextcloud.pendingShares: /apps/files/pendingshares
+        transitionValues:
+          urn:transition:alice-enters-username:
+            source: user.username
+          urn:transition:alice-enters-password:
+            source: user.password
+          urn:transition:bob-enters-username:
+            source: user.username
+          urn:transition:bob-enters-password:
+            source: user.password
+          urn:transition:alice-enters-remote-bob: ${NEXTCLOUD_BOB_USER}@http://${NEXTCLOUD_IOS_STACK_HOST:-host.docker.internal}:${NEXTCLOUD_IOS_BOB_PORT:-18086}
+    observers:
+      - use: "@openuji/journey-observer-operability/plugin"
+        options:
+          id: input-steps
+      - use: "@openuji/journey-observer-axe/plugin"
+        options:
+          reportId: nextcloud-filesharing.axe-path
+          strict: ${AXE_STRICT:-false}
+          sourceScreenshots:
+            states: true
+            fullPage: true
+          excludedPhaseIds:
+            - urn:phase:setup
   android:
     use: "@openuji/journey-executor-appium/plugin"
     options:
@@ -361,6 +536,56 @@ executors:
           strict: ${ANDROID_A11Y_STRICT:-false}
           excludedPhaseIds:
             - urn:phase:setup
+  ios:
+    use: "@openuji/journey-executor-appium/ios/plugin"
+    inputs:
+      application:
+        service: ios-app
+        output: app
+      server:
+        service: appium-ios
+        output: server
+      devices:
+        service: ios
+        output: devices
+    options:
+      assertionTimeoutMs: 1200000
+      application:
+        bundleId: it.twsweb.Nextcloud
+      devices:
+        urn:touchpoint:nextcloud-b:
+          device: default
+          capabilities:
+            # Appium otherwise restarts a simulator booted without a window, to show one. HEADLESS=false keeps the window.
+            appium:isHeadless: ${HEADLESS:-true}
+    client:
+      use: "@openuji/journey-vendor-nextcloud/ios/plugin"
+      options:
+        touchpoints: *ios-touchpoints
+        users: *users
+        entries:
+          nextcloud.ios.application: application
+          nextcloud.ios.files:
+            kind: deep-link
+            route: nextcloud://openFiles
+        transitionValues:
+          urn:transition:ios-enters-server:
+            source: touchpoint.baseURL
+          urn:transition:ios-enters-username:
+            source: user.username
+          urn:transition:ios-enters-password:
+            source: user.password
+    observers:
+      - use: "@openuji/journey-observer-operability/ios/plugin"
+        options:
+          id: ios-input-steps
+      - use: "@openuji/journey-observer-ios-accessibility/plugin"
+        options:
+          reportId: nextcloud-filesharing.ios-accessibility
+          screenshots: true
+          strict: ${IOS_A11Y_STRICT:-false}
+          excludedPhaseIds:
+            - urn:phase:setup
 profiles:
   default:
     use: "@openuji/journey-profiles/plugin"
@@ -374,9 +599,10 @@ profiles:
     use: "@openuji/journey-profiles/plugin"
     options:
       id: touch
-      # The Android model declares no TransitionMaterialization; Appium taps the bound object.
+      # Unmaterialized touch-tap transitions tap the bound object; urn:openuji:input:touch transitions declare steps.
       requireMaterialization: false
       modalityPreference:
         - urn:openuji:input-modality:keyboard-text-entry
+        - urn:openuji:input:touch
         - urn:openuji:input:touch-tap
 kind: suite
